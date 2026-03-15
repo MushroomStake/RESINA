@@ -3,7 +3,7 @@ import Image from "next/image";
 const webAppUrl = process.env.NEXT_PUBLIC_WEB_APP_URL ?? "#";
 const mobileAppUrl = process.env.NEXT_PUBLIC_MOBILE_APP_URL ?? "#";
 const apkDownloadUrl =
-  "https://expo.dev/accounts/mushroomstake/projects/resina-mobile/builds/eac13c28-f258-4457-8938-ba9262efa675";
+  "https://github.com/MushroomStake/RESINA/releases/download/v1.0.0/application-eac13c28-f258-4457-8938-ba9262efa675.apk";
 
 export default function HomePage() {
   return (
