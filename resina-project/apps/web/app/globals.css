@@ -1,30 +1,55 @@
+/* ─── RESINA Brand Variables ─────────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --resina-primary: #0a7ea4;
+  --resina-primary-dark: #085f7a;
+  --resina-primary-light: #1aa3d4;
+  --resina-accent: #f0a500;
+  --resina-bg: #f7f9fc;
+  --resina-surface: #ffffff;
+  --resina-text: #0f1f2e;
+  --resina-text-muted: #5a7184;
+  --resina-border: #dde6ef;
+  --resina-dark-bg: #0b1724;
+  --resina-dark-surface: #132030;
+  --resina-dark-text: #e8f0f7;
+  --resina-dark-text-muted: #8aa5bc;
+  --resina-dark-border: #1e3347;
+
+  --background: var(--resina-bg);
+  --foreground: var(--resina-text);
+  --font-sans: var(--font-geist-sans, system-ui, sans-serif);
+  --font-mono: var(--font-geist-mono, monospace);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: var(--resina-dark-bg);
+    --foreground: var(--resina-dark-text);
   }
+}
+
+/* ─── Reset ──────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
 }
 
 html,
 body {
   max-width: 100vw;
   overflow-x: hidden;
+  scroll-behavior: smooth;
 }
 
 body {
+  font-family: var(--font-sans);
   color: var(--foreground);
   background: var(--background);
-}
-
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
@@ -32,19 +57,8 @@ a {
   text-decoration: none;
 }
 
-.imgDark {
-  display: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
-
-  .imgLight {
-    display: none;
-  }
-  .imgDark {
-    display: unset;
-  }
+img,
+svg {
+  display: block;
+  max-width: 100%;
 }
