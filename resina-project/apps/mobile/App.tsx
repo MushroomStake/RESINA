@@ -1,6 +1,22 @@
-import { Image, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Image, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { supabase } from "./lib/supabase";
 
 export default function App() {
+  const [dbStatus, setDbStatus] = useState("Not tested");
+
+  const testSupabaseConnection = async () => {
+    setDbStatus("Checking...");
+    const { error } = await supabase.auth.getSession();
+
+    if (error) {
+      setDbStatus(`Connection error: ${error.message}`);
+      return;
+    }
+
+    setDbStatus("Connected to Supabase");
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
@@ -17,6 +33,12 @@ export default function App() {
         <Text style={styles.note}>
           Replace ./assets/images/login-preview.png with your latest login UI screenshot anytime.
         </Text>
+
+        <Pressable style={styles.button} onPress={testSupabaseConnection}>
+          <Text style={styles.buttonText}>Test Supabase Connection</Text>
+        </Pressable>
+
+        <Text style={styles.status}>{dbStatus}</Text>
       </View>
     </SafeAreaView>
   );
@@ -54,6 +76,23 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: "center",
     color: "#6b7280",
+    fontSize: 12,
+  },
+  button: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#2e9d5a",
+  },
+  buttonText: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+  status: {
+    marginTop: 8,
+    textAlign: "center",
+    color: "#374151",
     fontSize: 12,
   },
 });

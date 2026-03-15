@@ -36,6 +36,10 @@ export default function HomePage() {
 
         <section className="grid flex-1 grid-cols-1 items-center gap-12 px-5 py-6 md:grid-cols-2 md:px-10 md:py-8">
           <div className="max-w-[560px]">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#c5e8ce] bg-[#edf7ef] px-4 py-1.5 text-sm font-medium text-[#2e7d47]">
+              <span className="h-2 w-2 rounded-full bg-[#2e9d5a]" />
+              Brgy. Sta. Rita, Olongapo City
+            </div>
             <h1 className="font-[family-name:var(--font-display)] text-5xl font-bold tracking-wide text-[#0d3d73] md:text-6xl">
               RESINA
             </h1>
@@ -43,8 +47,9 @@ export default function HomePage() {
               Real-time Water Level Sensor IoT Network for Adaptive Flood Alerts
             </p>
             <p className="mt-8 max-w-[520px] text-lg leading-8 text-[#5e6872] md:text-xl">
-              RESINA installs IoT flood sensors at strategic river points to monitor water
-              levels in real time and push automated alerts to residents and barangay officials.
+              RESINA deploys IoT flood sensors along critical waterways in Barangay Sta. Rita,
+              Olongapo City — monitoring water levels in real time to keep residents and
+              barangay officials informed before flooding occurs.
             </p>
 
             <div className="mt-10 flex flex-wrap items-center gap-4">
@@ -81,18 +86,21 @@ export default function HomePage() {
 
         <footer className="mt-6 border-t border-[#e8ecee] bg-[#f0f2f4] px-5 py-10 md:px-10">
           <div className="grid grid-cols-1 gap-10 md:grid-cols-[1.1fr_1fr_1fr]">
-            <div className="flex items-center gap-4">
-              <Image src="/images/resina%20logo.png" alt="Resina logo" width={76} height={76} />
-              <span className="font-[family-name:var(--font-display)] text-[40px] leading-none text-[#334155]">
-                RESINA
-              </span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-4">
+                <Image src="/images/resina%20logo.png" alt="Resina logo" width={76} height={76} />
+                <span className="font-[family-name:var(--font-display)] text-[40px] leading-none text-[#334155]">
+                  RESINA
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-[#6b7280]">Brgy. Sta. Rita, Olongapo City</p>
             </div>
 
             <div>
               <h2 className="mb-3 text-xl font-semibold text-[#111827]">Link</h2>
               <ul className="space-y-2 text-base text-[#4b5563]">
                 <li>
-                  <a href={webAppUrl} className="hover:text-[#0d3d73]">
+                  <a href="/admin" className="hover:text-[#0d3d73]">
                     Admin Portal
                   </a>
                 </li>
