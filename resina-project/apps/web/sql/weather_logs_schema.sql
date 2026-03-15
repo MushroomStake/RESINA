@@ -3,6 +3,10 @@ create extension if not exists pgcrypto;
 create table if not exists public.weather_logs (
   id uuid primary key default gen_random_uuid(),
   temperature integer not null,
+  humidity integer,
+  heat_index numeric(4,1),
+  weather_main text,
+  weather_description text,
   intensity text not null,
   color_coded_warning text not null,
   signal_no text not null,
@@ -17,6 +21,10 @@ create table if not exists public.weather_logs (
 alter table public.weather_logs add column if not exists manual_description text not null default '';
 alter table public.weather_logs add column if not exists broadcast_date date not null default ((now() at time zone 'Asia/Manila')::date);
 alter table public.weather_logs add column if not exists broadcast_time time not null default ((now() at time zone 'Asia/Manila')::time);
+alter table public.weather_logs add column if not exists humidity integer;
+alter table public.weather_logs add column if not exists heat_index numeric(4,1);
+alter table public.weather_logs add column if not exists weather_main text;
+alter table public.weather_logs add column if not exists weather_description text;
 
 create index if not exists idx_weather_logs_recorded_at on public.weather_logs(recorded_at desc);
 

@@ -3,15 +3,16 @@ import { createClient as createServerSupabase } from "../../../../lib/supabase/s
 import { createAdminClient } from "../../../../lib/supabase/admin";
 
 type CreateUserBody = {
+  fullName?: string;
   firstName?: string;
   middleName?: string;
   lastName?: string;
   email?: string;
-  password?: string;
   role?: string;
+  password?: string;
 };
 
-function buildFullName(last: string, first: string, middle: string): string {
+function buildFullName(first: string, middle: string, last: string): string {
   return [first.trim(), middle.trim(), last.trim()].filter(Boolean).join(" ");
 }
 
@@ -46,20 +47,14 @@ export async function POST(request: NextRequest) {
       middleName = "",
       lastName = "",
       email = "",
-      password = "",
       role = "member",
+      fullName = "",
+      password = "",
     } = body;
 
-    if (!firstName.trim() || !lastName.trim() || !email.trim() || !password.trim()) {
+    if (!firstName.trim() || !lastName.trim() || !email.trim()) {
       return NextResponse.json(
-        { error: "First name, last name, email, and password are required." },
-        { status: 400 },
-      );
-    }
-
-    if (password.trim().length < 6) {
-      return NextResponse.json(
-        { error: "Password must be at least 6 characters." },
+        { error: "First name, last name, and email are required." },
         { status: 400 },
       );
     }
@@ -68,40 +63,102 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid role. Must be admin or member." }, { status: 400 });
     }
 
-    // 4. Create the Auth user with the service-role client (bypasses sign-up restrictions).
+    if (password.trim() && password.trim().length < 6) {
+      return NextResponse.json({ error: "Default password must be at least 6 characters." }, { status: 400 });
+    }
+
+    const normalizedFullName = fullName.trim() || buildFullName(firstName, middleName, lastName);
+    const normalizedEmail = email.trim().toLowerCase();
+    const defaultPassword = password.trim() || "admin123";
+    const adminLink = `${request.nextUrl.origin}/admin`;
+
+    // 4. Send an invite email with metadata and admin redirect.
     const adminSupabase = createAdminClient();
-    const { data: newUser, error: createError } = await adminSupabase.auth.admin.createUser({
-      email: email.trim().toLowerCase(),
-      password: password.trim(),
-      email_confirm: true, // pre-confirm so they can log in immediately
+    const { data: inviteResult, error: inviteError } = await adminSupabase.auth.admin.inviteUserByEmail(normalizedEmail, {
+      redirectTo: adminLink,
+      data: {
+        full_name: normalizedFullName,
+        position: role,
+        default_password: defaultPassword,
+        admin_link: adminLink,
+      },
     });
 
-    if (createError || !newUser.user) {
+    if (inviteError || !inviteResult.user) {
       return NextResponse.json(
-        { error: createError?.message ?? "Failed to create Auth user." },
+        { error: inviteError?.message ?? "Failed to send invitation." },
         { status: 400 },
       );
     }
 
-    // 5. Insert the matching profiles row.
-    const fullName = buildFullName(lastName, firstName, middleName);
-    const { error: insertError } = await adminSupabase.from("profiles").insert({
-      auth_user_id: newUser.user.id,
-      first_name: firstName.trim(),
-      middle_name: middleName.trim(),
-      last_name: lastName.trim(),
-      full_name: fullName,
-      email: email.trim().toLowerCase(),
-      role,
-    });
-
-    if (insertError) {
-      // Rollback: delete the Auth user to keep state consistent.
-      await adminSupabase.auth.admin.deleteUser(newUser.user.id);
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
+    const invitedUserId = inviteResult.user.id;
+    if (!invitedUserId) {
+      return NextResponse.json({ error: "Invite succeeded but user id was missing." }, { status: 500 });
     }
 
-    return NextResponse.json({ id: newUser.user.id, email: newUser.user.email });
+    // 5. Insert or update matching profiles row using explicit flow for clearer error handling.
+    const { data: existingProfile, error: selectError } = await adminSupabase
+      .from("profiles")
+      .select("id")
+      .eq("email", normalizedEmail)
+      .maybeSingle();
+
+    if (selectError) {
+      return NextResponse.json(
+        { error: `Failed to check existing profile: ${selectError.message}` },
+        { status: 500 },
+      );
+    }
+
+    if (existingProfile?.id) {
+      const { error: updateError } = await adminSupabase
+        .from("profiles")
+        .update({
+          auth_user_id: invitedUserId,
+          first_name: firstName.trim(),
+          middle_name: middleName.trim(),
+          last_name: lastName.trim(),
+          full_name: normalizedFullName,
+          role,
+        })
+        .eq("id", existingProfile.id);
+
+      if (updateError) {
+        return NextResponse.json(
+          { error: `Failed to update existing profile: ${updateError.message}` },
+          { status: 500 },
+        );
+      }
+    } else {
+      const { error: insertError } = await adminSupabase.from("profiles").insert({
+        auth_user_id: invitedUserId,
+        first_name: firstName.trim(),
+        middle_name: middleName.trim(),
+        last_name: lastName.trim(),
+        full_name: normalizedFullName,
+        email: normalizedEmail,
+        role,
+      });
+
+      if (insertError) {
+        return NextResponse.json(
+          { error: `Failed to insert profile: ${insertError.message}` },
+          { status: 500 },
+        );
+      }
+    }
+
+    return NextResponse.json({
+      id: invitedUserId,
+      email: inviteResult.user.email,
+      message: "Invite sent.",
+      metadata: {
+        fullName: normalizedFullName,
+        position: role,
+        defaultPassword,
+        link: adminLink,
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
