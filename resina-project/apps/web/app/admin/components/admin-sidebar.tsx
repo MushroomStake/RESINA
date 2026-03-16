@@ -6,7 +6,7 @@ import { memo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 
-type AdminSidebarPage = "dashboard" | "announcements" | "profile";
+type AdminSidebarPage = "dashboard" | "announcements" | "history" | "profile";
 
 type AdminSidebarProps = {
   activePage: AdminSidebarPage;
@@ -50,7 +50,13 @@ function AdminSidebar({ activePage }: AdminSidebarProps) {
             Announcements
           </Link>
         )}
-        <span className={navClass}>History</span>
+        {activePage === "history" ? (
+          <span className={activeClass}>History</span>
+        ) : (
+          <Link className={navClass} href="/admin/history">
+            History
+          </Link>
+        )}
 
         {activePage === "profile" ? (
           <span className={activeClass}>Admin Profile</span>

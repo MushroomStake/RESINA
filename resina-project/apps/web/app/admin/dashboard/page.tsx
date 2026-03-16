@@ -786,7 +786,7 @@ export default function AdminDashboardPage() {
 
             <button
               type="button"
-              onClick={() => router.push("/admin/profile")}
+              onClick={() => router.push("/admin/history")}
               className="group rounded-xl border border-[#e5e7eb] bg-white p-4 text-left shadow-sm transition hover:border-[#cde8d5] hover:bg-[#f9fdf9]"
             >
               <div className="flex items-start justify-between gap-3">
@@ -811,6 +811,7 @@ export default function AdminDashboardPage() {
 
             <button
               type="button"
+              onClick={() => router.push("/admin/profile")}
               className="group rounded-xl border border-[#e5e7eb] bg-white p-4 text-left shadow-sm transition hover:border-[#cde8d5] hover:bg-[#f9fdf9]"
             >
               <div className="flex items-start justify-between gap-3">

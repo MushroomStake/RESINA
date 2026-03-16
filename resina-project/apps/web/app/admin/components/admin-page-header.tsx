@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type AdminSidebarPage = "dashboard" | "announcements" | "profile";
+type AdminSidebarPage = "dashboard" | "announcements" | "history" | "profile";
 
 type AdminPageHeaderProps = {
   activePage: AdminSidebarPage;
@@ -16,6 +16,10 @@ const HEADER_CONTENT: Record<AdminSidebarPage, { eyebrow: string; title: string 
   announcements: {
     eyebrow: "Announcements",
     title: "Announcements",
+  },
+  history: {
+    eyebrow: "History",
+    title: "History Records",
   },
   profile: {
     eyebrow: "Profile",

@@ -15,6 +15,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const activePage = pathname.startsWith("/admin/profile")
     ? "profile"
+    : pathname.startsWith("/admin/history")
+      ? "history"
     : pathname.startsWith("/admin/announcements")
       ? "announcements"
       : "dashboard";
