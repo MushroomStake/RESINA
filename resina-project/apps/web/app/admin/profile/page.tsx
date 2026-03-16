@@ -23,6 +23,7 @@ type AddUserForm = {
   middleName: string;
   lastName: string;
   email: string;
+  confirmEmail: string;
   role: Role;
   password: string;
 };
@@ -84,6 +85,7 @@ export default function AdminProfilePage() {
     middleName: "",
     lastName: "",
     email: "",
+    confirmEmail: "",
     role: "member",
     password: "admin123",
   });
@@ -412,6 +414,16 @@ export default function AdminProfilePage() {
       return;
     }
 
+    if (!addUserForm.confirmEmail.trim()) {
+      setModalError("Please confirm the invite email address.");
+      return;
+    }
+
+    if (addUserForm.email.trim().toLowerCase() !== addUserForm.confirmEmail.trim().toLowerCase()) {
+      setModalError("Email and confirm email do not match.");
+      return;
+    }
+
     if (!addUserForm.password.trim() || addUserForm.password.trim().length < 6) {
       setModalError("Default password must be at least 6 characters.");
       return;
@@ -430,6 +442,7 @@ export default function AdminProfilePage() {
           middleName: addUserForm.middleName.trim(),
           lastName: addUserForm.lastName.trim(),
           email: addUserForm.email.trim().toLowerCase(),
+          confirmEmail: addUserForm.confirmEmail.trim().toLowerCase(),
           role: addUserForm.role,
           password: addUserForm.password.trim(),
         }),
@@ -446,6 +459,7 @@ export default function AdminProfilePage() {
         middleName: "",
         lastName: "",
         email: "",
+        confirmEmail: "",
         role: "member",
         password: "admin123",
       });
@@ -685,6 +699,17 @@ export default function AdminProfilePage() {
               </label>
 
               <label className="md:col-span-2">
+                <span className="mb-1 block text-sm font-medium">Confirm Email</span>
+                <input
+                  type="email"
+                  value={addUserForm.confirmEmail}
+                  onChange={(e) => setAddUserForm((prev) => ({ ...prev, confirmEmail: e.target.value }))}
+                  placeholder="re-enter@email.com"
+                  className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="md:col-span-2">
                 <span className="mb-1 block text-sm font-medium">Default Password</span>
                 <input
                   type="text"
@@ -693,7 +718,7 @@ export default function AdminProfilePage() {
                   placeholder="admin123"
                   className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm"
                 />
-                <p className="mt-1 text-xs italic text-[#6b7280]">This value is included in the invite email metadata.</p>
+                <p className="mt-1 text-xs italic text-[#6b7280]">This temporary password is set on the invited account.</p>
               </label>
             </div>
 

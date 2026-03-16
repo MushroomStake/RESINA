@@ -8,6 +8,7 @@ type CreateUserBody = {
   middleName?: string;
   lastName?: string;
   email?: string;
+  confirmEmail?: string;
   role?: string;
   password?: string;
 };
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
       middleName = "",
       lastName = "",
       email = "",
+      confirmEmail = "",
       role = "member",
       fullName = "",
       password = "",
@@ -69,8 +71,17 @@ export async function POST(request: NextRequest) {
 
     const normalizedFullName = fullName.trim() || buildFullName(firstName, middleName, lastName);
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedConfirmEmail = confirmEmail.trim().toLowerCase();
     const defaultPassword = password.trim() || "admin123";
     const adminLink = `${request.nextUrl.origin}/admin`;
+
+    if (!normalizedConfirmEmail) {
+      return NextResponse.json({ error: "Confirm email is required." }, { status: 400 });
+    }
+
+    if (normalizedEmail !== normalizedConfirmEmail) {
+      return NextResponse.json({ error: "Email and confirm email do not match." }, { status: 400 });
+    }
 
     // 4. Send an invite email with metadata and admin redirect.
     const adminSupabase = createAdminClient();
@@ -96,7 +107,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invite succeeded but user id was missing." }, { status: 500 });
     }
 
-    // 5. Insert or update matching profiles row using explicit flow for clearer error handling.
+    // 5. Assign an actual temporary password to the invited account.
+    const { error: setPasswordError } = await adminSupabase.auth.admin.updateUserById(invitedUserId, {
+      password: defaultPassword,
+      user_metadata: {
+        full_name: normalizedFullName,
+        position: role,
+        admin_link: adminLink,
+      },
+    });
+
+    if (setPasswordError) {
+      return NextResponse.json(
+        { error: `Invite sent but failed to set temporary password: ${setPasswordError.message}` },
+        { status: 500 },
+      );
+    }
+
+    // 6. Insert or update matching profiles row using explicit flow for clearer error handling.
     const { data: existingProfile, error: selectError } = await adminSupabase
       .from("profiles")
       .select("id")
