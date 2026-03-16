@@ -19,7 +19,6 @@ export default function HomePage() {
             <a className="text-[#2e9d5a]" href="#about">
               About
             </a>
-            <a href="/announcements">Announcements</a>
             <a href="#download">Download</a>
             <a href="#features">Features</a>
             <a href="#benefits">Benefits</a>
@@ -59,12 +58,6 @@ export default function HomePage() {
                 className="rounded-lg bg-[#49af57] px-7 py-3 text-base font-semibold text-white transition-colors hover:bg-[#3f9a4d]"
               >
                 Get started today
-              </a>
-              <a
-                href="/announcements"
-                className="rounded-lg border border-[#3f8f4d] bg-[#edf7ef] px-7 py-3 text-base font-semibold text-[#2f8e41] transition-colors hover:bg-[#dff1e3]"
-              >
-                View Announcements
               </a>
               <a
                 href={apkDownloadUrl}
@@ -109,11 +102,6 @@ export default function HomePage() {
                 <li>
                   <a href="/admin" className="hover:text-[#0d3d73]">
                     Admin Portal
-                  </a>
-                </li>
-                <li>
-                  <a href="/announcements" className="hover:text-[#0d3d73]">
-                    Public Announcements
                   </a>
                 </li>
                 <li>
