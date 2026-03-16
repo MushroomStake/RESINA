@@ -346,7 +346,6 @@ export default function AdminDashboardPage() {
   const [isChecking, setIsChecking] = useState(true);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [phNow, setPhNow] = useState(() => new Date());
   const [isWeatherModalOpen, setIsWeatherModalOpen] = useState(false);
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
@@ -712,14 +711,6 @@ export default function AdminDashboardPage() {
   }, [router]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setPhNow(new Date());
-    }, 30000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
     let isMounted = true;
     let recurringTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -748,25 +739,6 @@ export default function AdminDashboardPage() {
     };
   }, []);
 
-  const phTime = phNow
-    .toLocaleTimeString("en-PH", {
-      timeZone: "Asia/Manila",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    })
-    .replace(" ", "")
-    .toUpperCase();
-
-  const phDate = phNow
-    .toLocaleDateString("en-PH", {
-      timeZone: "Asia/Manila",
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-    })
-    .toUpperCase();
-
   if (isChecking) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-[#f3f5f5]">
@@ -778,21 +750,6 @@ export default function AdminDashboardPage() {
   return (
     <>
       <section className="px-5 py-6 md:px-8">
-          <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e7eb] pb-4">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-[#6b7280]">Dashboard</p>
-              <h1 className="text-xl font-bold text-[#111827]">Real-time Monitoring</h1>
-            </div>
-            <div className="flex items-center gap-2 rounded-xl border border-[#d9dde1] bg-[#f3f4f6] px-3 py-1.5 text-xs text-[#4b5563] shadow-sm">
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z" />
-              </svg>
-              <span className="font-semibold tracking-wide text-[#374151]">{phTime}</span>
-              <span className="text-[#9ca3af]">|</span>
-              <span className="tracking-wide text-[#6b7280]">{phDate}</span>
-            </div>
-          </header>
-
           <CurrentSensorStatus
             alertConfig={alertConfig}
             rangeLabel={rangeLabel}

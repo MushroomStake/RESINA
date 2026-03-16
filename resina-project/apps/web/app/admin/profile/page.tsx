@@ -39,17 +39,6 @@ function buildFullName(first: string, middle: string, last: string): string {
   return [first.trim(), middle.trim(), last.trim()].filter(Boolean).join(" ");
 }
 
-function formatDateShort(date: Date): string {
-  return date
-    .toLocaleDateString("en-PH", {
-      timeZone: "Asia/Manila",
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-    })
-    .toUpperCase();
-}
-
 export default function AdminProfilePage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -89,7 +78,6 @@ export default function AdminProfilePage() {
   const [password, setPassword] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [phNow, setPhNow] = useState(() => new Date());
 
   const [addUserForm, setAddUserForm] = useState<AddUserForm>({
     firstName: "",
@@ -204,23 +192,6 @@ export default function AdminProfilePage() {
 
     void initialize();
   }, [router, supabase]);
-
-  useEffect(() => {
-    const timer = setInterval(() => setPhNow(new Date()), 30000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const phTime = phNow
-    .toLocaleTimeString("en-PH", {
-      timeZone: "Asia/Manila",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    })
-    .replace(" ", "")
-    .toUpperCase();
-
-  const phDate = formatDateShort(phNow);
 
   const handleSaveProfile = async () => {
     if (!sessionUserId) {
@@ -497,18 +468,6 @@ export default function AdminProfilePage() {
   return (
     <>
       <section className="px-5 py-6 md:px-8">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e7eb] pb-4">
-          <h1 className="text-3xl font-bold text-[#1f2937]">Admin Profile</h1>
-          <div className="flex items-center gap-2 rounded-xl border border-[#d9dde1] bg-[#f3f4f6] px-3 py-1.5 text-xs text-[#4b5563] shadow-sm">
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z" />
-            </svg>
-            <span className="font-semibold tracking-wide text-[#374151]">{phTime}</span>
-            <span className="text-[#9ca3af]">|</span>
-            <span className="tracking-wide text-[#6b7280]">{phDate}</span>
-          </div>
-        </header>
-
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1.15fr]">
           <section className="rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
             <div className="flex items-start gap-3 border-b border-[#e5e7eb] px-5 py-5">
