@@ -107,9 +107,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invite succeeded but user id was missing." }, { status: 500 });
     }
 
-    // 5. Assign an actual temporary password to the invited account.
+    // 5. Assign an actual temporary password and confirm the email so the user can log in immediately.
     const { error: setPasswordError } = await adminSupabase.auth.admin.updateUserById(invitedUserId, {
       password: defaultPassword,
+      email_confirm: true,
       user_metadata: {
         full_name: normalizedFullName,
         position: role,
