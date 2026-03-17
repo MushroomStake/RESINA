@@ -7,6 +7,7 @@ import { createClient } from "../../../lib/supabase/client";
 import { AnnouncementCommentsModal } from "./components/announcement-comments-modal";
 import { CreateAnnouncementModal } from "./components/create-announcement-modal";
 import { DeleteConfirmationModal } from "./components/delete-confirmation-modal";
+import { ImageViewerModal } from "./components/image-viewer-modal";
 
 type AlertLevel = "normal" | "warning" | "emergency";
 
@@ -37,6 +38,7 @@ type AnnouncementRow = {
 type CommentRow = {
   id: string;
   announcement_id: string;
+  parent_comment_id?: string | null;
   commenter_name: string;
   comment_body: string;
   created_at: string;
@@ -48,6 +50,7 @@ type ProfileRow = {
 };
 
 const BUCKET_NAME = "announcement-images";
+const ADMIN_COMMENTER_NAME = "BRGY. STA. RITA";
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("en-PH", {
@@ -111,11 +114,17 @@ export default function AdminAnnouncementsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
   const [commentsError, setCommentsError] = useState<string | null>(null);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [deletingAnnouncementId, setDeletingAnnouncementId] = useState<string | null>(null);
   const [editingAnnouncement, setEditingAnnouncement] = useState<AnnouncementRow | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [confirmDeleteEntry, setConfirmDeleteEntry] = useState<AnnouncementRow | null>(null);
+
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<AnnouncementMedia[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [alertFilter, setAlertFilter] = useState<"all" | AlertLevel>("all");
   const [personnelCount, setPersonnelCount] = useState(0);
@@ -442,7 +451,7 @@ export default function AdminAnnouncementsPage() {
       .from("announcement_comments")
       .select("id, announcement_id, commenter_name, comment_body, created_at")
       .eq("announcement_id", announcement.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
 
     if (error) {
       setCommentsError(error.message);
@@ -479,6 +488,44 @@ export default function AdminAnnouncementsPage() {
 
     setSelectedComments((prev) => prev.filter((c) => c.id !== commentId));
     setDeletingCommentId(null);
+  };
+
+  const handleAddComment = async (commentBody: string, replyToCommentId: string | null) => {
+    if (!selectedAnnouncement) return;
+
+    const trimmed = commentBody.trim();
+    if (!trimmed) return;
+
+    setIsSubmittingComment(true);
+    setCommentsError(null);
+
+    const payload = replyToCommentId ? `[[reply:${replyToCommentId}]] ${trimmed}` : trimmed;
+
+    const { data, error } = await supabase
+      .from("announcement_comments")
+      .insert({
+        announcement_id: selectedAnnouncement.id,
+        commenter_name: ADMIN_COMMENTER_NAME,
+        comment_body: payload,
+      })
+      .select("id, announcement_id, commenter_name, comment_body, created_at")
+      .single();
+
+    if (error) {
+      setCommentsError(error.message);
+      setIsSubmittingComment(false);
+      return;
+    }
+
+    await supabase.from("activity_logs").insert({
+      action_type: "comment_added",
+      actor_name: postedByName,
+      detail: `Added admin comment on "${selectedAnnouncement.title}"`,
+      reference_id: selectedAnnouncement.id,
+    });
+
+    setSelectedComments((prev) => [...prev, data as CommentRow]);
+    setIsSubmittingComment(false);
   };
 
   const handleDeleteAnnouncement = async (entry: AnnouncementRow) => {
@@ -668,25 +715,62 @@ export default function AdminAnnouncementsPage() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               {filteredAnnouncements.map((entry) => (
                 <article key={entry.id} className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
-                  {/* Featured image */}
-                  <div className="relative h-52 w-full bg-[#f1f5f9]">
-                    {entry.announcement_media?.[0] ? (
-                      <Image
-                        src={entry.announcement_media[0].public_url}
-                        alt={entry.announcement_media[0].file_name}
-                        fill
-                        className="object-cover"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-[#94a3b8]">
-                        <svg viewBox="0 0 24 24" className="h-10 w-10" fill="none" stroke="currentColor" strokeWidth="1.5">
-                          <rect x="3" y="5" width="18" height="14" rx="2" />
-                          <path d="M8 13l2.5-2.5L14 14l2-2 2 2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
+                  {/* Featured image or gallery */}
+                  {(entry.announcement_media ?? []).length > 0 ? (
+                    <div className="bg-[#f1f5f9]">
+                      {(entry.announcement_media ?? []).length === 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedImages(entry.announcement_media ?? []);
+                            setSelectedImageIndex(0);
+                            setImageViewerOpen(true);
+                          }}
+                          className="group relative h-52 w-full"
+                          aria-label="View image"
+                        >
+                          <Image
+                            src={(entry.announcement_media ?? [])[0]?.public_url ?? ""}
+                            alt={(entry.announcement_media ?? [])[0]?.file_name ?? ""}
+                            fill
+                            className="object-cover"
+                            unoptimized
+                          />
+                        </button>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 p-2">
+                          {(entry.announcement_media ?? []).map((media, index) => (
+                            <button
+                              key={media.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedImages(entry.announcement_media ?? []);
+                                setSelectedImageIndex(index);
+                                setImageViewerOpen(true);
+                              }}
+                              className="relative h-40 w-full overflow-hidden rounded-lg"
+                              aria-label={`View image ${index + 1}`}
+                            >
+                              <Image
+                                src={media.public_url}
+                                alt={media.file_name}
+                                fill
+                                className="object-cover"
+                                unoptimized
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex h-52 w-full items-center justify-center bg-[#f1f5f9] text-[#94a3b8]">
+                      <svg viewBox="0 0 24 24" className="h-10 w-10" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <rect x="3" y="5" width="18" height="14" rx="2" />
+                        <path d="M8 13l2.5-2.5L14 14l2-2 2 2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                  )}
 
                   {/* Card body */}
                   <div className="p-4">
@@ -791,9 +875,14 @@ export default function AdminAnnouncementsPage() {
           isLoading={isLoadingComments}
           error={commentsError}
           deletingCommentId={deletingCommentId}
-          comments={selectedComments}
+          isSubmittingComment={isSubmittingComment}
+          comments={selectedComments.map((comment) => ({
+            ...comment,
+            parent_comment_id: comment.parent_comment_id ?? null,
+          }))}
           onClose={() => setIsCommentsModalOpen(false)}
           onDeleteComment={handleDeleteComment}
+          onAddComment={handleAddComment}
           formatDateTime={formatDateTime}
         />
 
@@ -803,6 +892,13 @@ export default function AdminAnnouncementsPage() {
           isDeleting={deletingAnnouncementId === confirmDeleteEntry?.id}
           onCancel={() => setConfirmDeleteEntry(null)}
           onConfirm={() => void handleDeleteAnnouncement(confirmDeleteEntry!)}
+        />
+
+        <ImageViewerModal
+          isOpen={imageViewerOpen}
+          images={selectedImages}
+          initialIndex={selectedImageIndex}
+          onClose={() => setImageViewerOpen(false)}
         />
       </div>
     </section>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import {
   AppState,
   Image,
@@ -18,7 +19,9 @@ import {
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import { BottomNav, type DashboardTab } from "./components/bottom-nav";
+import { AnnouncementCard } from "./components/announcement-card";
 import { LoadingToast } from "./components/loading-toast";
+import { AnnouncementCommentsModal } from "./components/announcement-comments-modal";
 import { SensorStatusCard } from "./components/sensor-status-card";
 import { WeatherUpdateCard } from "./components/weather-update-card";
 
@@ -74,6 +77,7 @@ type WeatherRow = {
 };
 
 type AnnouncementAlertLevel = "normal" | "warning" | "emergency";
+type AnnouncementFilterKey = "all" | AnnouncementAlertLevel;
 
 type AnnouncementMedia = {
   id: string;
@@ -91,6 +95,25 @@ type AnnouncementItem = {
   created_at: string;
   announcement_media: AnnouncementMedia[];
 };
+
+type ProfileAvatarKey = "boy" | "man" | "user" | "woman" | "woman2";
+
+type ProfileState = {
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  addressPurok: string;
+  role: string;
+  avatarKey: ProfileAvatarKey;
+};
+
+const PROFILE_AVATAR_OPTIONS: Array<{ key: ProfileAvatarKey; label: string; source: ReturnType<typeof require> }> = [
+  { key: "user", label: "User", source: require("./assets/Profile/user.png") },
+  { key: "man", label: "Man", source: require("./assets/Profile/man.png") },
+  { key: "boy", label: "Boy", source: require("./assets/Profile/boy.png") },
+  { key: "woman", label: "Woman", source: require("./assets/Profile/woman.png") },
+  { key: "woman2", label: "Woman 2", source: require("./assets/Profile/woman 2.png") },
+];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const expoEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
@@ -284,7 +307,31 @@ export default function App() {
     signalNo: "No Signal",
   });
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [announcementFilter, setAnnouncementFilter] = useState<AnnouncementFilterKey>("all");
   const [isAnnouncementsLoading, setIsAnnouncementsLoading] = useState(false);
+  const [isCommentsModalOpen, setIsCommentsModalOpen] = useState(false);
+  const [selectedAnnouncementForComments, setSelectedAnnouncementForComments] = useState<AnnouncementItem | null>(null);
+  const [profileState, setProfileState] = useState<ProfileState>({
+    fullName: "Resident",
+    email: "-",
+    phoneNumber: "-",
+    addressPurok: "",
+    role: "user",
+    avatarKey: "user",
+  });
+  const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const [isPasswordEditorOpen, setIsPasswordEditorOpen] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
   const latestWeatherRecordedAtRef = useRef<string | null>(null);
   const refreshToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastScrollRefreshAtRef = useRef(0);
@@ -311,6 +358,21 @@ export default function App() {
     [sensorSnapshot.waterLevel, alertConfig.rangeLabel],
   );
   const waterUpdatedLabel = useMemo(() => formatSensorUpdatedAt(sensorSnapshot.updatedAt), [sensorSnapshot.updatedAt]);
+  const selectedAvatar = useMemo(
+    () => PROFILE_AVATAR_OPTIONS.find((item) => item.key === profileState.avatarKey) ?? PROFILE_AVATAR_OPTIONS[0],
+    [profileState.avatarKey],
+  );
+
+  const filteredAnnouncements = useMemo(() => {
+    if (announcementFilter === "all") return announcements;
+    return announcements.filter((entry) => entry.alert_level === announcementFilter);
+  }, [announcementFilter, announcements]);
+
+  const currentCommenterName = useMemo(() => {
+    const name = profileState.fullName.trim();
+    if (name) return name;
+    return session?.user?.email?.split("@")[0] ?? "Resident";
+  }, [profileState.fullName, session]);
 
   useEffect(() => {
     latestWeatherRecordedAtRef.current = weatherSnapshot.recordedAt;
@@ -404,12 +466,35 @@ export default function App() {
     }
   };
 
-  const loadProfileRole = async (authUserId: string) => {
-    const { data } = await supabase.from("profiles").select("role").eq("auth_user_id", authUserId).maybeSingle();
+  const loadProfileData = async (authUserId: string, fallbackUser?: Session["user"]) => {
+    const { data } = await supabase.from("profiles").select("*").eq("auth_user_id", authUserId).maybeSingle();
 
-    if (data?.role) {
-      setRole(data.role);
-    }
+    const row = (data ?? {}) as Record<string, unknown>;
+    const metadata = ((fallbackUser?.user_metadata as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
+
+    const firstName = String(row.first_name ?? metadata.first_name ?? "").trim();
+    const middleName = String(row.middle_name ?? metadata.middle_name ?? "").trim();
+    const lastName = String(row.last_name ?? metadata.last_name ?? "").trim();
+    const fallbackName = [firstName, middleName, lastName].filter(Boolean).join(" ").trim();
+
+    const roleValue = String(row.role ?? metadata.role ?? "user");
+    const avatarRaw = String(metadata.profile_avatar ?? "user") as ProfileAvatarKey;
+    const avatarKey = PROFILE_AVATAR_OPTIONS.some((item) => item.key === avatarRaw) ? avatarRaw : "user";
+
+    const fullName = String((row.full_name ?? metadata.full_name ?? fallbackName) || "Resident").trim();
+    const email = String(row.email ?? fallbackUser?.email ?? "-").trim();
+    const phoneNumber = String(row.phone_number ?? metadata.phone_number ?? "-").trim();
+    const addressPurok = String(row.address_purok ?? metadata.address_purok ?? "").trim();
+
+    setRole(roleValue);
+    setProfileState({
+      fullName,
+      email: email || "-",
+      phoneNumber: phoneNumber || "-",
+      addressPurok,
+      role: roleValue,
+      avatarKey,
+    });
   };
 
   const loadSensorSnapshot = async () => {
@@ -474,6 +559,16 @@ export default function App() {
     setIsAnnouncementsLoading(false);
   };
 
+  const openCommentsForAnnouncement = (entry: AnnouncementItem) => {
+    setSelectedAnnouncementForComments(entry);
+    setIsCommentsModalOpen(true);
+  };
+
+  const closeCommentsModal = () => {
+    setIsCommentsModalOpen(false);
+    setSelectedAnnouncementForComments(null);
+  };
+
   const loadDashboard = async () => {
     setIsDashboardLoading(true);
     await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadAnnouncements()]);
@@ -492,7 +587,7 @@ export default function App() {
 
       setSession(initialSession);
       if (initialSession?.user?.id) {
-        await loadProfileRole(initialSession.user.id);
+        await loadProfileData(initialSession.user.id, initialSession.user);
       }
 
       setIsBootstrapping(false);
@@ -505,7 +600,7 @@ export default function App() {
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       if (nextSession?.user?.id) {
-        void loadProfileRole(nextSession.user.id);
+        void loadProfileData(nextSession.user.id, nextSession.user);
       }
     });
 
@@ -740,6 +835,124 @@ export default function App() {
     setSuccessMessage("Account created and logged in.");
   };
 
+  const handleSelectProfileAvatar = async (avatarKey: ProfileAvatarKey) => {
+    if (!session || isSavingAvatar) {
+      return;
+    }
+
+    setIsSavingAvatar(true);
+
+    const { data, error } = await supabase.auth.updateUser({
+      data: {
+        ...(session.user.user_metadata ?? {}),
+        profile_avatar: avatarKey,
+      },
+    });
+
+    setIsSavingAvatar(false);
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
+    clearAlerts();
+    setSuccessMessage("Profile avatar updated.");
+    setIsAvatarPickerOpen(false);
+    await loadProfileData(session.user.id, data.user ?? session.user);
+  };
+
+  const handleSaveAddressPurok = async () => {
+    if (!session || isSavingAddress) {
+      return;
+    }
+
+    setIsSavingAddress(true);
+
+    const { data, error } = await supabase.auth.updateUser({
+      data: {
+        ...(session.user.user_metadata ?? {}),
+        address_purok: profileState.addressPurok.trim(),
+      },
+    });
+
+    setIsSavingAddress(false);
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
+    clearAlerts();
+    setSuccessMessage("Address updated.");
+    await loadProfileData(session.user.id, data.user ?? session.user);
+  };
+
+  const handleChangePassword = async () => {
+    if (!session || isChangingPassword) {
+      return;
+    }
+
+    clearAlerts();
+
+    const currentPassword = passwordForm.currentPassword;
+    const newPassword = passwordForm.newPassword;
+    const confirmPassword = passwordForm.confirmPassword;
+    const email = profileState.email.trim().toLowerCase();
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setErrorMessage("Please complete all password fields.");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setErrorMessage("New password must be at least 6 characters.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setErrorMessage("New password and confirm password do not match.");
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      setErrorMessage("Cannot verify account email for password update.");
+      return;
+    }
+
+    setIsChangingPassword(true);
+
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email,
+      password: currentPassword,
+    });
+
+    if (verifyError) {
+      setIsChangingPassword(false);
+      setErrorMessage("Current password is incorrect.");
+      return;
+    }
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    setIsChangingPassword(false);
+
+    if (updateError) {
+      setErrorMessage(updateError.message);
+      return;
+    }
+
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+    setIsPasswordEditorOpen(false);
+    setSuccessMessage("Password updated successfully.");
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setActiveTab("home");
@@ -821,40 +1034,62 @@ export default function App() {
         emergency: { bg: "#fff1f2", text: "#be123c", label: "Emergency Alert" },
       };
 
+      const filterOptions: Array<{ key: AnnouncementFilterKey; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
+        { key: "all", label: "All / Lahat", icon: "funnel-outline" },
+        { key: "emergency", label: "Emergency", icon: "alert-circle-outline" },
+        { key: "normal", label: "General / Lahat", icon: "checkmark-circle-outline" },
+      ];
+
       return (
         <View>
           <Text style={styles.newsTitle}>ANNOUNCEMENT</Text>
-          <Text style={styles.newsSubtitle}>Recent updates from Barangay Sta. Rita</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.newsFiltersScroll}
+            contentContainerStyle={styles.newsFiltersRow}
+          >
+            {filterOptions.map((option) => {
+              const isActive = announcementFilter === option.key;
+
+              return (
+                <Pressable
+                  key={option.key}
+                  style={[styles.newsFilterChip, isActive && styles.newsFilterChipActive]}
+                  onPress={() => setAnnouncementFilter(option.key)}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={15}
+                    color={isActive ? "#ffffff" : "#4b5563"}
+                    style={styles.newsFilterIcon}
+                  />
+                  <Text style={[styles.newsFilterText, isActive && styles.newsFilterTextActive]}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
           {isAnnouncementsLoading ? <Text style={styles.loaderText}>Loading announcements...</Text> : null}
 
-          {!isAnnouncementsLoading && announcements.length === 0 ? (
+          {!isAnnouncementsLoading && filteredAnnouncements.length === 0 ? (
             <View style={styles.placeholderWrap}>
               <Text style={styles.placeholderTitle}>NEWS</Text>
-              <Text style={styles.placeholderText}>No announcements posted yet.</Text>
+              <Text style={styles.placeholderText}>No announcements found for this filter.</Text>
             </View>
           ) : null}
 
-          {announcements.map((entry) => {
+          {filteredAnnouncements.map((entry) => {
             const tone = badgeStyleByAlert[entry.alert_level] ?? badgeStyleByAlert.normal;
-            const firstImage = entry.announcement_media?.[0]?.public_url;
 
             return (
-              <View key={entry.id} style={styles.newsCard}>
-                <View style={styles.newsMetaRow}>
-                  <Text style={styles.newsAuthor}>{entry.posted_by_name || "Barangay Admin"}</Text>
-                  <Text style={styles.newsDate}>{formatAnnouncementDate(entry.created_at)}</Text>
-                </View>
-
-                <Text style={styles.newsHeadline}>{entry.title}</Text>
-                <View style={[styles.newsAlertBadge, { backgroundColor: tone.bg }]}>
-                  <Text style={[styles.newsAlertText, { color: tone.text }]}>{tone.label}</Text>
-                </View>
-
-                <Text style={styles.newsDescription}>{entry.description}</Text>
-
-                {firstImage ? <Image source={{ uri: firstImage }} style={styles.newsImage} resizeMode="cover" /> : null}
-              </View>
+              <AnnouncementCard
+                key={entry.id}
+                entry={entry}
+                tone={tone}
+                formattedDate={formatAnnouncementDate(entry.created_at)}
+                onOpenComments={openCommentsForAnnouncement}
+              />
             );
           })}
         </View>
@@ -871,11 +1106,157 @@ export default function App() {
     }
 
     return (
-      <View style={styles.placeholderWrap}>
-        <Text style={styles.placeholderTitle}>PROFILE</Text>
-        <Text style={styles.placeholderText}>Role: {role}</Text>
+      <View>
+        <View style={styles.profileHeaderRow}>
+          <Text style={styles.profileTitle}>Profile</Text>
+        </View>
+
+        <View style={styles.profileCard}>
+          <Image source={selectedAvatar.source} style={styles.profileAvatar} resizeMode="cover" />
+          <View style={styles.profileInfoCol}>
+            <Text style={styles.profileName}>{profileState.fullName}</Text>
+            <View style={styles.profileRoleRow}>
+              <Text style={styles.profileRoleBadge}>{profileState.role.toUpperCase()}</Text>
+              <Text style={styles.profileRoleText}>Barangay Sta. Rita</Text>
+            </View>
+          </View>
+          <Pressable style={styles.profileInlineEditBtn} onPress={() => setIsAvatarPickerOpen((prev) => !prev)}>
+            <Text style={styles.profileInlineEditText}>{isAvatarPickerOpen ? "✕" : "✎"}</Text>
+          </Pressable>
+        </View>
+
+        {isAvatarPickerOpen ? (
+          <View style={styles.avatarPickerCard}>
+            <Text style={styles.avatarPickerTitle}>Choose your profile avatar</Text>
+            <View style={styles.avatarGrid}>
+              {PROFILE_AVATAR_OPTIONS.map((item) => {
+                const isSelected = item.key === profileState.avatarKey;
+
+                return (
+                  <Pressable
+                    key={item.key}
+                    style={[styles.avatarOption, isSelected && styles.avatarOptionActive]}
+                    onPress={() => void handleSelectProfileAvatar(item.key)}
+                    disabled={isSavingAvatar}
+                  >
+                    <Image source={item.source} style={styles.avatarOptionImage} resizeMode="cover" />
+                    <Text style={[styles.avatarOptionLabel, isSelected && styles.avatarOptionLabelActive]}>{item.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {isSavingAvatar ? <Text style={styles.avatarSavingText}>Saving avatar...</Text> : null}
+          </View>
+        ) : null}
+
+        <Text style={styles.profileSectionTitle}>Contact Details</Text>
+        <View style={styles.profileInfoCard}>
+          <View style={styles.profileInfoRow}>
+            <View style={styles.profileInfoHeadingRow}>
+              <Text style={styles.profileInfoLabel}>Phone Number</Text>
+              <Text style={styles.profilePill}>SMS Active</Text>
+            </View>
+            <Text style={styles.profileInfoValue}>{profileState.phoneNumber}</Text>
+          </View>
+          <View style={styles.profileInfoDivider} />
+          <View style={styles.profileInfoRow}>
+            <Text style={styles.profileInfoLabel}>Email Address</Text>
+            <Text style={styles.profileInfoValue}>{profileState.email}</Text>
+          </View>
+          <View style={styles.profileInfoDivider} />
+          <View style={styles.profileInfoRow}>
+            <Text style={styles.profileInfoLabel}>Address / Purok</Text>
+            <TextInput
+              value={profileState.addressPurok}
+              onChangeText={(value) =>
+                setProfileState((prev) => ({
+                  ...prev,
+                  addressPurok: value,
+                }))
+              }
+              onBlur={() => void handleSaveAddressPurok()}
+              style={styles.profileAddressInput}
+              placeholder="Purok 4, Riverside St."
+              placeholderTextColor="#9ca3af"
+              editable={!isSavingAddress}
+            />
+          </View>
+        </View>
+
+        <Text style={styles.profileSectionTitle}>Change Password</Text>
+        <View style={styles.passwordChangeRow}>
+          <Text style={styles.passwordMask}>{isPasswordEditorOpen ? "Enter new password" : "********"}</Text>
+          <View style={styles.passwordActions}>
+            <Pressable onPress={() => setShowCurrentPassword((prev) => !prev)}>
+              <Text style={styles.passwordActionIcon}>{showCurrentPassword ? "🙈" : "👁"}</Text>
+            </Pressable>
+            <Pressable onPress={() => setIsPasswordEditorOpen((prev) => !prev)}>
+              <Text style={styles.passwordActionIcon}>✎</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {isPasswordEditorOpen ? (
+          <View style={styles.profilePasswordCard}>
+            <Text style={styles.profileInfoLabel}>Current Password</Text>
+            <TextInput
+              value={passwordForm.currentPassword}
+              onChangeText={(value) => setPasswordForm((prev) => ({ ...prev, currentPassword: value }))}
+              style={styles.profilePasswordInput}
+              secureTextEntry={!showCurrentPassword}
+              autoCapitalize="none"
+              placeholder="Enter current password"
+              placeholderTextColor="#9ca3af"
+            />
+
+            <Text style={[styles.profileInfoLabel, styles.profilePasswordLabelSpacing]}>New Password</Text>
+            <TextInput
+              value={passwordForm.newPassword}
+              onChangeText={(value) => setPasswordForm((prev) => ({ ...prev, newPassword: value }))}
+              style={styles.profilePasswordInput}
+              secureTextEntry={!showNewPassword}
+              autoCapitalize="none"
+              placeholder="Enter new password"
+              placeholderTextColor="#9ca3af"
+            />
+            <Pressable style={styles.passwordToggleMini} onPress={() => setShowNewPassword((prev) => !prev)}>
+              <Text style={styles.passwordToggleMiniText}>{showNewPassword ? "Hide" : "Show"}</Text>
+            </Pressable>
+
+            <Text style={[styles.profileInfoLabel, styles.profilePasswordLabelSpacing]}>Confirm Password</Text>
+            <TextInput
+              value={passwordForm.confirmPassword}
+              onChangeText={(value) => setPasswordForm((prev) => ({ ...prev, confirmPassword: value }))}
+              style={styles.profilePasswordInput}
+              secureTextEntry={!showConfirmPassword}
+              autoCapitalize="none"
+              placeholder="Confirm new password"
+              placeholderTextColor="#9ca3af"
+            />
+            <Pressable style={styles.passwordToggleMini} onPress={() => setShowConfirmPassword((prev) => !prev)}>
+              <Text style={styles.passwordToggleMiniText}>{showConfirmPassword ? "Hide" : "Show"}</Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.profilePasswordSaveBtn, isChangingPassword && styles.buttonDisabled]}
+              onPress={() => void handleChangePassword()}
+              disabled={isChangingPassword}
+            >
+              <Text style={styles.profilePasswordSaveText}>{isChangingPassword ? "Updating..." : "Update Password"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <View style={styles.alertCard}>
+          <Text style={styles.alertCardTitle}>Alert Notifications</Text>
+          <Text style={styles.alertCardBody}>
+            Your primary phone number is registered for automated SMS alerts. In case of spills or critical levels, you
+            will be notified immediately.
+          </Text>
+        </View>
+
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Log Out</Text>
+          <Text style={styles.logoutText}>Logout from Device</Text>
         </Pressable>
       </View>
     );
@@ -950,6 +1331,16 @@ export default function App() {
                 void runManualRefresh("Refreshing News...");
               }
             }}
+          />
+
+          <AnnouncementCommentsModal
+            visible={isCommentsModalOpen}
+            announcement={selectedAnnouncementForComments}
+            currentCommenterName={currentCommenterName}
+            currentUserAvatarSource={selectedAvatar.source}
+            sessionUserId={session.user.id}
+            onRequestClose={closeCommentsModal}
+            onError={setErrorMessage}
           />
         </View>
       </SafeAreaView>
@@ -1236,73 +1627,322 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "500",
   },
+  profileHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  profileTitle: {
+    color: "#1f2937",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  profileCard: {
+    borderWidth: 1,
+    borderColor: "#d9dde3",
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    position: "relative",
+  },
+  profileAvatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 999,
+    backgroundColor: "#e5e7eb",
+  },
+  profileInfoCol: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  profileName: {
+    color: "#1f2937",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  profileInlineEditBtn: {
+    position: "absolute",
+    right: 12,
+    top: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+  },
+  profileInlineEditText: {
+    color: "#4b5563",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  profileRoleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  profileRoleBadge: {
+    color: "#111827",
+    backgroundColor: "#e5e7eb",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  profileRoleText: {
+    marginLeft: 8,
+    color: "#6b7280",
+    fontSize: 13,
+  },
+  avatarPickerCard: {
+    borderWidth: 1,
+    borderColor: "#cdd8f0",
+    borderRadius: 14,
+    backgroundColor: "#f8fbff",
+    padding: 12,
+    marginBottom: 12,
+  },
+  avatarPickerTitle: {
+    color: "#374151",
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+  avatarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  avatarOption: {
+    width: 64,
+    alignItems: "center",
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  avatarOptionActive: {
+    backgroundColor: "#ebf5ed",
+    borderColor: "#6ec17b",
+  },
+  avatarOptionImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+  },
+  avatarOptionLabel: {
+    marginTop: 6,
+    fontSize: 11,
+    color: "#6b7280",
+    fontWeight: "600",
+  },
+  avatarOptionLabelActive: {
+    color: "#166534",
+  },
+  avatarSavingText: {
+    marginTop: 8,
+    color: "#2f8d41",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  profileSectionTitle: {
+    color: "#556072",
+    fontWeight: "700",
+    fontSize: 14,
+    marginTop: 4,
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  profileInfoCard: {
+    borderWidth: 1,
+    borderColor: "#d9dde3",
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    marginBottom: 12,
+  },
+  profileInfoRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  profileInfoHeadingRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 2,
+  },
+  profileInfoLabel: {
+    color: "#6b7280",
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  profilePill: {
+    color: "#374151",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#f9fafb",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  profileInfoValue: {
+    color: "#1f2937",
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  profileAddressInput: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 10,
+    backgroundColor: "#f9fafb",
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    color: "#1f2937",
+    fontSize: 14,
+  },
+  passwordChangeRow: {
+    borderWidth: 1,
+    borderColor: "#d9dde3",
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  passwordMask: {
+    color: "#374151",
+    fontSize: 14,
+    letterSpacing: 1,
+    fontWeight: "600",
+  },
+  passwordActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  passwordActionIcon: {
+    color: "#6b7280",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  profilePasswordCard: {
+    borderWidth: 1,
+    borderColor: "#d9dde3",
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    padding: 12,
+    marginBottom: 12,
+  },
+  profilePasswordInput: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 10,
+    backgroundColor: "#f9fafb",
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    color: "#1f2937",
+    fontSize: 14,
+  },
+  profilePasswordLabelSpacing: {
+    marginTop: 10,
+  },
+  passwordToggleMini: {
+    alignSelf: "flex-end",
+    marginTop: 5,
+  },
+  passwordToggleMiniText: {
+    color: "#6b7280",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  profilePasswordSaveBtn: {
+    marginTop: 12,
+    borderRadius: 10,
+    backgroundColor: "#4caf50",
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  profilePasswordSaveText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  alertCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#bfdfc6",
+    backgroundColor: "#eef7f0",
+    padding: 14,
+    marginBottom: 12,
+  },
+  alertCardTitle: {
+    color: "#1f2937",
+    fontWeight: "700",
+    fontSize: 18,
+    marginBottom: 6,
+  },
+  alertCardBody: {
+    color: "#4b5563",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  profileInfoDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
   newsTitle: {
     textAlign: "center",
     color: "#1f2937",
     fontWeight: "700",
-    fontSize: 18,
+    fontSize: 15,
     marginBottom: 4,
+    letterSpacing: 0.2,
   },
-  newsSubtitle: {
-    textAlign: "center",
-    color: "#6b7280",
-    fontSize: 13,
-    marginBottom: 12,
+  newsFiltersScroll: {
+    marginBottom: 10,
   },
-  newsCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#d8dde4",
-    backgroundColor: "#ffffff",
-    padding: 14,
-    marginBottom: 12,
-  },
-  newsMetaRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  newsFiltersRow: {
+    paddingBottom: 2,
+    paddingHorizontal: 2,
     gap: 8,
   },
-  newsAuthor: {
-    color: "#2f9e44",
-    fontWeight: "700",
-    fontSize: 13,
-    flex: 1,
-  },
-  newsDate: {
-    color: "#6b7280",
-    fontSize: 12,
-  },
-  newsHeadline: {
-    marginTop: 8,
-    color: "#1f2937",
-    fontSize: 28,
-    fontWeight: "700",
-    lineHeight: 32,
-  },
-  newsAlertBadge: {
-    alignSelf: "flex-start",
+  newsFilterChip: {
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    marginTop: 10,
+    backgroundColor: "#f0f2f5",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
-  newsAlertText: {
+  newsFilterChipActive: {
+    backgroundColor: "#48a957",
+    borderColor: "#48a957",
+  },
+  newsFilterIcon: {
+    marginRight: 6,
+  },
+  newsFilterText: {
+    color: "#374151",
     fontSize: 12,
     fontWeight: "700",
   },
-  newsDescription: {
-    marginTop: 10,
-    color: "#4b5563",
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  newsImage: {
-    marginTop: 12,
-    width: "100%",
-    height: 180,
-    borderRadius: 12,
-    backgroundColor: "#e5e7eb",
+  newsFilterTextActive: {
+    color: "#ffffff",
   },
   placeholderWrap: {
     minHeight: 420,
@@ -1321,13 +1961,16 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     marginTop: 8,
-    backgroundColor: "#4caf50",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#d9dde3",
     paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    alignItems: "center",
   },
   logoutText: {
-    color: "#ffffff",
+    color: "#4b5563",
     fontWeight: "700",
     fontSize: 14,
   },

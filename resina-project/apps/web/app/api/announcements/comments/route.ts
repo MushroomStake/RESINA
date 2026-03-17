@@ -4,6 +4,7 @@ import { createAdminClient } from "../../../../lib/supabase/admin";
 
 type CreateCommentBody = {
   announcementId?: string;
+  parentCommentId?: string | null;
   commenterName?: string;
   commentBody?: string;
 };
@@ -11,17 +12,36 @@ type CreateCommentBody = {
 export async function GET() {
   try {
     const adminSupabase = createAdminClient();
-    const { data, error } = await adminSupabase
+    const threadedResult = await adminSupabase
       .from("announcement_comments")
-      .select("id, announcement_id, commenter_name, comment_body, created_at")
-      .order("created_at", { ascending: false })
+      .select("id, announcement_id, parent_comment_id, commenter_name, comment_body, created_at")
+      .order("created_at", { ascending: true })
       .limit(200);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!threadedResult.error) {
+      return NextResponse.json({ comments: threadedResult.data ?? [] });
     }
 
-    return NextResponse.json({ comments: data ?? [] });
+    if (!threadedResult.error.message.toLowerCase().includes("parent_comment_id")) {
+      return NextResponse.json({ error: threadedResult.error.message }, { status: 500 });
+    }
+
+    const fallbackResult = await adminSupabase
+      .from("announcement_comments")
+      .select("id, announcement_id, commenter_name, comment_body, created_at")
+      .order("created_at", { ascending: true })
+      .limit(200);
+
+    if (fallbackResult.error) {
+      return NextResponse.json({ error: fallbackResult.error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      comments: (fallbackResult.data ?? []).map((row) => ({
+        ...row,
+        parent_comment_id: null,
+      })),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load comments.";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -32,6 +52,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as CreateCommentBody;
     const announcementId = body.announcementId?.trim() ?? "";
+    const parentCommentId = body.parentCommentId?.trim() || null;
     const commenterName = body.commenterName?.trim() ?? "";
     const commentBody = body.commentBody?.trim() ?? "";
 
@@ -68,15 +89,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Announcement not found." }, { status: 404 });
     }
 
-    const { error: insertError } = await adminSupabase.from("announcement_comments").insert({
+    const insertPayload = {
       announcement_id: announcementId,
+      parent_comment_id: parentCommentId,
       commenter_auth_user_id: user?.id ?? null,
       commenter_name: commenterName,
       comment_body: commentBody,
-    });
+    };
 
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
+    const insertResult = await adminSupabase.from("announcement_comments").insert(insertPayload);
+
+    if (
+      insertResult.error &&
+      insertResult.error.message.toLowerCase().includes("parent_comment_id")
+    ) {
+      const fallbackInsert = await adminSupabase.from("announcement_comments").insert({
+        announcement_id: announcementId,
+        commenter_auth_user_id: user?.id ?? null,
+        commenter_name: commenterName,
+        comment_body: commentBody,
+      });
+
+      if (fallbackInsert.error) {
+        return NextResponse.json({ error: fallbackInsert.error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true }, { status: 201 });
+    }
+
+    if (insertResult.error) {
+      return NextResponse.json({ error: insertResult.error.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true }, { status: 201 });

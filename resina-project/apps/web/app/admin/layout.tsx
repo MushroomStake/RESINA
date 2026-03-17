@@ -22,10 +22,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       : "dashboard";
 
   return (
-    <main className="min-h-dvh bg-[#f3f5f5] text-[#1f2937]">
-      <div className="grid min-h-dvh w-full grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)]">
-        <AdminSidebar activePage={activePage} />
-        <div className="min-w-0">
+    <main className="h-dvh overflow-hidden bg-[#f3f5f5] text-[#1f2937]">
+      <div className="grid h-full w-full grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="h-dvh md:sticky md:top-0 md:overflow-hidden">
+          <AdminSidebar activePage={activePage} />
+        </div>
+        <div className="min-w-0 overflow-y-auto">
           <AdminPageHeader activePage={activePage} />
           {children}
         </div>

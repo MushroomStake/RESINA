@@ -31,14 +31,21 @@ create index if not exists idx_announcement_media_announcement_id
 create table if not exists public.announcement_comments (
   id uuid primary key default gen_random_uuid(),
   announcement_id uuid not null references public.announcements(id) on delete cascade,
+  parent_comment_id uuid references public.announcement_comments(id) on delete cascade,
   commenter_auth_user_id uuid,
   commenter_name text not null,
   comment_body text not null,
   created_at timestamptz not null default now()
 );
 
+alter table public.announcement_comments
+  add column if not exists parent_comment_id uuid references public.announcement_comments(id) on delete cascade;
+
 create index if not exists idx_announcement_comments_announcement_id
   on public.announcement_comments(announcement_id);
+
+create index if not exists idx_announcement_comments_parent_comment_id
+  on public.announcement_comments(parent_comment_id);
 
 create or replace function public.set_updated_at()
 returns trigger

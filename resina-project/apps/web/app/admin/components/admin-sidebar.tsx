@@ -25,7 +25,7 @@ function AdminSidebar({ activePage }: AdminSidebarProps) {
   const activeClass = "block rounded-lg bg-[#e9f7ec] px-3 py-2 font-medium text-[#2e9d5a]";
 
   return (
-    <aside className="border-r border-[#e5e7eb] bg-[#f7f8f9] px-4 py-6 md:px-5">
+    <aside className="h-dvh border-r border-[#e5e7eb] bg-[#f7f8f9] px-4 py-6 md:px-5">
       <div className="flex items-center gap-3">
         <Image src="/images/resina%20logo.png" alt="Resina logo" width={56} height={56} />
         <div>
