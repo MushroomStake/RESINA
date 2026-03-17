@@ -7,7 +7,7 @@ import { createClient } from "../../../lib/supabase/client";
 import { AnnouncementCommentsModal } from "./components/announcement-comments-modal";
 import { CreateAnnouncementModal } from "./components/create-announcement-modal";
 import { DeleteConfirmationModal } from "./components/delete-confirmation-modal";
-import { ImageViewerModal } from "./components/image-viewer-modal";
+import { ImageViewerModal } from "@/app/admin/announcements/components/image-viewer-modal";
 
 type AlertLevel = "normal" | "warning" | "emergency";
 
