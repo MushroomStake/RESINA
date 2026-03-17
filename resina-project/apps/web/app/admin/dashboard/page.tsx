@@ -147,18 +147,20 @@ function formatLastUpdate(updatedAt: string | null): string {
     return "No recent update";
   }
 
-  const now = Date.now();
-  const timestamp = new Date(updatedAt).getTime();
-  const minutes = Math.max(0, Math.round((now - timestamp) / 60000));
-
-  if (minutes < 1) {
-    return "Last update: just now";
-  }
-  if (minutes === 1) {
-    return "Last update: 1 min ago";
+  const timestamp = new Date(updatedAt);
+  if (Number.isNaN(timestamp.getTime())) {
+    return "No recent update";
   }
 
-  return `Last update: ${minutes} mins ago`;
+  return `Last update: ${timestamp.toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })}`;
 }
 
 function formatWeatherDateForCard(date: Date): string {
@@ -282,15 +284,47 @@ function resolveIntensityLabel(wet: WetSeverity, heat: HeatSeverity): string {
   return "Normal";
 }
 
-function analyzeOpenWeather(main: string, description: string, temperatureC: number, humidity: number) {
+function resolveDrySeasonNightIcon(main: string, description: string): string {
+  const lowerMain = main.toLowerCase();
+  const lowerDescription = description.toLowerCase();
+
+  if (lowerMain.includes("clear")) {
+    return "/weather/dry-season/clear sky moon.png";
+  }
+
+  if (lowerMain.includes("cloud") || lowerDescription.includes("cloud")) {
+    return "/weather/dry-season/few clouds moon.png";
+  }
+
+  if (
+    lowerMain.includes("mist") ||
+    lowerMain.includes("fog") ||
+    lowerMain.includes("haze") ||
+    lowerDescription.includes("mist") ||
+    lowerDescription.includes("fog") ||
+    lowerDescription.includes("haze")
+  ) {
+    return "/weather/dry-season/mist moon.png";
+  }
+
+  return "/weather/dry-season/few clouds moon.png";
+}
+
+function analyzeOpenWeather(main: string, description: string, temperatureC: number, humidity: number, iconCode: string) {
   const wetSeverity = inferWetSeverity(main, description);
   const heatIndex = computeHeatIndexC(temperatureC, humidity);
   const heatSeverity = resolveHeatSeverity(heatIndex);
   const intensityDescription = resolveIntensityLabel(wetSeverity, heatSeverity);
+  const isNight = iconCode.endsWith("n");
+
+  let iconPath = WEATHER_ICON_MAP[intensityDescription] ?? "/weather/dry-season/Sun - Normal.png";
+  if (isNight && wetSeverity === "none") {
+    iconPath = resolveDrySeasonNightIcon(main, description);
+  }
 
   return {
     intensityDescription,
-    iconPath: WEATHER_ICON_MAP[intensityDescription] ?? "/weather/dry-season/Sun - Normal.png",
+    iconPath,
     heatIndex,
   };
 }
@@ -514,14 +548,15 @@ export default function AdminDashboardPage() {
 
       const data = (await response.json()) as {
         main?: { temp?: number; humidity?: number };
-        weather?: Array<{ main?: string; description?: string }>;
+        weather?: Array<{ main?: string; description?: string; icon?: string }>;
       };
 
       const temperature = Math.round(data.main?.temp ?? 25);
       const humidity = Math.round(data.main?.humidity ?? 60);
       const weatherMain = data.weather?.[0]?.main ?? "Clear";
       const weatherDescription = data.weather?.[0]?.description ?? "";
-      const analyzed = analyzeOpenWeather(weatherMain, weatherDescription, temperature, humidity);
+      const weatherIconCode = data.weather?.[0]?.icon ?? "01d";
+      const analyzed = analyzeOpenWeather(weatherMain, weatherDescription, temperature, humidity, weatherIconCode);
       const selectedWarning = applyToPublishedCard
         ? weatherState.colorCodedWarning
         : weatherDraft.colorCodedWarning;
@@ -574,7 +609,7 @@ export default function AdminDashboardPage() {
   const handlePublishWeather = async () => {
     const normalized: WeatherState = {
       ...weatherDraft,
-      iconPath: WEATHER_ICON_MAP[weatherDraft.intensityDescription] ?? weatherDraft.iconPath,
+      iconPath: weatherDraft.iconPath || WEATHER_ICON_MAP[weatherDraft.intensityDescription] || "/weather/dry-season/Sun - Normal.png",
       dateLabel: formatWeatherDateForCard(new Date()),
     };
 
@@ -600,7 +635,6 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     const supabase = createClient();
     let isMounted = true;
-    let refreshTimer: ReturnType<typeof setInterval> | null = null;
     let liveChannel: ReturnType<typeof supabase.channel> | null = null;
 
     const loadLatestSensorData = async () => {
@@ -691,19 +725,12 @@ export default function AdminDashboardPage() {
           () => void loadLatestSensorData(),
         )
         .subscribe();
-
-      refreshTimer = setInterval(() => {
-        void loadLatestSensorData();
-      }, 10000);
     };
 
     void initialize();
 
     return () => {
       isMounted = false;
-      if (refreshTimer) {
-        clearInterval(refreshTimer);
-      }
       if (liveChannel) {
         void supabase.removeChannel(liveChannel);
       }

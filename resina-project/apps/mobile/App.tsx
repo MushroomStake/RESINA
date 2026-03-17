@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AppState,
   Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
   Pressable,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -16,6 +18,9 @@ import {
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import { BottomNav, type DashboardTab } from "./components/bottom-nav";
+import { LoadingToast } from "./components/loading-toast";
+import { SensorStatusCard } from "./components/sensor-status-card";
+import { WeatherUpdateCard } from "./components/weather-update-card";
 
 type AuthMode = "login" | "register";
 type AlertLevelKey = "normal" | "critical" | "evacuation" | "spilling";
@@ -42,10 +47,49 @@ type SensorSnapshot = {
 };
 
 type WeatherSnapshot = {
+  recordedAt: string | null;
   dateLabel: string;
   temperature: number;
+  iconPath: string;
   intensityDescription: string;
+  conditionDescription: string;
+  humidity: number;
+  heatIndex: number;
   manualDescription: string;
+  colorCodedWarning: string;
+  signalNo: string;
+};
+
+type WeatherRow = {
+  recorded_at?: string | null;
+  temperature?: number | string | null;
+  icon_path?: string | null;
+  humidity?: number | string | null;
+  heat_index?: number | string | null;
+  weather_description?: string | null;
+  intensity?: string | null;
+  color_coded_warning?: string | null;
+  signal_no?: string | null;
+  manual_description?: string | null;
+};
+
+type AnnouncementAlertLevel = "normal" | "warning" | "emergency";
+
+type AnnouncementMedia = {
+  id: string;
+  file_name: string;
+  public_url: string;
+  display_order: number;
+};
+
+type AnnouncementItem = {
+  id: string;
+  title: string;
+  description: string;
+  alert_level: AnnouncementAlertLevel;
+  posted_by_name: string;
+  created_at: string;
+  announcement_media: AnnouncementMedia[];
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -114,13 +158,25 @@ function formatRangeLabel(level: number | null, fallback: string): string {
   return `${level.toFixed(1)} - ${upper.toFixed(2)}m`;
 }
 
-function formatRelativeUpdate(updatedAt: string | null): string {
-  if (!updatedAt) return "UPDATED JUST NOW";
+function formatSensorUpdatedAt(updatedAt: string | null): string {
+  if (!updatedAt) return "UPDATED: NO RECENT DATA";
 
-  const diffMinutes = Math.max(0, Math.round((Date.now() - new Date(updatedAt).getTime()) / 60000));
-  if (diffMinutes < 1) return "UPDATED JUST NOW";
-  if (diffMinutes === 1) return "UPDATED 1M AGO";
-  return `UPDATED ${diffMinutes}M AGO`;
+  const timestamp = new Date(updatedAt);
+  if (Number.isNaN(timestamp.getTime())) {
+    return "UPDATED: NO RECENT DATA";
+  }
+
+  return `UPDATED: ${timestamp
+    .toLocaleString("en-PH", {
+      timeZone: "Asia/Manila",
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+    .toUpperCase()}`;
 }
 
 function formatWeatherDate(dateISO: string | null): string {
@@ -136,15 +192,56 @@ function formatWeatherDate(dateISO: string | null): string {
     .toUpperCase();
 }
 
-function getWeatherBackground(intensity: string): string {
-  const lowered = intensity.toLowerCase();
-  if (lowered.includes("heavy") || lowered.includes("torrential")) return "#cfd5de";
-  if (lowered.includes("rain")) return "#d8dde4";
-  return "#ece8d2";
+function getWeatherBackground(intensity: string, colorCodedWarning: string, heatIndex: number): string {
+  const warning = colorCodedWarning.toLowerCase();
+  if (warning.includes("red")) return "#E74C4C";
+  if (warning.includes("orange")) return "#FF7E1C";
+  if (warning.includes("yellow")) return "#F7D400";
+
+  const rainyLabels = ["light rain", "moderate rain", "heavy rain", "torrential rain"];
+  if (rainyLabels.includes(intensity.toLowerCase())) return "#B3B7C0";
+
+  if (heatIndex < 27) return "#ECE8D2";
+  if (heatIndex <= 32) return "#F4E68E";
+  if (heatIndex <= 41) return "#FDDC00";
+  if (heatIndex <= 51) return "#FF7E1C";
+  return "#E74C4C";
 }
 
 function buildFullName(firstName: string, middleName: string, lastName: string): string {
   return [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(" ");
+}
+
+function formatAnnouncementDate(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "Published recently";
+  }
+
+  return `Published ${parsed.toLocaleDateString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  })}`;
+}
+
+function mapWeatherRowToSnapshot(row: WeatherRow): WeatherSnapshot {
+  const temp = Math.round(Number(row.temperature ?? 24));
+
+  return {
+    recordedAt: row.recorded_at ?? null,
+    dateLabel: formatWeatherDate(row.recorded_at ?? null),
+    temperature: Number.isNaN(temp) ? 24 : temp,
+    iconPath: String(row.icon_path ?? ""),
+    intensityDescription: String(row.intensity ?? "Normal"),
+    conditionDescription: String(row.weather_description ?? "").trim(),
+    humidity: Math.round(Number(row.humidity ?? 0)),
+    heatIndex: Math.round(Number(row.heat_index ?? (Number.isNaN(temp) ? 24 : temp))),
+    manualDescription: String(row.manual_description ?? "").trim() || "Stay updated with official barangay advisories.",
+    colorCodedWarning: String(row.color_coded_warning ?? "No Warning"),
+    signalNo: String(row.signal_no ?? "No Signal"),
+  };
 }
 
 export default function App() {
@@ -157,6 +254,9 @@ export default function App() {
   const [mode, setMode] = useState<AuthMode>("login");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
+  const [isRefreshingDashboard, setIsRefreshingDashboard] = useState(false);
+  const [isRefreshToastVisible, setIsRefreshToastVisible] = useState(false);
+  const [refreshToastMessage, setRefreshToastMessage] = useState("Refreshing live data...");
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -171,11 +271,23 @@ export default function App() {
   });
 
   const [weatherSnapshot, setWeatherSnapshot] = useState<WeatherSnapshot>({
+    recordedAt: null,
     dateLabel: "TODAY",
     temperature: 24,
-    intensityDescription: "Clear Sky",
+    iconPath: "",
+    intensityDescription: "Normal",
+    conditionDescription: "",
+    humidity: 0,
+    heatIndex: 24,
     manualDescription: "No active advisory right now.",
+    colorCodedWarning: "No Warning",
+    signalNo: "No Signal",
   });
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [isAnnouncementsLoading, setIsAnnouncementsLoading] = useState(false);
+  const latestWeatherRecordedAtRef = useRef<string | null>(null);
+  const refreshToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastScrollRefreshAtRef = useRef(0);
 
   const [loginForm, setLoginForm] = useState<LoginForm>({
     email: "",
@@ -198,11 +310,52 @@ export default function App() {
     () => formatRangeLabel(sensorSnapshot.waterLevel, alertConfig.rangeLabel),
     [sensorSnapshot.waterLevel, alertConfig.rangeLabel],
   );
-  const waterUpdatedLabel = useMemo(() => formatRelativeUpdate(sensorSnapshot.updatedAt), [sensorSnapshot.updatedAt]);
+  const waterUpdatedLabel = useMemo(() => formatSensorUpdatedAt(sensorSnapshot.updatedAt), [sensorSnapshot.updatedAt]);
+
+  useEffect(() => {
+    latestWeatherRecordedAtRef.current = weatherSnapshot.recordedAt;
+  }, [weatherSnapshot.recordedAt]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshToastTimerRef.current) {
+        clearTimeout(refreshToastTimerRef.current);
+      }
+    };
+  }, []);
 
   const clearAlerts = () => {
     setErrorMessage("");
     setSuccessMessage("");
+  };
+
+  const runManualRefresh = async (message: string) => {
+    if (!session || isRefreshingDashboard) {
+      return;
+    }
+
+    if (refreshToastTimerRef.current) {
+      clearTimeout(refreshToastTimerRef.current);
+      refreshToastTimerRef.current = null;
+    }
+
+    setRefreshToastMessage(message);
+    setIsRefreshToastVisible(true);
+    setIsRefreshingDashboard(true);
+    const refreshStart = Date.now();
+
+    try {
+      await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadAnnouncements()]);
+    } finally {
+      setIsRefreshingDashboard(false);
+      const elapsed = Date.now() - refreshStart;
+      const minVisibleMs = 900;
+      const hideDelay = Math.max(0, minVisibleMs - elapsed);
+
+      refreshToastTimerRef.current = setTimeout(() => {
+        setIsRefreshToastVisible(false);
+      }, hideDelay);
+    }
   };
 
   const handleDeepLinkAuth = async (url: string) => {
@@ -289,7 +442,7 @@ export default function App() {
   const loadWeatherSnapshot = async () => {
     const { data } = await supabase
       .from("weather_logs")
-      .select("recorded_at, temperature, intensity, manual_description")
+      .select("recorded_at, temperature, icon_path, humidity, heat_index, weather_description, intensity, color_coded_warning, signal_no, manual_description")
       .order("recorded_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -298,17 +451,32 @@ export default function App() {
       return;
     }
 
-    setWeatherSnapshot({
-      dateLabel: formatWeatherDate(data.recorded_at as string | null),
-      temperature: Math.round(Number(data.temperature ?? 24)),
-      intensityDescription: String(data.intensity ?? "Clear Sky"),
-      manualDescription: String(data.manual_description ?? "").trim() || "Stay updated with official barangay advisories.",
-    });
+    setWeatherSnapshot(mapWeatherRowToSnapshot(data as WeatherRow));
+  };
+
+  const loadAnnouncements = async () => {
+    setIsAnnouncementsLoading(true);
+
+    const { data } = await supabase
+      .from("announcements")
+      .select(
+        "id, title, description, alert_level, posted_by_name, created_at, announcement_media(id, file_name, public_url, display_order)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    const rows = ((data ?? []) as AnnouncementItem[]).map((entry) => ({
+      ...entry,
+      announcement_media: [...(entry.announcement_media ?? [])].sort((a, b) => a.display_order - b.display_order),
+    }));
+
+    setAnnouncements(rows);
+    setIsAnnouncementsLoading(false);
   };
 
   const loadDashboard = async () => {
     setIsDashboardLoading(true);
-    await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot()]);
+    await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadAnnouncements()]);
     setIsDashboardLoading(false);
   };
 
@@ -371,12 +539,101 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     void loadDashboard();
+    let liveChannel: ReturnType<typeof supabase.channel> | null = null;
+
+    liveChannel = supabase
+      .channel("resina-mobile-dashboard-live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sensor_readings" },
+        () => void loadSensorSnapshot(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sensor_status" },
+        () => void loadSensorSnapshot(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "water_levels" },
+        () => void loadSensorSnapshot(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sensor_logs" },
+        () => void loadSensorSnapshot(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "weather_logs" },
+        (payload) => {
+          const row = (payload.new ?? null) as WeatherRow | null;
+
+          if (row && Object.keys(row).length > 0) {
+            setWeatherSnapshot(mapWeatherRowToSnapshot(row));
+            return;
+          }
+
+          void loadWeatherSnapshot();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "announcements" },
+        () => void loadAnnouncements(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "announcement_media" },
+        () => void loadAnnouncements(),
+      )
+      .subscribe();
+
+    return () => {
+      if (liveChannel) {
+        void supabase.removeChannel(liveChannel);
+      }
+    };
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
 
     const interval = setInterval(() => {
-      void loadDashboard();
-    }, 10000);
+      void (async () => {
+        const { data } = await supabase
+          .from("weather_logs")
+          .select("recorded_at")
+          .order("recorded_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-    return () => clearInterval(interval);
+        const latestRecordedAt = (data?.recorded_at as string | null) ?? null;
+        if (!latestRecordedAt) return;
+
+        if (latestWeatherRecordedAtRef.current !== latestRecordedAt) {
+          await loadWeatherSnapshot();
+        }
+      })();
+    }, 12000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void Promise.all([loadWeatherSnapshot(), loadAnnouncements()]);
+      }
+    });
+
+    return () => {
+      sub.remove();
+    };
   }, [session]);
 
   const handleLogin = async () => {
@@ -495,7 +752,11 @@ export default function App() {
   };
 
   const renderHomeTab = () => {
-    const weatherCardBackground = getWeatherBackground(weatherSnapshot.intensityDescription);
+    const weatherCardBackground = getWeatherBackground(
+      weatherSnapshot.intensityDescription,
+      weatherSnapshot.colorCodedWarning,
+      weatherSnapshot.heatIndex,
+    );
 
     return (
       <>
@@ -505,32 +766,28 @@ export default function App() {
           <Text style={styles.locationText}>BRIDGE WATER LEVEL AT STA. RITA, OLONGAPO CITY.</Text>
         </View>
 
-        <View style={[styles.sensorCard, { backgroundColor: alertConfig.cardColor }]}>
-          <View style={styles.sensorMetaRow}>
-            <Text style={styles.sensorChip}>Sta. Rita Bridge</Text>
-            <Text style={styles.sensorUpdated}>{waterUpdatedLabel}</Text>
-          </View>
+        <SensorStatusCard
+          stationLabel="Sta. Rita Bridge"
+          updatedLabel={waterUpdatedLabel}
+          rangeLabel={waterRange}
+          alertTitle={alertConfig.title}
+          alertBadge={alertConfig.badge}
+          backgroundColor={alertConfig.cardColor}
+        />
 
-          <Text style={styles.sensorRange}>{waterRange}</Text>
-          <Text style={styles.sensorLevel}>{alertConfig.title}</Text>
-          <Text style={styles.sensorBadge}>{alertConfig.badge}</Text>
-        </View>
-
-        <View style={[styles.weatherCard, { backgroundColor: weatherCardBackground }]}>
-          <View style={styles.weatherTopRow}>
-            <Text style={styles.weatherCondition}>{weatherSnapshot.intensityDescription.toUpperCase()}</Text>
-            <Text style={styles.weatherDate}>{weatherSnapshot.dateLabel}</Text>
-          </View>
-
-          <View style={styles.weatherBodyRow}>
-            <Text style={styles.weatherTemp}>{weatherSnapshot.temperature}°C</Text>
-            <Image source={require("./assets/images/Sta-Rita.png")} style={styles.weatherIcon} resizeMode="contain" />
-          </View>
-        </View>
-
-        <View style={styles.noticeCard}>
-          <Text style={styles.noticeText}>{weatherSnapshot.manualDescription}</Text>
-        </View>
+        <WeatherUpdateCard
+          intensityLabel={weatherSnapshot.intensityDescription}
+          iconPath={weatherSnapshot.iconPath}
+          conditionDescription={weatherSnapshot.conditionDescription}
+          dateLabel={weatherSnapshot.dateLabel}
+          temperature={weatherSnapshot.temperature}
+          humidity={weatherSnapshot.humidity}
+          heatIndex={weatherSnapshot.heatIndex}
+          advisoryText={weatherSnapshot.manualDescription}
+          backgroundColor={weatherCardBackground}
+          colorCodedWarning={weatherSnapshot.colorCodedWarning}
+          signalNo={weatherSnapshot.signalNo}
+        />
 
         <Text style={styles.quickActionsTitle}>Quick Actions</Text>
         <View style={styles.actionCardPrimary}>
@@ -558,10 +815,48 @@ export default function App() {
     }
 
     if (activeTab === "news") {
+      const badgeStyleByAlert: Record<AnnouncementAlertLevel, { bg: string; text: string; label: string }> = {
+        normal: { bg: "#ecfdf3", text: "#15803d", label: "General Update" },
+        warning: { bg: "#fff7ed", text: "#c2410c", label: "Warning Alert" },
+        emergency: { bg: "#fff1f2", text: "#be123c", label: "Emergency Alert" },
+      };
+
       return (
-        <View style={styles.placeholderWrap}>
-          <Text style={styles.placeholderTitle}>NEWS</Text>
-          <Text style={styles.placeholderText}>Announcements will appear here.</Text>
+        <View>
+          <Text style={styles.newsTitle}>ANNOUNCEMENT</Text>
+          <Text style={styles.newsSubtitle}>Recent updates from Barangay Sta. Rita</Text>
+
+          {isAnnouncementsLoading ? <Text style={styles.loaderText}>Loading announcements...</Text> : null}
+
+          {!isAnnouncementsLoading && announcements.length === 0 ? (
+            <View style={styles.placeholderWrap}>
+              <Text style={styles.placeholderTitle}>NEWS</Text>
+              <Text style={styles.placeholderText}>No announcements posted yet.</Text>
+            </View>
+          ) : null}
+
+          {announcements.map((entry) => {
+            const tone = badgeStyleByAlert[entry.alert_level] ?? badgeStyleByAlert.normal;
+            const firstImage = entry.announcement_media?.[0]?.public_url;
+
+            return (
+              <View key={entry.id} style={styles.newsCard}>
+                <View style={styles.newsMetaRow}>
+                  <Text style={styles.newsAuthor}>{entry.posted_by_name || "Barangay Admin"}</Text>
+                  <Text style={styles.newsDate}>{formatAnnouncementDate(entry.created_at)}</Text>
+                </View>
+
+                <Text style={styles.newsHeadline}>{entry.title}</Text>
+                <View style={[styles.newsAlertBadge, { backgroundColor: tone.bg }]}>
+                  <Text style={[styles.newsAlertText, { color: tone.text }]}>{tone.label}</Text>
+                </View>
+
+                <Text style={styles.newsDescription}>{entry.description}</Text>
+
+                {firstImage ? <Image source={{ uri: firstImage }} style={styles.newsImage} resizeMode="cover" /> : null}
+              </View>
+            );
+          })}
         </View>
       );
     }
@@ -614,10 +909,48 @@ export default function App() {
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
         <View style={styles.dashboardWrapper}>
-          <ScrollView contentContainerStyle={styles.dashboardContainer}>
+          <LoadingToast visible={isRefreshToastVisible} message={refreshToastMessage} topOffset={66} />
+          <ScrollView
+            contentContainerStyle={styles.dashboardContainer}
+            alwaysBounceVertical
+            onScrollEndDrag={(event) => {
+              if (activeTab === "profile") return;
+
+              const y = event.nativeEvent.contentOffset.y;
+              const now = Date.now();
+              const cooldownMs = 5000;
+
+              if (y <= 0 && now - lastScrollRefreshAtRef.current >= cooldownMs) {
+                lastScrollRefreshAtRef.current = now;
+                const label = activeTab === "news" ? "Refreshing News..." : "Refreshing Home...";
+                void runManualRefresh(label);
+              }
+            }}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshingDashboard}
+                onRefresh={() => void runManualRefresh("Refreshing dashboard...")}
+                tintColor="#2f8d41"
+                colors={["#2f8d41"]}
+              />
+            }
+          >
             {isDashboardLoading ? <Text style={styles.loaderText}>Refreshing live data...</Text> : renderDashboardBody()}
           </ScrollView>
-          <BottomNav activeTab={activeTab} onChange={setActiveTab} />
+          <BottomNav
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            onReselect={(tab) => {
+              if (tab === "home") {
+                void runManualRefresh("Refreshing Home...");
+                return;
+              }
+
+              if (tab === "news") {
+                void runManualRefresh("Refreshing News...");
+              }
+            }}
+          />
         </View>
       </SafeAreaView>
     );
@@ -840,7 +1173,7 @@ const styles = StyleSheet.create({
   },
   dashboardContainer: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 22,
     paddingBottom: 22,
     gap: 12,
   },
@@ -848,7 +1181,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#1f2937",
     fontWeight: "700",
-    fontSize: 20,
+    fontSize: 16,
     marginBottom: 6,
   },
   locationRow: {
@@ -859,108 +1192,9 @@ const styles = StyleSheet.create({
   },
   locationText: {
     color: "#1f2937",
-    fontSize: 24,
+    fontSize: 17,
     fontWeight: "700",
-    lineHeight: 30,
-  },
-  sensorCard: {
-    borderRadius: 14,
-    padding: 14,
-  },
-  sensorMetaRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  sensorChip: {
-    color: "#2f8d41",
-    backgroundColor: "#e8f5eb",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  sensorUpdated: {
-    color: "#ffffff",
-    fontWeight: "700",
-    fontSize: 11,
-  },
-  sensorRange: {
-    textAlign: "center",
-    color: "#ffffff",
-    fontSize: 50,
-    fontWeight: "800",
-    marginTop: 16,
-  },
-  sensorLevel: {
-    textAlign: "center",
-    color: "#ffffff",
-    fontWeight: "700",
-    fontSize: 18,
-    marginTop: 12,
-  },
-  sensorBadge: {
-    alignSelf: "center",
-    marginTop: 22,
-    marginBottom: 8,
-    color: "#2f8d41",
-    backgroundColor: "#eef8ef",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  weatherCard: {
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#d5d9df",
-  },
-  weatherTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  weatherCondition: {
-    color: "#2f3645",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  weatherDate: {
-    color: "#2f3645",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  weatherBodyRow: {
-    marginTop: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  weatherTemp: {
-    fontSize: 56,
-    color: "#323948",
-    fontWeight: "800",
-  },
-  weatherIcon: {
-    width: 104,
-    height: 104,
-    opacity: 0.9,
-  },
-  noticeCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    padding: 14,
-    backgroundColor: "#f1f3f5",
-  },
-  noticeText: {
-    color: "#3f4654",
-    fontSize: 18,
-    lineHeight: 26,
+    lineHeight: 23,
   },
   quickActionsTitle: {
     color: "#20232c",
@@ -1001,6 +1235,74 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontSize: 24,
     fontWeight: "500",
+  },
+  newsTitle: {
+    textAlign: "center",
+    color: "#1f2937",
+    fontWeight: "700",
+    fontSize: 18,
+    marginBottom: 4,
+  },
+  newsSubtitle: {
+    textAlign: "center",
+    color: "#6b7280",
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  newsCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#d8dde4",
+    backgroundColor: "#ffffff",
+    padding: 14,
+    marginBottom: 12,
+  },
+  newsMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
+  newsAuthor: {
+    color: "#2f9e44",
+    fontWeight: "700",
+    fontSize: 13,
+    flex: 1,
+  },
+  newsDate: {
+    color: "#6b7280",
+    fontSize: 12,
+  },
+  newsHeadline: {
+    marginTop: 8,
+    color: "#1f2937",
+    fontSize: 28,
+    fontWeight: "700",
+    lineHeight: 32,
+  },
+  newsAlertBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginTop: 10,
+  },
+  newsAlertText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  newsDescription: {
+    marginTop: 10,
+    color: "#4b5563",
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  newsImage: {
+    marginTop: 12,
+    width: "100%",
+    height: 180,
+    borderRadius: 12,
+    backgroundColor: "#e5e7eb",
   },
   placeholderWrap: {
     minHeight: 420,
