@@ -43,10 +43,10 @@ type HeatSeverity = "normal" | "caution" | "extreme-caution" | "danger" | "extre
 
 const WEATHER_ICON_MAP: Record<string, string> = {
   Normal: "/weather/dry-season/Sun - Normal.png",
-  Caution: "/weather/dry-season/sun - Caution.png",
-  "Extreme Caution": "/weather/dry-season/sun - Extreme Caution.png",
-  Danger: "/weather/dry-season/sun - Danger.png",
-  "Extreme Danger": "/weather/dry-season/sun - Danger.png",
+  Caution: "/weather/dry-season/Sun - Caution.png",
+  "Extreme Caution": "/weather/dry-season/Sun - Extreme Caution.png",
+  Danger: "/weather/dry-season/Sun - Danger.png",
+  "Extreme Danger": "/weather/dry-season/Sun - Danger.png",
   "Light Rain": "/weather/wet-season/Light Rain.png",
   "Moderate Rain": "/weather/wet-season/Moderate Rain.png",
   "Heavy Rain": "/weather/wet-season/Heavy Rain.png",
@@ -749,6 +749,11 @@ export default function AdminDashboardPage() {
       // Show last saved state immediately; fall back to live API fetch if nothing stored
       const hasData = await loadWeatherFromSupabase();
       if (!hasData && isMounted) {
+        doFetch();
+      }
+
+      // Always refresh once on load so day/night icon and weather state are current.
+      if (isMounted) {
         doFetch();
       }
 
