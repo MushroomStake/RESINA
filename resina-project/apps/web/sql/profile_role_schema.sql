@@ -9,10 +9,20 @@ create table if not exists public.profiles (
   last_name text,
   full_name text not null,
   email text not null unique,
-  role text not null check (role in ('admin', 'member')) default 'member',
+  role text not null check (role in ('admin', 'member', 'user')) default 'user',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Keep existing databases in sync with the role policy above.
+alter table public.profiles
+  drop constraint if exists profiles_role_check;
+
+alter table public.profiles
+  add constraint profiles_role_check check (role in ('admin', 'member', 'user'));
+
+alter table public.profiles
+  alter column role set default 'user';
 
 create or replace function public.set_updated_at()
 returns trigger

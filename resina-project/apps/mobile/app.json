@@ -2,6 +2,7 @@
   "expo": {
     "name": "RESINA",
     "slug": "resina-mobile",
+    "scheme": "resina",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",

@@ -89,20 +89,26 @@ function inferAlertLevel(statusText: string | null, waterLevel: number | null): 
   return "normal";
 }
 
-function buildHistoryDescription(level: AlertLevelKey, waterLevel: number): string {
-  const readingLabel = `${waterLevel.toFixed(2)}m actual reading`;
-
+function buildHistoryDescription(level: AlertLevelKey): string {
   if (level === "spilling") {
-    return `${readingLabel}. Classified under the spilling threshold range.`;
+    return "Classified under the spilling threshold range.";
   }
   if (level === "evacuation") {
-    return `${readingLabel}. Classified under the evacuation threshold range.`;
+    return "Classified under the evacuation threshold range.";
   }
   if (level === "critical") {
-    return `${readingLabel}. Classified under the critical threshold range.`;
+    return "Classified under the critical threshold range.";
   }
 
-  return `${readingLabel}. Classified under the normal threshold range.`;
+  return "Classified under the normal threshold range.";
+}
+
+function resolveRangeLabel(level: AlertLevelKey, fallback: string): string {
+  if (level === "spilling") {
+    return "4.0+m";
+  }
+
+  return fallback;
 }
 
 function normalizeHistoryRow(row: Record<string, unknown>): HistoryRecord | null {
@@ -130,8 +136,8 @@ function normalizeHistoryRow(row: Record<string, unknown>): HistoryRecord | null
     waterLevel,
     alertLevel,
     statusLabel: config.statusLabel,
-    rangeLabel: config.rangeLabel,
-    description: buildHistoryDescription(alertLevel, waterLevel),
+    rangeLabel: resolveRangeLabel(alertLevel, config.rangeLabel),
+    description: buildHistoryDescription(alertLevel),
   };
 }
 
@@ -383,14 +389,14 @@ export default function AdminHistoryPage() {
 
   const handleDownloadCsv = () => {
     const lines = [
-      ["Date & Time", "Actual Reading", "Status", "Level", "Description"].join(","),
+      ["Date", "Time", "Status", "Level", "Description"].join(","),
       ...filteredRecords.map((entry) =>
         [
-          `"${formatHistoryDateTime(entry)}"`,
-          `"${entry.waterLevel.toFixed(2)}m"`,
+          `"${formatHistoryDate(entry)}"`,
+          `"${formatHistoryTime(entry)}"`,
           `"${entry.statusLabel}"`,
           `"${entry.rangeLabel}"`,
-          `"${entry.description}"`,
+          `"${ALERT_LEVELS[entry.alertLevel].description}"`,
         ].join(","),
       ),
     ];
@@ -514,7 +520,6 @@ export default function AdminHistoryPage() {
                 <tr>
                   <th className="px-4 py-3 font-semibold">Date</th>
                   <th className="px-4 py-3 font-semibold">Time</th>
-                  <th className="px-4 py-3 font-semibold">Actual Reading</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
                   <th className="px-4 py-3 font-semibold">Level</th>
                   <th className="px-4 py-3 font-semibold">Description</th>
@@ -523,13 +528,13 @@ export default function AdminHistoryPage() {
               <tbody className="text-[#4b5563]">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-[#6b7280]">
+                    <td colSpan={5} className="px-4 py-6 text-[#6b7280]">
                       Loading history records...
                     </td>
                   </tr>
                 ) : pagedRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-[#6b7280]">
+                    <td colSpan={5} className="px-4 py-6 text-[#6b7280]">
                       {pageError ?? "No history records matched the current filters."}
                     </td>
                   </tr>
@@ -541,7 +546,6 @@ export default function AdminHistoryPage() {
                       <tr key={entry.id} className="border-b border-[#eef1f4] last:border-b-0">
                         <td className="px-4 py-4 text-[#6b7280] whitespace-nowrap">{formatHistoryDate(entry)}</td>
                         <td className="px-4 py-4 text-[#6b7280] whitespace-nowrap">{formatHistoryTime(entry)}</td>
-                        <td className="px-4 py-4 font-semibold text-[#1f2937]">{entry.waterLevel.toFixed(2)}m</td>
                         <td className="px-4 py-4">
                           <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${config.chipClass}`}>
                             {entry.statusLabel}
