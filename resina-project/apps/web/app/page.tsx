@@ -74,7 +74,7 @@ export default function HomePage() {
             <div className="absolute left-[56%] top-[48%] h-[410px] w-[410px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#e4ebe4] md:h-[440px] md:w-[440px]" />
 
             <Image
-              src="/images/phone-login.png"
+              src="/images/phone login.png"
               alt="Resina mobile screens"
               width={420}
               height={620}

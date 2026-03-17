@@ -1353,7 +1353,7 @@ export default function App() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
           <View style={styles.container}>
-            <Image source={require("./assets/images/Sta-Rita.png")} style={styles.logo} resizeMode="contain" />
+            <Image source={require("./assets/images/Sta Rita.png")} style={styles.logo} resizeMode="contain" />
 
             <Text style={styles.brandTitle}>RESINA</Text>
             <Text style={styles.brandSubtitle}>Citizen Access Portal</Text>
