@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker/src/datetimepicker";
+import type { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import {
   AppState,
   Image,
@@ -24,6 +26,7 @@ import { LoadingToast } from "./components/loading-toast";
 import { AnnouncementCommentsModal } from "./components/announcement-comments-modal";
 import { SensorStatusCard } from "./components/sensor-status-card";
 import { WeatherUpdateCard } from "./components/weather-update-card";
+import { MobileSectionHeader } from "./components/mobile-section-header";
 
 type AuthMode = "login" | "register";
 type AlertLevelKey = "normal" | "critical" | "evacuation" | "spilling";
@@ -76,6 +79,25 @@ type WeatherRow = {
   manual_description?: string | null;
 };
 
+type HistoryAlertLevel = "normal" | "critical" | "evacuation" | "spilling";
+
+type HistoryRecord = {
+  id: string;
+  recordedAt: string;
+  readingDate: string | null;
+  readingTime: string | null;
+  waterLevel: number;
+  alertLevel: HistoryAlertLevel;
+  statusLabel: string;
+  rangeLabel: string;
+};
+
+type HistoryDayGroup = {
+  dateKey: string;
+  dateLabel: string;
+  entries: HistoryRecord[];
+};
+
 type AnnouncementAlertLevel = "normal" | "warning" | "emergency";
 type AnnouncementFilterKey = "all" | AnnouncementAlertLevel;
 
@@ -119,6 +141,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const expoEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
 const mobileEmailRedirectUrl =
   expoEnv?.EXPO_PUBLIC_MOBILE_EMAIL_REDIRECT_URL ?? "https://resina-two.vercel.app/";
+const DASHBOARD_TOP_PADDING = Platform.OS === "android" ? 14 : 16;
 
 const ALERT_LEVELS: Record<
   AlertLevelKey,
@@ -152,6 +175,46 @@ const ALERT_LEVELS: Record<
     badge: "Alert Level 4",
     rangeLabel: "4.0+m",
     cardColor: "#A82A2A",
+  },
+};
+
+const HISTORY_LEVELS: Record<
+  HistoryAlertLevel,
+  {
+    statusLabel: string;
+    rangeLabel: string;
+    cardBackground: string;
+    badgeBorder: string;
+    badgeText: string;
+  }
+> = {
+  normal: {
+    statusLabel: "Normal",
+    rangeLabel: "1.5 - 2.49m",
+    cardBackground: "#dbe2dd",
+    badgeBorder: "#67b56e",
+    badgeText: "#2d8a39",
+  },
+  critical: {
+    statusLabel: "Critical",
+    rangeLabel: "2.5 - 2.9m",
+    cardBackground: "#ece6c8",
+    badgeBorder: "#9f8c28",
+    badgeText: "#8b7300",
+  },
+  evacuation: {
+    statusLabel: "Evacuation",
+    rangeLabel: "3.0 - 3.9m",
+    cardBackground: "#e9e5e5",
+    badgeBorder: "#c36d37",
+    badgeText: "#b55f2d",
+  },
+  spilling: {
+    statusLabel: "Spilling",
+    rangeLabel: "4.0+m",
+    cardBackground: "#ebe1e3",
+    badgeBorder: "#f06868",
+    badgeText: "#ef4e4e",
   },
 };
 
@@ -249,6 +312,109 @@ function formatAnnouncementDate(value: string): string {
   })}`;
 }
 
+function inferHistoryAlertLevel(statusText: string | null, waterLevel: number | null): HistoryAlertLevel {
+  const status = (statusText ?? "").toLowerCase();
+
+  if (status.includes("spill")) return "spilling";
+  if (status.includes("evac")) return "evacuation";
+  if (status.includes("critical") || status.includes("alert level 2") || status.includes("alert 2")) {
+    return "critical";
+  }
+
+  if (waterLevel !== null) {
+    if (waterLevel >= 4) return "spilling";
+    if (waterLevel >= 3) return "evacuation";
+    if (waterLevel >= 2.5) return "critical";
+  }
+
+  return "normal";
+}
+
+function formatHistoryTimeOnly(record: HistoryRecord): string {
+  const source =
+    record.readingDate && record.readingTime
+      ? new Date(`${record.readingDate}T${record.readingTime}`)
+      : new Date(record.recordedAt);
+
+  if (Number.isNaN(source.getTime())) {
+    return "--:--";
+  }
+
+  return source
+    .toLocaleTimeString("en-PH", {
+      timeZone: "Asia/Manila",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+    .replace(" AM", "AM")
+    .replace(" PM", "PM");
+}
+
+function getHistoryDateKey(record: HistoryRecord): string {
+  if (record.readingDate) {
+    return record.readingDate;
+  }
+
+  return new Date(record.recordedAt).toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila",
+  });
+}
+
+function formatHistoryGroupDateLabel(dateKey: string): string {
+  const parsed = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return dateKey;
+  }
+
+  return parsed.toLocaleDateString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
+function mapHistoryRowToRecord(row: Record<string, unknown>): HistoryRecord | null {
+  const recordedAt = String(row.created_at ?? "").trim();
+  if (!recordedAt) {
+    return null;
+  }
+
+  const waterLevel = Number(row.water_level ?? Number.NaN);
+  if (Number.isNaN(waterLevel)) {
+    return null;
+  }
+
+  const alertLevel = inferHistoryAlertLevel((row.status as string | null) ?? null, waterLevel);
+  const config = HISTORY_LEVELS[alertLevel];
+
+  return {
+    id: String(row.id ?? recordedAt),
+    recordedAt,
+    readingDate: (row.reading_date as string | null) ?? null,
+    readingTime: (row.reading_time as string | null) ?? null,
+    waterLevel,
+    alertLevel,
+    statusLabel: config.statusLabel,
+    rangeLabel: config.rangeLabel,
+  };
+}
+
+function getHistorySourceTimestamp(record: HistoryRecord): number {
+  const candidate =
+    record.readingDate && record.readingTime
+      ? new Date(`${record.readingDate}T${record.readingTime}`)
+      : new Date(record.recordedAt);
+
+  const time = candidate.getTime();
+  if (Number.isNaN(time)) {
+    return 0;
+  }
+
+  return time;
+}
+
 function mapWeatherRowToSnapshot(row: WeatherRow): WeatherSnapshot {
   const temp = Math.round(Number(row.temperature ?? 24));
 
@@ -311,6 +477,12 @@ export default function App() {
   const [isAnnouncementsLoading, setIsAnnouncementsLoading] = useState(false);
   const [isCommentsModalOpen, setIsCommentsModalOpen] = useState(false);
   const [selectedAnnouncementForComments, setSelectedAnnouncementForComments] = useState<AnnouncementItem | null>(null);
+  const [historyRecords, setHistoryRecords] = useState<HistoryRecord[]>([]);
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<"all" | HistoryAlertLevel>("all");
+  const [selectedHistoryDateKey, setSelectedHistoryDateKey] = useState<string | null>(null);
+  const [showHistoryDatePicker, setShowHistoryDatePicker] = useState(false);
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(5);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [profileState, setProfileState] = useState<ProfileState>({
     fullName: "Resident",
     email: "-",
@@ -368,6 +540,40 @@ export default function App() {
     return announcements.filter((entry) => entry.alert_level === announcementFilter);
   }, [announcementFilter, announcements]);
 
+  const filteredHistoryRecords = useMemo(() => {
+    return historyRecords.filter((entry) => {
+      const matchesStatus = historyStatusFilter === "all" || entry.alertLevel === historyStatusFilter;
+      const matchesDate = !selectedHistoryDateKey || getHistoryDateKey(entry) === selectedHistoryDateKey;
+      return matchesStatus && matchesDate;
+    });
+  }, [historyRecords, historyStatusFilter, selectedHistoryDateKey]);
+
+  const visibleHistoryRecords = useMemo(
+    () => filteredHistoryRecords.slice(0, historyVisibleCount),
+    [filteredHistoryRecords, historyVisibleCount],
+  );
+
+  const groupedVisibleHistoryRecords = useMemo<HistoryDayGroup[]>(() => {
+    const grouped = new Map<string, HistoryRecord[]>();
+
+    visibleHistoryRecords.forEach((entry) => {
+      const key = getHistoryDateKey(entry);
+      const existing = grouped.get(key);
+
+      if (existing) {
+        existing.push(entry);
+      } else {
+        grouped.set(key, [entry]);
+      }
+    });
+
+    return Array.from(grouped.entries()).map(([dateKey, entries]) => ({
+      dateKey,
+      dateLabel: formatHistoryGroupDateLabel(dateKey),
+      entries,
+    }));
+  }, [visibleHistoryRecords]);
+
   const currentCommenterName = useMemo(() => {
     const name = profileState.fullName.trim();
     if (name) return name;
@@ -407,7 +613,7 @@ export default function App() {
     const refreshStart = Date.now();
 
     try {
-      await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadAnnouncements()]);
+      await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadAnnouncements(), loadHistoryRecords()]);
     } finally {
       setIsRefreshingDashboard(false);
       const elapsed = Date.now() - refreshStart;
@@ -559,6 +765,29 @@ export default function App() {
     setIsAnnouncementsLoading(false);
   };
 
+  const loadHistoryRecords = async () => {
+    setIsHistoryLoading(true);
+
+    const { data, error } = await supabase
+      .from("sensor_readings")
+      .select("id, water_level, status, reading_date, reading_time, created_at")
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (error) {
+      setIsHistoryLoading(false);
+      return;
+    }
+
+    const normalized = (data ?? [])
+      .map((row) => mapHistoryRowToRecord(row as Record<string, unknown>))
+      .filter((row): row is HistoryRecord => row !== null)
+      .sort((left, right) => getHistorySourceTimestamp(right) - getHistorySourceTimestamp(left));
+
+    setHistoryRecords(normalized);
+    setIsHistoryLoading(false);
+  };
+
   const openCommentsForAnnouncement = (entry: AnnouncementItem) => {
     setSelectedAnnouncementForComments(entry);
     setIsCommentsModalOpen(true);
@@ -571,7 +800,7 @@ export default function App() {
 
   const loadDashboard = async () => {
     setIsDashboardLoading(true);
-    await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadAnnouncements()]);
+    await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadAnnouncements(), loadHistoryRecords()]);
     setIsDashboardLoading(false);
   };
 
@@ -641,7 +870,10 @@ export default function App() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sensor_readings" },
-        () => void loadSensorSnapshot(),
+        () => {
+          void loadSensorSnapshot();
+          void loadHistoryRecords();
+        },
       )
       .on(
         "postgres_changes",
@@ -692,6 +924,52 @@ export default function App() {
   }, [session]);
 
   useEffect(() => {
+    setHistoryVisibleCount(5);
+  }, [historyStatusFilter, selectedHistoryDateKey]);
+
+  const selectedHistoryDateValue = useMemo(() => {
+    if (!selectedHistoryDateKey) {
+      return new Date();
+    }
+
+    const parsed = new Date(`${selectedHistoryDateKey}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) {
+      return new Date();
+    }
+
+    return parsed;
+  }, [selectedHistoryDateKey]);
+
+  const selectedHistoryDateLabel = useMemo(() => {
+    if (!selectedHistoryDateKey) {
+      return "All Dates";
+    }
+
+    return formatHistoryGroupDateLabel(selectedHistoryDateKey);
+  }, [selectedHistoryDateKey]);
+
+  const handleHistoryDateChange = (event: DateTimePickerEvent, date?: Date) => {
+    if (event.type === "dismissed") {
+      setShowHistoryDatePicker(false);
+      return;
+    }
+
+    if (!date) {
+      return;
+    }
+
+    const nextDateKey = date.toLocaleDateString("en-CA", {
+      timeZone: "Asia/Manila",
+    });
+
+    setSelectedHistoryDateKey(nextDateKey);
+
+    if (Platform.OS === "android") {
+      setShowHistoryDatePicker(false);
+    }
+  };
+
+  useEffect(() => {
     if (!session) return;
 
     const interval = setInterval(() => {
@@ -722,7 +1000,7 @@ export default function App() {
 
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        void Promise.all([loadWeatherSnapshot(), loadAnnouncements()]);
+        void Promise.all([loadWeatherSnapshot(), loadAnnouncements(), loadHistoryRecords()]);
       }
     });
 
@@ -973,7 +1251,7 @@ export default function App() {
 
     return (
       <>
-        <Text style={styles.homeTitle}>HOME</Text>
+        <MobileSectionHeader title="HOME" />
 
         <View style={styles.locationRow}>
           <Text style={styles.locationText}>BRIDGE WATER LEVEL AT STA. RITA, OLONGAPO CITY.</Text>
@@ -1042,7 +1320,7 @@ export default function App() {
 
       return (
         <View>
-          <Text style={styles.newsTitle}>ANNOUNCEMENT</Text>
+          <MobileSectionHeader title="ANNOUNCEMENT" />
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -1097,19 +1375,123 @@ export default function App() {
     }
 
     if (activeTab === "history") {
+      const historyFilterOptions: Array<{ key: "all" | HistoryAlertLevel; label: string }> = [
+        { key: "all", label: "All" },
+        { key: "normal", label: "Normal" },
+        { key: "critical", label: "Critical" },
+        { key: "evacuation", label: "Evacuate" },
+        { key: "spilling", label: "Spilling" },
+      ];
+
+      const canLoadMore = visibleHistoryRecords.length < filteredHistoryRecords.length;
+
       return (
-        <View style={styles.placeholderWrap}>
-          <Text style={styles.placeholderTitle}>HISTORY</Text>
-          <Text style={styles.placeholderText}>Historical sensor records will appear here.</Text>
+        <View>
+          <MobileSectionHeader title="HISTORY" />
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.historyFiltersScroll}
+            contentContainerStyle={styles.historyFiltersRow}
+          >
+            {historyFilterOptions.map((option) => {
+              const isActive = historyStatusFilter === option.key;
+
+              return (
+                <Pressable
+                  key={option.key}
+                  style={[styles.historyFilterChip, isActive && styles.historyFilterChipActive]}
+                  onPress={() => setHistoryStatusFilter(option.key)}
+                >
+                  <Text style={[styles.historyFilterText, isActive && styles.historyFilterTextActive]}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.historyToolbarRow}>
+            <Pressable
+              style={styles.historyDateRangeBtn}
+              onPress={() => setShowHistoryDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={15} color="#374151" />
+              <Text style={styles.historyDateRangeText}>{selectedHistoryDateLabel}</Text>
+            </Pressable>
+
+            <Text style={styles.historySortedText}>SORTED: NEWEST FIRST</Text>
+          </View>
+
+          {showHistoryDatePicker ? (
+            <View style={styles.historyCalendarWrap}>
+              <DateTimePicker
+                mode="date"
+                value={selectedHistoryDateValue}
+                display={Platform.OS === "ios" ? "inline" : "default"}
+                onChange={handleHistoryDateChange}
+              />
+            </View>
+          ) : null}
+
+          {selectedHistoryDateKey ? (
+            <Pressable style={styles.historyClearDateBtn} onPress={() => setSelectedHistoryDateKey(null)}>
+              <Text style={styles.historyClearDateText}>Show all dates</Text>
+            </Pressable>
+          ) : null}
+
+          {isHistoryLoading ? <Text style={styles.loaderText}>Loading history...</Text> : null}
+
+          {!isHistoryLoading && filteredHistoryRecords.length === 0 ? (
+            <View style={styles.placeholderWrap}>
+              <Text style={styles.placeholderText}>No history records found.</Text>
+            </View>
+          ) : null}
+
+          {groupedVisibleHistoryRecords.map((group) => (
+            <View key={group.dateKey} style={styles.historyDayGroup}>
+              <Text style={styles.historyDayGroupTitle}>{group.dateLabel}</Text>
+
+              {group.entries.map((entry) => {
+                const config = HISTORY_LEVELS[entry.alertLevel];
+
+                return (
+                  <View
+                    key={entry.id}
+                    style={[
+                      styles.historyCard,
+                      {
+                        backgroundColor: config.cardBackground,
+                      },
+                    ]}
+                  >
+                    <View style={styles.historyCardTopRow}>
+                      <Text style={styles.historyDateTimeText}>{formatHistoryTimeOnly(entry)}</Text>
+                      <View style={[styles.historyStatusBadge, { borderColor: config.badgeBorder }]}>
+                        <Text style={[styles.historyStatusBadgeText, { color: config.badgeText }]}>{entry.statusLabel}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.historyRangeText}>{entry.rangeLabel}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+
+          {!isHistoryLoading && canLoadMore ? (
+            <Pressable
+              style={styles.historyLoadMoreBtn}
+              onPress={() => setHistoryVisibleCount((count) => count + 5)}
+            >
+              <Text style={styles.historyLoadMoreText}>Load older records</Text>
+            </Pressable>
+          ) : null}
         </View>
       );
     }
 
     return (
       <View>
-        <View style={styles.profileHeaderRow}>
-          <Text style={styles.profileTitle}>Profile</Text>
-        </View>
+        <MobileSectionHeader title="PROFILE" />
 
         <View style={styles.profileCard}>
           <Image source={selectedAvatar.source} style={styles.profileAvatar} resizeMode="cover" />
@@ -1329,6 +1711,11 @@ export default function App() {
 
               if (tab === "news") {
                 void runManualRefresh("Refreshing News...");
+                return;
+              }
+
+              if (tab === "history") {
+                void runManualRefresh("Refreshing History...");
               }
             }}
           />
@@ -1564,16 +1951,9 @@ const styles = StyleSheet.create({
   },
   dashboardContainer: {
     paddingHorizontal: 16,
-    paddingTop: 22,
+    paddingTop: DASHBOARD_TOP_PADDING,
     paddingBottom: 22,
     gap: 12,
-  },
-  homeTitle: {
-    textAlign: "center",
-    color: "#1f2937",
-    fontWeight: "700",
-    fontSize: 16,
-    marginBottom: 6,
   },
   locationRow: {
     borderTopWidth: 1,
@@ -1626,17 +2006,6 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontSize: 24,
     fontWeight: "500",
-  },
-  profileHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  profileTitle: {
-    color: "#1f2937",
-    fontSize: 18,
-    fontWeight: "700",
   },
   profileCard: {
     borderWidth: 1,
@@ -1903,14 +2272,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
   },
-  newsTitle: {
-    textAlign: "center",
-    color: "#1f2937",
-    fontWeight: "700",
-    fontSize: 15,
-    marginBottom: 4,
-    letterSpacing: 0.2,
-  },
   newsFiltersScroll: {
     marginBottom: 10,
   },
@@ -1918,6 +2279,141 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
     paddingHorizontal: 2,
     gap: 8,
+  },
+  historyFiltersScroll: {
+    marginBottom: 10,
+  },
+  historyFiltersRow: {
+    paddingBottom: 2,
+    paddingHorizontal: 2,
+    gap: 8,
+  },
+  historyFilterChip: {
+    borderRadius: 999,
+    backgroundColor: "#f0f2f5",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+  },
+  historyFilterChipActive: {
+    backgroundColor: "#43aa52",
+    borderColor: "#43aa52",
+  },
+  historyFilterText: {
+    color: "#596172",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  historyFilterTextActive: {
+    color: "#ffffff",
+  },
+  historyToolbarRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  historyCalendarWrap: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#d9dde3",
+    backgroundColor: "#ffffff",
+    marginBottom: 10,
+    overflow: "hidden",
+    alignItems: "stretch",
+  },
+  historyClearDateBtn: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d9dde3",
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 10,
+  },
+  historyClearDateText: {
+    color: "#475467",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  historyDateRangeBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#cfd4db",
+    backgroundColor: "#f6f7f8",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  historyDateRangeText: {
+    color: "#202a37",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  historySortedText: {
+    color: "#556070",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.1,
+  },
+  historyDayGroup: {
+    marginBottom: 4,
+  },
+  historyDayGroupTitle: {
+    color: "#1f2937",
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 2,
+  },
+  historyCard: {
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#e6e8eb",
+  },
+  historyCardTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  historyDateTimeText: {
+    color: "#5b6473",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  historyStatusBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: "#ffffff99",
+  },
+  historyStatusBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  historyRangeText: {
+    color: "#1b222c",
+    fontSize: 44,
+    fontWeight: "700",
+  },
+  historyLoadMoreBtn: {
+    paddingVertical: 14,
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  historyLoadMoreText: {
+    color: "#586174",
+    fontSize: 13,
+    fontWeight: "500",
   },
   newsFilterChip: {
     flexDirection: "row",
