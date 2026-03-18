@@ -6,12 +6,17 @@ import { createAdminClient } from "../../../../lib/supabase/admin";
 type WetSeverity = "none" | "light" | "moderate" | "heavy" | "torrential";
 type HeatSeverity = "normal" | "caution" | "extreme-caution" | "danger" | "extreme-danger";
 
+const SUNRISE_SUNSET_WINDOW_MS = 30 * 60 * 1000;
+const DRY_NORMAL_ICON_PATH = "/weather/dry-season/sun Normal.png";
+const DRY_SUNRISE_ICON_PATH = "/weather/dry-season/sunrise.png";
+const DRY_SUNSET_ICON_PATH = "/weather/dry-season/sunset.png";
+
 const WEATHER_ICON_MAP: Record<string, string> = {
-  Normal: "/weather/dry-season/Sun - Normal.png",
-  Caution: "/weather/dry-season/sun - Caution.png",
-  "Extreme Caution": "/weather/dry-season/sun - Extreme Caution.png",
-  Danger: "/weather/dry-season/sun - Danger.png",
-  "Extreme Danger": "/weather/dry-season/sun - Danger.png",
+  Normal: DRY_NORMAL_ICON_PATH,
+  Caution: "/weather/dry-season/sun Caution.png",
+  "Extreme Caution": "/weather/dry-season/sun Extreme Caution.png",
+  Danger: "/weather/dry-season/sun Danger.png",
+  "Extreme Danger": "/weather/dry-season/sun Danger.png",
   "Light Rain": "/weather/wet-season/Light Rain.png",
   "Moderate Rain": "/weather/wet-season/Moderate Rain.png",
   "Heavy Rain": "/weather/wet-season/Heavy Rain.png",
@@ -118,6 +123,38 @@ function resolveDrySeasonNightIcon(main: string, description: string): string {
   return "/weather/dry-season/few clouds moon.png";
 }
 
+function resolveDrySeasonPhaseIcon(
+  main: string,
+  description: string,
+  iconCode: string,
+  sunriseUnixSeconds?: number,
+  sunsetUnixSeconds?: number,
+): string {
+  if (typeof sunriseUnixSeconds !== "number" || typeof sunsetUnixSeconds !== "number") {
+    return iconCode.endsWith("n")
+      ? resolveDrySeasonNightIcon(main, description)
+      : DRY_NORMAL_ICON_PATH;
+  }
+
+  const now = Date.now();
+  const sunriseMs = sunriseUnixSeconds * 1000;
+  const sunsetMs = sunsetUnixSeconds * 1000;
+
+  if (Math.abs(now - sunriseMs) <= SUNRISE_SUNSET_WINDOW_MS) {
+    return DRY_SUNRISE_ICON_PATH;
+  }
+
+  if (Math.abs(now - sunsetMs) <= SUNRISE_SUNSET_WINDOW_MS) {
+    return DRY_SUNSET_ICON_PATH;
+  }
+
+  if (now < sunriseMs || now > sunsetMs) {
+    return resolveDrySeasonNightIcon(main, description);
+  }
+
+  return DRY_NORMAL_ICON_PATH;
+}
+
 function buildAutoDescription(intensity: string, description: string): string {
   const base = description
     ? description.charAt(0).toUpperCase() + description.slice(1)
@@ -174,6 +211,7 @@ export async function GET(request: NextRequest) {
   const owmData = (await owmResponse.json()) as {
     main?: { temp?: number; humidity?: number };
     weather?: Array<{ main?: string; description?: string; icon?: string }>;
+    sys?: { sunrise?: number; sunset?: number };
   };
 
   const temperature = Math.round(owmData.main?.temp ?? 25);
@@ -186,10 +224,15 @@ export async function GET(request: NextRequest) {
   const heatIndex = computeHeatIndexC(temperature, humidity);
   const heatSeverity = resolveHeatSeverity(heatIndex);
   const intensity = resolveIntensityLabel(wetSeverity, heatSeverity);
-  const isNight = weatherIconCode.endsWith("n");
-  const iconPath = isNight && wetSeverity === "none"
-    ? resolveDrySeasonNightIcon(weatherMain, weatherDescription)
-    : WEATHER_ICON_MAP[intensity] ?? "/weather/dry-season/Sun - Normal.png";
+  const iconPath = wetSeverity === "none"
+    ? resolveDrySeasonPhaseIcon(
+        weatherMain,
+        weatherDescription,
+        weatherIconCode,
+        owmData.sys?.sunrise,
+        owmData.sys?.sunset,
+      )
+    : WEATHER_ICON_MAP[intensity] ?? DRY_NORMAL_ICON_PATH;
   const manualDescription = buildAutoDescription(intensity, weatherDescription);
 
   // 2. Save a new row to weather_logs using the service-role key (bypasses RLS).

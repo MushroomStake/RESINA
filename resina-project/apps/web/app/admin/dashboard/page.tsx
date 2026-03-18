@@ -37,16 +37,21 @@ type WeatherState = {
 const WARNING_OPTIONS = ["No Warning", "Yellow Warning", "Orange Warning", "Red Warning"] as const;
 const SIGNAL_OPTIONS = ["No Signal", "Signal #1", "Signal #2", "Signal #3", "Signal #4", "Signal #5"] as const;
 const OPENWEATHER_REFRESH_MS = 3_600_000;
+const SUNRISE_SUNSET_WINDOW_MS = 30 * 60 * 1000;
 
 type WetSeverity = "none" | "light" | "moderate" | "heavy" | "torrential";
 type HeatSeverity = "normal" | "caution" | "extreme-caution" | "danger" | "extreme-danger";
 
+const DRY_NORMAL_ICON_PATH = "/weather/dry-season/sun Normal.png";
+const DRY_SUNRISE_ICON_PATH = "/weather/dry-season/sunrise.png";
+const DRY_SUNSET_ICON_PATH = "/weather/dry-season/sunset.png";
+
 const WEATHER_ICON_MAP: Record<string, string> = {
-  Normal: "/weather/dry-season/Sun - Normal.png",
-  Caution: "/weather/dry-season/Sun - Caution.png",
-  "Extreme Caution": "/weather/dry-season/Sun - Extreme Caution.png",
-  Danger: "/weather/dry-season/Sun - Danger.png",
-  "Extreme Danger": "/weather/dry-season/Sun - Danger.png",
+  Normal: DRY_NORMAL_ICON_PATH,
+  Caution: "/weather/dry-season/sun Caution.png",
+  "Extreme Caution": "/weather/dry-season/sun Extreme Caution.png",
+  Danger: "/weather/dry-season/sun Danger.png",
+  "Extreme Danger": "/weather/dry-season/sun Danger.png",
   "Light Rain": "/weather/wet-season/Light Rain.png",
   "Moderate Rain": "/weather/wet-season/Moderate Rain.png",
   "Heavy Rain": "/weather/wet-season/Heavy Rain.png",
@@ -310,17 +315,56 @@ function resolveDrySeasonNightIcon(main: string, description: string): string {
   return "/weather/dry-season/few clouds moon.png";
 }
 
-function analyzeOpenWeather(main: string, description: string, temperatureC: number, humidity: number, iconCode: string) {
+function resolveDrySeasonPhaseIcon(
+  main: string,
+  description: string,
+  iconCode: string,
+  sunriseUnixSeconds?: number,
+  sunsetUnixSeconds?: number,
+): string {
+  if (typeof sunriseUnixSeconds !== "number" || typeof sunsetUnixSeconds !== "number") {
+    return iconCode.endsWith("n")
+      ? resolveDrySeasonNightIcon(main, description)
+      : DRY_NORMAL_ICON_PATH;
+  }
+
+  const now = Date.now();
+  const sunriseMs = sunriseUnixSeconds * 1000;
+  const sunsetMs = sunsetUnixSeconds * 1000;
+
+  if (Math.abs(now - sunriseMs) <= SUNRISE_SUNSET_WINDOW_MS) {
+    return DRY_SUNRISE_ICON_PATH;
+  }
+
+  if (Math.abs(now - sunsetMs) <= SUNRISE_SUNSET_WINDOW_MS) {
+    return DRY_SUNSET_ICON_PATH;
+  }
+
+  if (now < sunriseMs || now > sunsetMs) {
+    return resolveDrySeasonNightIcon(main, description);
+  }
+
+  return DRY_NORMAL_ICON_PATH;
+}
+
+function analyzeOpenWeather(
+  main: string,
+  description: string,
+  temperatureC: number,
+  humidity: number,
+  iconCode: string,
+  sunriseUnixSeconds?: number,
+  sunsetUnixSeconds?: number,
+) {
   const wetSeverity = inferWetSeverity(main, description);
   const heatIndex = computeHeatIndexC(temperatureC, humidity);
   const heatSeverity = resolveHeatSeverity(heatIndex);
   const intensityDescription = resolveIntensityLabel(wetSeverity, heatSeverity);
-  const isNight = iconCode.endsWith("n");
 
-  let iconPath = WEATHER_ICON_MAP[intensityDescription] ?? "/weather/dry-season/Sun - Normal.png";
-  if (isNight && wetSeverity === "none") {
-    iconPath = resolveDrySeasonNightIcon(main, description);
-  }
+  const iconPath =
+    wetSeverity === "none"
+      ? resolveDrySeasonPhaseIcon(main, description, iconCode, sunriseUnixSeconds, sunsetUnixSeconds)
+      : WEATHER_ICON_MAP[intensityDescription] ?? DRY_NORMAL_ICON_PATH;
 
   return {
     intensityDescription,
@@ -401,7 +445,7 @@ export default function AdminDashboardPage() {
     broadcastDate: null,
     broadcastTime: null,
     recordedAt: null,
-    iconPath: "/weather/dry-season/Sun - Normal.png",
+    iconPath: DRY_NORMAL_ICON_PATH,
   });
   const [weatherDraft, setWeatherDraft] = useState<WeatherState>({
     id: null,
@@ -418,7 +462,7 @@ export default function AdminDashboardPage() {
     broadcastDate: null,
     broadcastTime: null,
     recordedAt: null,
-    iconPath: "/weather/dry-season/Sun - Normal.png",
+    iconPath: DRY_NORMAL_ICON_PATH,
   });
   const [snapshot, setSnapshot] = useState<SensorSnapshot>({
     waterLevel: null,
@@ -482,7 +526,7 @@ export default function AdminDashboardPage() {
       broadcastDate: row.broadcast_date,
       broadcastTime: row.broadcast_time,
       recordedAt: row.recorded_at,
-      iconPath: row.icon_path ?? WEATHER_ICON_MAP[row.intensity] ?? "/weather/dry-season/Sun - Normal.png",
+      iconPath: row.icon_path ?? WEATHER_ICON_MAP[row.intensity] ?? DRY_NORMAL_ICON_PATH,
     };
 
     setWeatherState(loadedState);
@@ -549,6 +593,7 @@ export default function AdminDashboardPage() {
       const data = (await response.json()) as {
         main?: { temp?: number; humidity?: number };
         weather?: Array<{ main?: string; description?: string; icon?: string }>;
+        sys?: { sunrise?: number; sunset?: number };
       };
 
       const temperature = Math.round(data.main?.temp ?? 25);
@@ -556,7 +601,15 @@ export default function AdminDashboardPage() {
       const weatherMain = data.weather?.[0]?.main ?? "Clear";
       const weatherDescription = data.weather?.[0]?.description ?? "";
       const weatherIconCode = data.weather?.[0]?.icon ?? "01d";
-      const analyzed = analyzeOpenWeather(weatherMain, weatherDescription, temperature, humidity, weatherIconCode);
+      const analyzed = analyzeOpenWeather(
+        weatherMain,
+        weatherDescription,
+        temperature,
+        humidity,
+        weatherIconCode,
+        data.sys?.sunrise,
+        data.sys?.sunset,
+      );
       const selectedWarning = applyToPublishedCard
         ? weatherState.colorCodedWarning
         : weatherDraft.colorCodedWarning;
@@ -609,7 +662,7 @@ export default function AdminDashboardPage() {
   const handlePublishWeather = async () => {
     const normalized: WeatherState = {
       ...weatherDraft,
-      iconPath: weatherDraft.iconPath || WEATHER_ICON_MAP[weatherDraft.intensityDescription] || "/weather/dry-season/Sun - Normal.png",
+      iconPath: weatherDraft.iconPath || WEATHER_ICON_MAP[weatherDraft.intensityDescription] || DRY_NORMAL_ICON_PATH,
       dateLabel: formatWeatherDateForCard(new Date()),
     };
 
@@ -739,10 +792,26 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     let isMounted = true;
+    let alignedTimer: ReturnType<typeof setTimeout> | null = null;
     let recurringTimer: ReturnType<typeof setInterval> | null = null;
 
     const doFetch = () => {
       if (isMounted) void fetchLatestWeather(true);
+    };
+
+    const scheduleHourlyFetch = () => {
+      const now = new Date();
+      const nextHour = new Date(now);
+      nextHour.setMinutes(0, 0, 0);
+      nextHour.setHours(nextHour.getHours() + 1);
+      const delayMs = Math.max(1000, nextHour.getTime() - now.getTime());
+
+      alignedTimer = setTimeout(() => {
+        doFetch();
+        if (isMounted) {
+          recurringTimer = setInterval(doFetch, OPENWEATHER_REFRESH_MS);
+        }
+      }, delayMs);
     };
 
     const initialize = async () => {
@@ -757,16 +826,15 @@ export default function AdminDashboardPage() {
         doFetch();
       }
 
-      // Pull from weather API every 1 hour.
-      if (isMounted) {
-        recurringTimer = setInterval(doFetch, OPENWEATHER_REFRESH_MS);
-      }
+      // Align recurring refresh to exact top-of-hour timestamps.
+      if (isMounted) scheduleHourlyFetch();
     };
 
     void initialize();
 
     return () => {
       isMounted = false;
+      if (alignedTimer !== null) clearTimeout(alignedTimer);
       if (recurringTimer !== null) clearInterval(recurringTimer);
     };
   }, []);
