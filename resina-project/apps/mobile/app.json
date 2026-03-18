@@ -5,7 +5,7 @@
     "scheme": "resina",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/Sta Rita.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/images/splash icon.png",
@@ -23,7 +23,7 @@
       "package": "com.resina.mobile",
       "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive icon.png",
+        "foregroundImage": "./assets/images/Sta Rita.png",
         "backgroundColor": "#ffffff"
       }
     },

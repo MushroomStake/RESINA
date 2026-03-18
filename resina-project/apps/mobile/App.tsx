@@ -90,6 +90,7 @@ type HistoryRecord = {
   alertLevel: HistoryAlertLevel;
   statusLabel: string;
   rangeLabel: string;
+  description: string;
 };
 
 type HistoryDayGroup = {
@@ -142,6 +143,8 @@ const expoEnv = (globalThis as { process?: { env?: Record<string, string | undef
 const mobileEmailRedirectUrl =
   expoEnv?.EXPO_PUBLIC_MOBILE_EMAIL_REDIRECT_URL ?? "https://resina-two.vercel.app/";
 const DASHBOARD_TOP_PADDING = Platform.OS === "android" ? 14 : 16;
+const DEFAULT_WEATHER_ADVISORY =
+  "No urgent advisory right now. Keep alerts enabled and monitor weather updates from Barangay Sta. Rita.";
 
 const ALERT_LEVELS: Record<
   AlertLevelKey,
@@ -150,31 +153,36 @@ const ALERT_LEVELS: Record<
     badge: string;
     rangeLabel: string;
     cardColor: string;
+    description: string;
   }
 > = {
   normal: {
-    title: "NORMAL LEVEL",
+    title: "Normal Level",
     badge: "Alert Level 1",
     rangeLabel: "1.5 - 2.49m",
-    cardColor: "#4CAF50",
+    cardColor: "#4a9f55",
+    description: "Normal ang antas ng tubig. Ligtas ang sitwasyon at walang inaasahang banta sa ngayon.",
   },
   critical: {
-    title: "CRITICAL LEVEL",
+    title: "Critical Level",
     badge: "Alert Level 2",
     rangeLabel: "2.5 - 2.9m",
-    cardColor: "#F7C520",
+    cardColor: "#c79a12",
+    description: "Mataas ang tubig. Maging alerto, ihanda ang mga gamit, at patuloy na magmonitor sa mga balita.",
   },
   evacuation: {
-    title: "EVACUATION LEVEL",
+    title: "Evacuation Level",
     badge: "Alert Level 3",
     rangeLabel: "3.0 - 3.9m",
-    cardColor: "#FF7E1C",
+    cardColor: "#d96a1a",
+    description: "Mapanganib ang antas ng tubig. Lumikas na agad patungo sa mas mataas na lugar o evacuation center.",
   },
   spilling: {
-    title: "SPILLING LEVEL",
+    title: "Spilling Level",
     badge: "Alert Level 4",
     rangeLabel: "4.0+m",
-    cardColor: "#A82A2A",
+    cardColor: "#a43737",
+    description: "Umaapaw na ang tubig. Delikado na ang sitwasyon; unahin ang kaligtasan ng buhay at sumunod sa mga rescuer.",
   },
 };
 
@@ -183,6 +191,7 @@ const HISTORY_LEVELS: Record<
   {
     statusLabel: string;
     rangeLabel: string;
+    description: string;
     cardBackground: string;
     badgeBorder: string;
     badgeText: string;
@@ -191,27 +200,31 @@ const HISTORY_LEVELS: Record<
   normal: {
     statusLabel: "Normal",
     rangeLabel: "1.5 - 2.49m",
+    description: "Normal ang antas ng tubig. Ligtas ang sitwasyon at walang agarang banta sa kasalukuyan.",
     cardBackground: "#dbe2dd",
     badgeBorder: "#67b56e",
     badgeText: "#2d8a39",
   },
   critical: {
-    statusLabel: "Critical",
+    statusLabel: "Kritikal",
     rangeLabel: "2.5 - 2.9m",
+    description: "Mataas ang tubig. Maging maingat, manatiling alerto, at patuloy na magmonitor ng sitwasyon.",
     cardBackground: "#ece6c8",
     badgeBorder: "#9f8c28",
     badgeText: "#8b7300",
   },
   evacuation: {
-    statusLabel: "Evacuation",
+    statusLabel: "Paglikas",
     rangeLabel: "3.0 - 3.9m",
+    description: "Mapanganib na ang antas ng tubig. Kumilos agad at lumikas sa mas mataas o mas ligtas na lugar.",
     cardBackground: "#e9e5e5",
     badgeBorder: "#c36d37",
     badgeText: "#b55f2d",
   },
   spilling: {
-    statusLabel: "Spilling",
+    statusLabel: "Umaapaw",
     rangeLabel: "4.0+m",
+    description: "Umaapaw na ang tubig at lubhang delikado ang sitwasyon. Unahin ang kaligtasan ng lahat.",
     cardBackground: "#ebe1e3",
     badgeBorder: "#f06868",
     badgeText: "#ef4e4e",
@@ -398,6 +411,7 @@ function mapHistoryRowToRecord(row: Record<string, unknown>): HistoryRecord | nu
     alertLevel,
     statusLabel: config.statusLabel,
     rangeLabel: config.rangeLabel,
+    description: config.description,
   };
 }
 
@@ -427,7 +441,7 @@ function mapWeatherRowToSnapshot(row: WeatherRow): WeatherSnapshot {
     conditionDescription: String(row.weather_description ?? "").trim(),
     humidity: Math.round(Number(row.humidity ?? 0)),
     heatIndex: Math.round(Number(row.heat_index ?? (Number.isNaN(temp) ? 24 : temp))),
-    manualDescription: String(row.manual_description ?? "").trim() || "Stay updated with official barangay advisories.",
+    manualDescription: String(row.manual_description ?? "").trim() || DEFAULT_WEATHER_ADVISORY,
     colorCodedWarning: String(row.color_coded_warning ?? "No Warning"),
     signalNo: String(row.signal_no ?? "No Signal"),
   };
@@ -468,7 +482,7 @@ export default function App() {
     conditionDescription: "",
     humidity: 0,
     heatIndex: 24,
-    manualDescription: "No active advisory right now.",
+    manualDescription: DEFAULT_WEATHER_ADVISORY,
     colorCodedWarning: "No Warning",
     signalNo: "No Signal",
   });
@@ -496,7 +510,6 @@ export default function App() {
   const [isSavingAddress, setIsSavingAddress] = useState(false);
   const [isPasswordEditorOpen, setIsPasswordEditorOpen] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
@@ -579,6 +592,15 @@ export default function App() {
     if (name) return name;
     return session?.user?.email?.split("@")[0] ?? "Resident";
   }, [profileState.fullName, session]);
+
+  const displayRoleLabel = useMemo(() => {
+    const roleLabel = profileState.role.trim().toLowerCase();
+    if (!roleLabel || roleLabel === "user") {
+      return "RESIDENT";
+    }
+
+    return roleLabel.toUpperCase();
+  }, [profileState.role]);
 
   useEffect(() => {
     latestWeatherRecordedAtRef.current = weatherSnapshot.recordedAt;
@@ -690,7 +712,9 @@ export default function App() {
     const fullName = String((row.full_name ?? metadata.full_name ?? fallbackName) || "Resident").trim();
     const email = String(row.email ?? fallbackUser?.email ?? "-").trim();
     const phoneNumber = String(row.phone_number ?? metadata.phone_number ?? "-").trim();
-    const addressPurok = String(row.address_purok ?? metadata.address_purok ?? "").trim();
+    const rowAddress = String(row.address_purok ?? "").trim();
+    const metadataAddress = String(metadata.address_purok ?? "").trim();
+    const addressPurok = rowAddress || metadataAddress;
 
     setRole(roleValue);
     setProfileState({
@@ -1145,12 +1169,30 @@ export default function App() {
       return;
     }
 
+    const normalizedAddress = profileState.addressPurok.trim();
+
     setIsSavingAddress(true);
+
+    const { error: profileError } = await supabase.from("profiles").upsert(
+      {
+        auth_user_id: session.user.id,
+        address_purok: normalizedAddress,
+      },
+      {
+        onConflict: "auth_user_id",
+      },
+    );
+
+    if (profileError) {
+      setIsSavingAddress(false);
+      setErrorMessage(profileError.message);
+      return;
+    }
 
     const { data, error } = await supabase.auth.updateUser({
       data: {
         ...(session.user.user_metadata ?? {}),
-        address_purok: profileState.addressPurok.trim(),
+        address_purok: normalizedAddress,
       },
     });
 
@@ -1263,6 +1305,7 @@ export default function App() {
           rangeLabel={waterRange}
           alertTitle={alertConfig.title}
           alertBadge={alertConfig.badge}
+          alertDescription={alertConfig.description}
           backgroundColor={alertConfig.cardColor}
         />
 
@@ -1281,21 +1324,21 @@ export default function App() {
         />
 
         <Text style={styles.quickActionsTitle}>Quick Actions</Text>
-        <View style={styles.actionCardPrimary}>
+        <Pressable style={styles.actionCardPrimary} onPress={() => setActiveTab("history")}>
           <View>
             <Text style={styles.actionTitle}>Water Level History</Text>
             <Text style={styles.actionSubtitle}>View historical water level trends and logs</Text>
           </View>
           <Text style={styles.actionArrow}>›</Text>
-        </View>
+        </Pressable>
 
-        <View style={styles.actionCardSecondary}>
+        <Pressable style={styles.actionCardSecondary} onPress={() => setActiveTab("news")}>
           <View>
             <Text style={styles.actionTitle}>Announcements</Text>
             <Text style={styles.actionSubtitle}>Official updates from Barangay Sta. Rita</Text>
           </View>
           <Text style={styles.actionArrow}>›</Text>
-        </View>
+        </Pressable>
       </>
     );
   };
@@ -1314,8 +1357,8 @@ export default function App() {
 
       const filterOptions: Array<{ key: AnnouncementFilterKey; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
         { key: "all", label: "All / Lahat", icon: "funnel-outline" },
+        { key: "warning", label: "Warning", icon: "warning-outline" },
         { key: "emergency", label: "Emergency", icon: "alert-circle-outline" },
-        { key: "normal", label: "General / Lahat", icon: "checkmark-circle-outline" },
       ];
 
       return (
@@ -1471,6 +1514,8 @@ export default function App() {
                       </View>
                     </View>
                     <Text style={styles.historyRangeText}>{entry.rangeLabel}</Text>
+                    <Text style={styles.historyDescriptionLabel}>Deskripsyon</Text>
+                    <Text style={styles.historyDescriptionText}>{entry.description}</Text>
                   </View>
                 );
               })}
@@ -1498,7 +1543,7 @@ export default function App() {
           <View style={styles.profileInfoCol}>
             <Text style={styles.profileName}>{profileState.fullName}</Text>
             <View style={styles.profileRoleRow}>
-              <Text style={styles.profileRoleBadge}>{profileState.role.toUpperCase()}</Text>
+              <Text style={styles.profileRoleBadge}>{displayRoleLabel}</Text>
               <Text style={styles.profileRoleText}>Barangay Sta. Rita</Text>
             </View>
           </View>
@@ -1522,7 +1567,6 @@ export default function App() {
                     disabled={isSavingAvatar}
                   >
                     <Image source={item.source} style={styles.avatarOptionImage} resizeMode="cover" />
-                    <Text style={[styles.avatarOptionLabel, isSelected && styles.avatarOptionLabelActive]}>{item.label}</Text>
                   </Pressable>
                 );
               })}
@@ -1569,9 +1613,6 @@ export default function App() {
         <View style={styles.passwordChangeRow}>
           <Text style={styles.passwordMask}>{isPasswordEditorOpen ? "Enter new password" : "********"}</Text>
           <View style={styles.passwordActions}>
-            <Pressable onPress={() => setShowCurrentPassword((prev) => !prev)}>
-              <Text style={styles.passwordActionIcon}>{showCurrentPassword ? "🙈" : "👁"}</Text>
-            </Pressable>
             <Pressable onPress={() => setIsPasswordEditorOpen((prev) => !prev)}>
               <Text style={styles.passwordActionIcon}>✎</Text>
             </Pressable>
@@ -1585,7 +1626,7 @@ export default function App() {
               value={passwordForm.currentPassword}
               onChangeText={(value) => setPasswordForm((prev) => ({ ...prev, currentPassword: value }))}
               style={styles.profilePasswordInput}
-              secureTextEntry={!showCurrentPassword}
+              secureTextEntry
               autoCapitalize="none"
               placeholder="Enter current password"
               placeholderTextColor="#9ca3af"
@@ -2404,6 +2445,20 @@ const styles = StyleSheet.create({
     color: "#1b222c",
     fontSize: 44,
     fontWeight: "700",
+  },
+  historyDescriptionLabel: {
+    color: "#374151",
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  historyDescriptionText: {
+    color: "#4b5563",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
   },
   historyLoadMoreBtn: {
     paddingVertical: 14,

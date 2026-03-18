@@ -6,6 +6,7 @@ type SensorStatusCardProps = {
   rangeLabel: string;
   alertTitle: string;
   alertBadge: string;
+  alertDescription: string;
   backgroundColor: string;
 };
 
@@ -15,6 +16,7 @@ export function SensorStatusCard({
   rangeLabel,
   alertTitle,
   alertBadge,
+  alertDescription,
   backgroundColor,
 }: SensorStatusCardProps) {
   return (
@@ -27,6 +29,10 @@ export function SensorStatusCard({
       <Text style={styles.sensorRange}>{rangeLabel}</Text>
       <Text style={styles.sensorLevel}>{alertTitle}</Text>
       <Text style={styles.sensorBadge}>{alertBadge}</Text>
+      <View style={styles.sensorDescriptionWrap}>
+        <Text style={styles.sensorDescriptionLabel}>DESKRIPSYON</Text>
+        <Text style={styles.sensorDescriptionText}>{alertDescription}</Text>
+      </View>
     </View>
   );
 }
@@ -81,5 +87,27 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     fontSize: 13,
     fontWeight: "700",
+  },
+  sensorDescriptionWrap: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ffffff66",
+    backgroundColor: "#ffffff1f",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  sensorDescriptionLabel: {
+    color: "#f6fff7",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+  },
+  sensorDescriptionText: {
+    color: "#ffffff",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
+    fontWeight: "500",
   },
 });
