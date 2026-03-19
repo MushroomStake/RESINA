@@ -1521,10 +1521,29 @@ export default function App() {
       },
     });
 
+    const { error: profileAvatarError } = await supabase.from("profiles").upsert(
+      {
+        auth_user_id: session.user.id,
+        full_name: profileState.fullName,
+        email: profileState.email,
+        role,
+        resident_status: profileState.residentStatus,
+        profile_avatar: avatarKey,
+      },
+      {
+        onConflict: "auth_user_id",
+      },
+    );
+
     setIsSavingAvatar(false);
 
     if (error) {
       setErrorMessage(error.message);
+      return;
+    }
+
+    if (profileAvatarError) {
+      setErrorMessage(profileAvatarError.message);
       return;
     }
 

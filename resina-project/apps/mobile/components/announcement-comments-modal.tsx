@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   Image,
+  Keyboard,
+  Platform,
   type ImageSourcePropType,
   Modal,
   Pressable,
@@ -9,6 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { supabase } from "../lib/supabase";
@@ -16,11 +19,14 @@ import { supabase } from "../lib/supabase";
 type AnnouncementCommentItem = {
   id: string;
   announcement_id: string;
+  commenter_auth_user_id: string | null;
   parent_comment_id: string | null;
   commenter_name: string;
   comment_body: string;
   created_at: string;
 };
+
+type ProfileAvatarKey = "boy" | "man" | "user" | "woman" | "woman2";
 
 type AnnouncementPreview = {
   id: string;
@@ -39,6 +45,18 @@ type AnnouncementCommentsModalProps = {
 
 const REPLY_TOKEN_REGEX = /^\[\[reply:([^\]]+)\]\]\s*/i;
 const LEGACY_MENTION_REGEX = /^@([^\s].*?)\s+/;
+const PROFILE_AVATAR_SOURCES: Record<ProfileAvatarKey, ImageSourcePropType> = {
+  user: require("../assets/Profile/user.png"),
+  man: require("../assets/Profile/man.png"),
+  boy: require("../assets/Profile/boy.png"),
+  woman: require("../assets/Profile/woman.png"),
+  woman2: require("../assets/Profile/woman 2.png"),
+};
+
+function resolveAvatarSource(value: unknown): ImageSourcePropType {
+  const key = String(value ?? "").trim().toLowerCase() as ProfileAvatarKey;
+  return PROFILE_AVATAR_SOURCES[key] ?? PROFILE_AVATAR_SOURCES.user;
+}
 
 function formatCommentAge(value: string): string {
   const parsed = new Date(value);
@@ -111,6 +129,7 @@ export function AnnouncementCommentsModal({
   onRequestClose,
   onError,
 }: AnnouncementCommentsModalProps) {
+  const { height: windowHeight } = useWindowDimensions();
   const [announcementComments, setAnnouncementComments] = useState<AnnouncementCommentItem[]>([]);
   const [isCommentsLoading, setIsCommentsLoading] = useState(false);
   const [isPostingComment, setIsPostingComment] = useState(false);
@@ -120,6 +139,14 @@ export function AnnouncementCommentsModal({
   const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null);
   const [replyingToCommentName, setReplyingToCommentName] = useState<string | null>(null);
   const [collapsedCommentIds, setCollapsedCommentIds] = useState<Set<string>>(new Set());
+  const [commenterAvatarByUserId, setCommenterAvatarByUserId] = useState<Record<string, ImageSourcePropType>>({});
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const keyboardOffset = Platform.OS === "ios" ? keyboardHeight : 0;
+  const composerInset = replyingToCommentName ? 108 : 70;
+  const modalMaxHeight = Math.max(
+    300,
+    Math.min(windowHeight * 0.82, windowHeight - keyboardOffset - 96),
+  );
 
   const commentsByParent = useMemo(() => {
     const grouped = new Map<string | null, AnnouncementCommentItem[]>();
@@ -142,7 +169,7 @@ export function AnnouncementCommentsModal({
 
     const threadedResult = await supabase
       .from("announcement_comments")
-      .select("id, announcement_id, parent_comment_id, commenter_name, comment_body, created_at")
+      .select("id, announcement_id, commenter_auth_user_id, parent_comment_id, commenter_name, comment_body, created_at")
       .eq("announcement_id", announcement.id)
       .order("created_at", { ascending: true });
 
@@ -164,7 +191,7 @@ export function AnnouncementCommentsModal({
 
     const fallbackResult = await supabase
       .from("announcement_comments")
-      .select("id, announcement_id, commenter_name, comment_body, created_at")
+      .select("id, announcement_id, commenter_auth_user_id, commenter_name, comment_body, created_at")
       .eq("announcement_id", announcement.id)
       .order("created_at", { ascending: true });
 
@@ -193,8 +220,82 @@ export function AnnouncementCommentsModal({
     setReplyingToCommentName(null);
     setCollapsedCommentIds(new Set());
     setModalError("");
+    setKeyboardHeight(0);
     void loadAnnouncementComments();
   }, [announcement?.id, loadAnnouncementComments, visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      setKeyboardHeight(0);
+      return;
+    }
+
+    const handleShow = (event: { endCoordinates?: { height?: number } }) => {
+      const nextHeight = Math.max(0, event.endCoordinates?.height ?? 0);
+      setKeyboardHeight(nextHeight);
+    };
+
+    const handleHide = () => {
+      setKeyboardHeight(0);
+    };
+
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      handleShow,
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      handleHide,
+    );
+
+    // iOS can resize keyboard frame (emoji/suggested bars); keep the input aligned.
+    const frameSub = Platform.OS === "ios" ? Keyboard.addListener("keyboardWillChangeFrame", handleShow) : null;
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      frameSub?.remove();
+    };
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    const commenterIds = Array.from(
+      new Set(
+        announcementComments
+          .map((entry) => entry.commenter_auth_user_id)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    if (commenterIds.length === 0) {
+      setCommenterAvatarByUserId({});
+      return;
+    }
+
+    void (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("auth_user_id, profile_avatar")
+        .in("auth_user_id", commenterIds);
+
+      const nextMap: Record<string, ImageSourcePropType> = {};
+
+      (data ?? []).forEach((row) => {
+        const userId = String((row as { auth_user_id?: string }).auth_user_id ?? "").trim();
+        if (!userId) {
+          return;
+        }
+
+        nextMap[userId] = resolveAvatarSource((row as { profile_avatar?: unknown }).profile_avatar);
+      });
+
+      setCommenterAvatarByUserId(nextMap);
+    })();
+  }, [announcementComments, visible]);
 
   useEffect(() => {
     if (!visible || !announcement?.id) return;
@@ -298,6 +399,11 @@ export function AnnouncementCommentsModal({
     await loadAnnouncementComments();
   };
 
+  const handleModalClose = () => {
+    setKeyboardHeight(0);
+    onRequestClose();
+  };
+
   const renderCommentThread = (parentCommentId: string | null, depth = 0) => {
     const items = commentsByParent.get(parentCommentId) ?? [];
 
@@ -307,7 +413,17 @@ export function AnnouncementCommentsModal({
         style={[styles.commentItem, depth > 0 && { marginLeft: Math.min(depth * 20, 44) }]}
       >
         <View style={styles.commentRowMain}>
-          {comment.commenter_name === currentCommenterName ? (
+          {comment.commenter_auth_user_id ? (
+            <Image
+              source={
+                comment.commenter_auth_user_id === sessionUserId
+                  ? currentUserAvatarSource
+                  : commenterAvatarByUserId[comment.commenter_auth_user_id] ?? PROFILE_AVATAR_SOURCES.user
+              }
+              style={styles.commentAvatarImage}
+              resizeMode="cover"
+            />
+          ) : comment.commenter_name.trim().toLowerCase() === currentCommenterName.trim().toLowerCase() ? (
             <Image source={currentUserAvatarSource} style={styles.commentAvatarImage} resizeMode="cover" />
           ) : (
             <Ionicons name="person-circle-outline" size={24} color="#4b5563" style={styles.commentAvatar} />
@@ -344,19 +460,23 @@ export function AnnouncementCommentsModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onRequestClose}>
-      <View style={styles.commentsModalOverlay}>
-        <View style={styles.commentsModalCard}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleModalClose}>
+      <View style={[styles.commentsModalOverlay, { paddingBottom: 14 + keyboardOffset }]}> 
+        <View style={[styles.commentsModalCard, { maxHeight: modalMaxHeight }]}> 
           <View style={styles.commentsModalHeader}>
             <Text style={styles.commentsModalTitle}>Comments</Text>
-            <Pressable style={styles.commentsCloseBtn} onPress={onRequestClose}>
+            <Pressable style={styles.commentsCloseBtn} onPress={handleModalClose}>
               <Text style={styles.commentsCloseText}>Close</Text>
             </Pressable>
           </View>
 
           {announcement ? <Text style={styles.commentsAnnouncementTitle}>{announcement.title}</Text> : null}
 
-          <ScrollView style={styles.commentsList} contentContainerStyle={styles.commentsListContent}>
+          <ScrollView
+            style={styles.commentsList}
+            contentContainerStyle={[styles.commentsListContent, { paddingBottom: composerInset }]}
+            keyboardShouldPersistTaps="handled"
+          >
             {modalError ? <Text style={styles.commentsErrorText}>{modalError}</Text> : null}
             {isCommentsLoading ? <Text style={styles.loaderText}>Loading comments...</Text> : null}
 
@@ -367,40 +487,46 @@ export function AnnouncementCommentsModal({
             {!isCommentsLoading ? renderCommentThread(null) : null}
           </ScrollView>
 
-          {replyingToCommentName ? (
-            <View style={styles.replyingTagRow}>
-              <Text style={styles.replyingTagText}>Replying to {replyingToCommentName}</Text>
-              <Pressable
-                onPress={() => {
-                  setReplyingToCommentName(null);
-                  setReplyingToCommentId(null);
+          <View style={styles.commentComposerWrap}>
+            {replyingToCommentName ? (
+              <View style={styles.replyingTagRow}>
+                <Text style={styles.replyingTagText}>Replying to {replyingToCommentName}</Text>
+                <Pressable
+                  onPress={() => {
+                    setReplyingToCommentName(null);
+                    setReplyingToCommentId(null);
+                  }}
+                >
+                  <Text style={styles.replyingTagClear}>Clear</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            <View style={styles.commentInputRow}>
+              <Image source={currentUserAvatarSource} style={styles.inputAvatarImage} resizeMode="cover" />
+              <TextInput
+                value={commentInput}
+                onChangeText={setCommentInput}
+                onBlur={() => {
+                  // Some Android keyboards skip hide events; force reset as fallback.
+                  setTimeout(() => setKeyboardHeight(0), 120);
                 }}
+                style={styles.commentInput}
+                placeholder="Write a comment..."
+                placeholderTextColor="#9ca3af"
+              />
+              <Pressable
+                style={[styles.commentSendBtn, isPostingComment && styles.buttonDisabled]}
+                onPress={() => void handlePostComment()}
+                disabled={isPostingComment}
               >
-                <Text style={styles.replyingTagClear}>Clear</Text>
+                {isPostingComment ? (
+                  <Text style={styles.commentSendText}>...</Text>
+                ) : (
+                  <Ionicons name="paper-plane-outline" size={24} color="#9ca3af" />
+                )}
               </Pressable>
             </View>
-          ) : null}
-
-          <View style={styles.commentInputRow}>
-            <Image source={currentUserAvatarSource} style={styles.inputAvatarImage} resizeMode="cover" />
-            <TextInput
-              value={commentInput}
-              onChangeText={setCommentInput}
-              style={styles.commentInput}
-              placeholder="Write a comment..."
-              placeholderTextColor="#9ca3af"
-            />
-            <Pressable
-              style={[styles.commentSendBtn, isPostingComment && styles.buttonDisabled]}
-              onPress={() => void handlePostComment()}
-              disabled={isPostingComment}
-            >
-              {isPostingComment ? (
-                <Text style={styles.commentSendText}>...</Text>
-              ) : (
-                <Ionicons name="paper-plane-outline" size={24} color="#9ca3af" />
-              )}
-            </Pressable>
           </View>
         </View>
       </View>
@@ -424,10 +550,12 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   commentsModalCard: {
-    maxHeight: "82%",
+    minHeight: 320,
+    flexShrink: 1,
     borderRadius: 18,
     backgroundColor: "#ffffff",
     overflow: "hidden",
+    position: "relative",
   },
   commentsModalHeader: {
     paddingHorizontal: 16,
@@ -464,7 +592,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   commentsList: {
-    maxHeight: 360,
+    flex: 1,
+    minHeight: 220,
     marginTop: 8,
   },
   commentsListContent: {
@@ -537,9 +666,19 @@ const styles = StyleSheet.create({
   commentChildrenWrap: {
     marginTop: 8,
   },
+  commentComposerWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
   replyingTagRow: {
-    marginHorizontal: 16,
+    marginHorizontal: 12,
     marginTop: 8,
+    marginBottom: 2,
     borderRadius: 999,
     backgroundColor: "#eef2ff",
     paddingHorizontal: 12,
@@ -559,13 +698,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   commentInputRow: {
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexShrink: 0,
   },
   inputAvatarImage: {
     width: 34,

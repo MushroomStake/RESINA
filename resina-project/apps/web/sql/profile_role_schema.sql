@@ -11,6 +11,7 @@ create table if not exists public.profiles (
   email text not null unique,
   address_purok text,
   resident_status text not null check (resident_status in ('resident', 'non_resident')) default 'resident',
+  profile_avatar text,
   role text not null check (role in ('admin', 'member', 'user')) default 'user',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -21,6 +22,9 @@ alter table public.profiles
 
 alter table public.profiles
   add column if not exists resident_status text not null default 'resident';
+
+alter table public.profiles
+  add column if not exists profile_avatar text;
 
 alter table public.profiles
   drop constraint if exists profiles_resident_status_check;

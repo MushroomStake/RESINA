@@ -727,12 +727,12 @@ export default function AdminAnnouncementsPage() {
           ) : filteredAnnouncements.length === 0 ? (
             <p className="text-sm text-[#6b7280]">No announcements match the current search or filter.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
               {filteredAnnouncements.map((entry) => (
-                <article key={entry.id} className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
+                <article key={entry.id} className="flex h-full flex-col overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
                   {/* Featured image or gallery */}
                   {(entry.announcement_media ?? []).length > 0 ? (
-                    <div className="bg-[#f1f5f9]">
+                    <div className="h-52 bg-[#f1f5f9]">
                       {(entry.announcement_media ?? []).length === 1 ? (
                         <button
                           type="button"
@@ -741,7 +741,7 @@ export default function AdminAnnouncementsPage() {
                             setSelectedImageIndex(0);
                             setImageViewerOpen(true);
                           }}
-                          className="group relative h-52 w-full"
+                          className="group relative h-full w-full"
                           aria-label="View image"
                         >
                           <Image
@@ -753,7 +753,7 @@ export default function AdminAnnouncementsPage() {
                           />
                         </button>
                       ) : (
-                        <div className="grid grid-cols-2 gap-2 p-2">
+                        <div className="grid h-full grid-cols-2 gap-2 p-2">
                           {(entry.announcement_media ?? []).map((media, index) => (
                             <button
                               key={media.id}
@@ -763,7 +763,7 @@ export default function AdminAnnouncementsPage() {
                                 setSelectedImageIndex(index);
                                 setImageViewerOpen(true);
                               }}
-                              className="relative h-40 w-full overflow-hidden rounded-lg"
+                              className="relative h-full w-full overflow-hidden rounded-lg"
                               aria-label={`View image ${index + 1}`}
                             >
                               <Image
@@ -788,10 +788,10 @@ export default function AdminAnnouncementsPage() {
                   )}
 
                   {/* Card body */}
-                  <div className="p-4">
+                  <div className="flex h-full flex-col p-4">
                     {/* Title + 3-dot menu */}
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="text-base font-semibold leading-snug text-[#111827]">{entry.title}</h3>
+                      <h3 className="min-h-[52px] text-base font-semibold leading-snug text-[#111827]">{entry.title}</h3>
                       <div className="relative shrink-0">
                         <button
                           type="button"
@@ -832,10 +832,10 @@ export default function AdminAnnouncementsPage() {
                     </div>
 
                     {/* Description */}
-                    <p className="mt-2 line-clamp-3 text-sm text-[#6b7280]">{entry.description}</p>
+                    <p className="mt-2 min-h-[72px] line-clamp-3 text-sm text-[#6b7280]">{entry.description}</p>
 
                     {/* Divider */}
-                    <div className="my-3 border-t border-[#f0f2f4]" />
+                    <div className="my-3 mt-auto border-t border-[#f0f2f4]" />
 
                     {/* Footer */}
                     <div className="flex items-center justify-between gap-2 text-xs text-[#6b7280]">

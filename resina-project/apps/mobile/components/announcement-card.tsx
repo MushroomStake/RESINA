@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { ImageViewerModal } from "./image-viewer-modal";
 
 type AnnouncementAlertLevel = "normal" | "warning" | "emergency";
@@ -41,11 +41,13 @@ export const AnnouncementCard = memo(function AnnouncementCard({
   formattedDate,
   onOpenComments,
 }: AnnouncementCardProps) {
+  const { width } = useWindowDimensions();
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const hasImages = (entry.announcement_media ?? []).length > 0;
   const imageCount = (entry.announcement_media ?? []).length;
+  const galleryImageWidth = Math.max(220, Math.min(width - 96, 320));
 
   const handleImagePress = (index: number) => {
     setSelectedImageIndex(index);
@@ -69,12 +71,28 @@ export const AnnouncementCard = memo(function AnnouncementCard({
 
         {hasImages ? (
           <View style={styles.imageGalleryContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16}>
-              {(entry.announcement_media ?? []).map((media, index) => (
+            {imageCount === 1 ? (
+              <Pressable
+                onPress={() => handleImagePress(0)}
+                style={[styles.singleImageWrapper, { width: galleryImageWidth }]}
+              >
+                <Image source={{ uri: entry.announcement_media[0]?.public_url }} style={styles.newsImage} resizeMode="cover" />
+              </Pressable>
+            ) : (
+              <ScrollView
+                horizontal
+                pagingEnabled
+                decelerationRate="fast"
+                snapToInterval={galleryImageWidth + 10}
+                showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={16}
+                contentContainerStyle={styles.imageGalleryContent}
+              >
+                {(entry.announcement_media ?? []).map((media, index) => (
                 <Pressable
                   key={media.id}
                   onPress={() => handleImagePress(index)}
-                  style={styles.imageWrapper}
+                  style={[styles.imageWrapper, { width: galleryImageWidth }, index === imageCount - 1 && styles.imageWrapperLast]}
                 >
                   <Image source={{ uri: media.public_url }} style={styles.newsImage} resizeMode="cover" />
                   {imageCount > 1 ? (
@@ -85,8 +103,9 @@ export const AnnouncementCard = memo(function AnnouncementCard({
                     </View>
                   ) : null}
                 </Pressable>
-              ))}
-            </ScrollView>
+                ))}
+              </ScrollView>
+            )}
           </View>
         ) : null}
 
@@ -159,16 +178,28 @@ const styles = StyleSheet.create({
   },
   imageGalleryContainer: {
     marginTop: 12,
-    marginHorizontal: -14,
     marginBottom: 0,
+    alignItems: "center",
+  },
+  imageGalleryContent: {
+    paddingHorizontal: 2,
+  },
+  singleImageWrapper: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
   },
   imageWrapper: {
     position: "relative",
     marginRight: 8,
-    paddingLeft: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  imageWrapperLast: {
+    marginRight: 0,
   },
   newsImage: {
-    width: 200,
+    width: "100%",
     height: 180,
     borderRadius: 12,
     backgroundColor: "#e5e7eb",
@@ -176,7 +207,7 @@ const styles = StyleSheet.create({
   imageCounter: {
     position: "absolute",
     bottom: 7,
-    right: 14,
+    right: 8,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     paddingHorizontal: 8,
     paddingVertical: 4,
