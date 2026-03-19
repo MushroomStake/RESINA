@@ -8,6 +8,7 @@ import { AnnouncementCommentsModal } from "./components/announcement-comments-mo
 import { CreateAnnouncementModal } from "./components/create-announcement-modal";
 import { DeleteConfirmationModal } from "./components/delete-confirmation-modal";
 import { ImageViewerModal } from "@/app/admin/announcements/components/image-viewer-modal";
+import StatusFeedbackModal from "../components/status-feedback-modal";
 
 type AlertLevel = "normal" | "warning" | "emergency";
 
@@ -128,6 +129,15 @@ export default function AdminAnnouncementsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [alertFilter, setAlertFilter] = useState<"all" | AlertLevel>("all");
   const [personnelCount, setPersonnelCount] = useState(0);
+  const [statusVisible, setStatusVisible] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [statusVariant, setStatusVariant] = useState<"success" | "error" | "info">("info");
+
+  const showStatus = (variant: "success" | "error" | "info", message: string) => {
+    setStatusVariant(variant);
+    setStatusMessage(message);
+    setStatusVisible(true);
+  };
 
   const loadAnnouncements = async () => {
     setIsLoadingAnnouncements(true);
@@ -248,12 +258,12 @@ export default function AdminAnnouncementsPage() {
     event.preventDefault();
 
     if (!sessionUserId) {
-      setFormError("Session expired. Please log in again.");
+      showStatus("error", "Session expired. Please log in again.");
       return;
     }
 
     if (!title.trim() || !description.trim()) {
-      setFormError("Headline and description are required.");
+      showStatus("error", "Headline and description are required.");
       return;
     }
 
@@ -326,6 +336,7 @@ export default function AdminAnnouncementsPage() {
         setEditingAnnouncement(null);
         setIsCreateModalOpen(false);
         setFormMessage("Announcement updated.");
+        showStatus("success", "Announcement updated.");
         await loadAnnouncements();
         return;
       }
@@ -393,11 +404,13 @@ export default function AdminAnnouncementsPage() {
       setAlertLevel("normal");
       setIsCreateModalOpen(false);
       setFormMessage("Announcement published.");
+      showStatus("success", "Announcement published.");
 
       await loadAnnouncements();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save announcement.";
       setFormError(message);
+      showStatus("error", message);
     } finally {
       setIsSubmitting(false);
     }
@@ -409,12 +422,14 @@ export default function AdminAnnouncementsPage() {
     const { error: storageError } = await supabase.storage.from(BUCKET_NAME).remove([media.storage_path]);
     if (storageError) {
       setPageError(storageError.message);
+      showStatus("error", storageError.message);
       return;
     }
 
     const { error: deleteRowError } = await supabase.from("announcement_media").delete().eq("id", media.id);
     if (deleteRowError) {
       setPageError(deleteRowError.message);
+      showStatus("error", deleteRowError.message);
       return;
     }
 
@@ -539,6 +554,7 @@ export default function AdminAnnouncementsPage() {
       const { error: storageError } = await supabase.storage.from(BUCKET_NAME).remove(storagePaths);
       if (storageError) {
         setPageError(storageError.message);
+        showStatus("error", storageError.message);
         setConfirmDeleteEntry(null);
         setDeletingAnnouncementId(null);
         return;
@@ -552,6 +568,7 @@ export default function AdminAnnouncementsPage() {
 
     if (deleteError) {
       setPageError(deleteError.message);
+      showStatus("error", deleteError.message);
       setConfirmDeleteEntry(null);
       setDeletingAnnouncementId(null);
       return;
@@ -575,6 +592,7 @@ export default function AdminAnnouncementsPage() {
     setAnnouncements((prev) => prev.filter((a) => a.id !== entry.id));
     setConfirmDeleteEntry(null);
     setDeletingAnnouncementId(null);
+    showStatus("success", "Announcement deleted.");
   };
 
   const openEditModal = (entry: AnnouncementRow) => {
@@ -703,9 +721,6 @@ export default function AdminAnnouncementsPage() {
             <h2 className="text-lg font-semibold text-[#111827]">Published Announcements</h2>
             <p className="text-sm text-[#6b7280]">{filteredAnnouncements.length} shown</p>
           </div>
-
-          {formMessage ? <p className="mb-3 text-sm text-[#15803d]">{formMessage}</p> : null}
-          {pageError ? <p className="mb-3 text-sm text-[#b91c1c]">{pageError}</p> : null}
 
           {isLoadingAnnouncements ? (
             <p className="text-sm text-[#6b7280]">Loading posts...</p>
@@ -899,6 +914,16 @@ export default function AdminAnnouncementsPage() {
           images={selectedImages}
           initialIndex={selectedImageIndex}
           onClose={() => setImageViewerOpen(false)}
+        />
+
+        <StatusFeedbackModal
+          visible={statusVisible}
+          message={statusMessage}
+          variant={statusVariant}
+          onClose={() => {
+            setStatusVisible(false);
+            setStatusMessage("");
+          }}
         />
       </div>
     </section>

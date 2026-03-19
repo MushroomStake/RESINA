@@ -24,6 +24,7 @@ import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import { BottomNav, type DashboardTab } from "./components/bottom-nav";
 import { AnnouncementCard } from "./components/announcement-card";
 import { LoadingToast } from "./components/loading-toast";
+import { StatusToast } from "./components/status-toast";
 import { AnnouncementCommentsModal } from "./components/announcement-comments-modal";
 import { SensorStatusCard } from "./components/sensor-status-card";
 import { WeatherUpdateCard } from "./components/weather-update-card";
@@ -31,6 +32,7 @@ import { MobileSectionHeader } from "./components/mobile-section-header";
 
 type AuthMode = "login" | "register";
 type AlertLevelKey = "normal" | "critical" | "evacuation" | "spilling";
+type ResidentStatus = "resident" | "non_resident";
 
 type LoginForm = {
   email: string;
@@ -43,6 +45,8 @@ type RegisterForm = {
   lastName: string;
   email: string;
   phoneNumber: string;
+  residentStatus: ResidentStatus;
+  addressPurok: string;
   password: string;
   confirmPassword: string;
 };
@@ -126,6 +130,7 @@ type ProfileState = {
   fullName: string;
   email: string;
   phoneNumber: string;
+  residentStatus: ResidentStatus;
   addressPurok: string;
   role: string;
   avatarKey: ProfileAvatarKey;
@@ -536,6 +541,58 @@ function resolveLoadBanner(result: CacheAwareLoadResult[]): { showCached: boolea
   };
 }
 
+function normalizeStatusMessage(message: string, variant: "error" | "success"): string {
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const normalized = trimmed.toLowerCase();
+
+  if (variant === "error") {
+    if (normalized.includes("invalid login credentials") || normalized.includes("invalid credentials")) {
+      return "Wrong email or password. Please try again.";
+    }
+
+    if (
+      normalized.includes("email not confirmed") ||
+      normalized.includes("not confirmed") ||
+      normalized.includes("confirm your email") ||
+      normalized.includes("email_not_confirmed")
+    ) {
+      return "Your email is not confirmed yet. Please check your inbox and confirm your account.";
+    }
+
+    if (normalized.includes("network request failed") || normalized.includes("failed to fetch")) {
+      return "Cannot connect right now. Please check your internet connection and try again.";
+    }
+
+    if (
+      normalized.includes("unauthorized") ||
+      normalized.includes("permission denied") ||
+      normalized.includes("forbidden")
+    ) {
+      return "You have no access privilege in this portal.";
+    }
+  }
+
+  if (variant === "success") {
+    if (normalized === "logged in successfully.") {
+      return "Login successful.";
+    }
+
+    if (normalized === "account created and logged in.") {
+      return "Account created successfully. You are now logged in.";
+    }
+  }
+
+  return trimmed;
+}
+
+function normalizeResidentStatus(value: unknown): ResidentStatus {
+  return String(value).toLowerCase() === "non_resident" ? "non_resident" : "resident";
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<string>("user");
@@ -592,6 +649,7 @@ export default function App() {
     fullName: "Resident",
     email: "-",
     phoneNumber: "-",
+    residentStatus: "resident",
     addressPurok: "",
     role: "user",
     avatarKey: "user",
@@ -623,9 +681,12 @@ export default function App() {
     lastName: "",
     email: "",
     phoneNumber: "",
+    residentStatus: "resident",
+    addressPurok: "",
     password: "",
     confirmPassword: "",
   });
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState<string | null>(null);
 
   const alertLevel = useMemo(() => inferAlertLevel(sensorSnapshot), [sensorSnapshot]);
   const alertConfig = ALERT_LEVELS[alertLevel];
@@ -687,11 +748,21 @@ export default function App() {
   const displayRoleLabel = useMemo(() => {
     const roleLabel = profileState.role.trim().toLowerCase();
     if (!roleLabel || roleLabel === "user") {
-      return "RESIDENT";
+      return profileState.residentStatus === "non_resident" ? "NON-RESIDENT" : "RESIDENT";
     }
 
     return roleLabel.toUpperCase();
-  }, [profileState.role]);
+  }, [profileState.residentStatus, profileState.role]);
+
+  const residentStatusCaption = useMemo(() => {
+    return profileState.residentStatus === "non_resident" ? "Outside Sta. Rita" : "Sta. Rita Resident";
+  }, [profileState.residentStatus]);
+
+  const statusVariant = errorMessage ? "error" : "success";
+  const statusModalMessage = useMemo(
+    () => normalizeStatusMessage(errorMessage || successMessage, statusVariant),
+    [errorMessage, successMessage, statusVariant],
+  );
 
   useEffect(() => {
     latestWeatherRecordedAtRef.current = weatherSnapshot.recordedAt;
@@ -825,24 +896,52 @@ export default function App() {
     const fullName = String((row.full_name ?? metadata.full_name ?? fallbackName) || "Resident").trim();
     const email = String(row.email ?? fallbackUser?.email ?? "-").trim();
     const phoneNumber = String(row.phone_number ?? metadata.phone_number ?? "-").trim();
+    const residentStatus = normalizeResidentStatus(row.resident_status ?? metadata.resident_status);
     const rowAddress = String(row.address_purok ?? "").trim();
     const metadataAddress = String(metadata.address_purok ?? "").trim();
-    const addressPurok = rowAddress || metadataAddress;
+    const rowResidentStatus = normalizeResidentStatus(row.resident_status);
+    const addressPurok = residentStatus === "resident" ? rowAddress || metadataAddress : "";
+    const normalizedRole = roleValue === "admin" || roleValue === "member" || roleValue === "user" ? roleValue : "user";
+    const resolvedAddress = residentStatus === "resident" ? metadataAddress || rowAddress : "";
+    const shouldSyncProfile =
+      rowResidentStatus !== residentStatus || (residentStatus === "resident" ? rowAddress !== resolvedAddress : rowAddress !== "");
+
+    // Keep profile table in sync with auth metadata after registration confirmation.
+    if (shouldSyncProfile) {
+      const profileEmail = String(row.email ?? fallbackUser?.email ?? "").trim();
+
+      if (profileEmail) {
+        await supabase.from("profiles").upsert(
+          {
+            auth_user_id: authUserId,
+            full_name: fullName || "Resident",
+            email: profileEmail,
+            role: normalizedRole,
+            resident_status: residentStatus,
+            address_purok: resolvedAddress,
+          },
+          {
+            onConflict: "auth_user_id",
+          },
+        );
+      }
+    }
 
     const nextProfileState: ProfileState = {
       fullName,
       email: email || "-",
       phoneNumber: phoneNumber || "-",
+      residentStatus,
       addressPurok,
-      role: roleValue,
+      role: normalizedRole,
       avatarKey,
     };
 
-    setRole(roleValue);
+    setRole(normalizedRole);
     setProfileState(nextProfileState);
 
     await writeCache(profileCacheKey, {
-      role: roleValue,
+      role: normalizedRole,
       profileState: nextProfileState,
     });
   };
@@ -1306,7 +1405,19 @@ export default function App() {
     setIsSubmitting(false);
 
     if (error) {
-      if (error.message.toLowerCase().includes("email not confirmed")) {
+      const normalizedError = error.message.toLowerCase();
+      const isUnconfirmedByErrorText =
+        normalizedError.includes("email not confirmed") ||
+        normalizedError.includes("not confirmed") ||
+        normalizedError.includes("confirm your email") ||
+        normalizedError.includes("email_not_confirmed");
+      const looksLikeInvalidCreds =
+        normalizedError.includes("invalid login credentials") || normalizedError.includes("invalid credentials");
+      const isFreshUnconfirmedAttempt = Boolean(
+        pendingConfirmationEmail && pendingConfirmationEmail === email && looksLikeInvalidCreds,
+      );
+
+      if (isUnconfirmedByErrorText || isFreshUnconfirmedAttempt) {
         setErrorMessage("Your email is not confirmed yet. Please check your email and confirm your account.");
         return;
       }
@@ -1315,6 +1426,7 @@ export default function App() {
       return;
     }
 
+    setPendingConfirmationEmail(null);
     setSuccessMessage("Logged in successfully.");
   };
 
@@ -1327,11 +1439,18 @@ export default function App() {
     const fullName = buildFullName(firstName, middleName, lastName);
     const email = registerForm.email.trim().toLowerCase();
     const phoneNumber = registerForm.phoneNumber.trim();
+    const residentStatus = registerForm.residentStatus;
+    const addressPurok = registerForm.addressPurok.trim();
     const password = registerForm.password;
     const confirmPassword = registerForm.confirmPassword;
 
     if (!firstName || !lastName || !email || !phoneNumber || !password || !confirmPassword) {
       setErrorMessage("Please complete all registration fields.");
+      return;
+    }
+
+    if (residentStatus === "resident" && !addressPurok) {
+      setErrorMessage("Address / Purok is required for Sta. Rita residents.");
       return;
     }
 
@@ -1363,6 +1482,8 @@ export default function App() {
           middle_name: middleName,
           last_name: lastName,
           phone_number: phoneNumber,
+          resident_status: residentStatus,
+          address_purok: residentStatus === "resident" ? addressPurok : "",
           role: "user",
         },
       },
@@ -1376,11 +1497,13 @@ export default function App() {
     }
 
     if (!data.session) {
+      setPendingConfirmationEmail(email);
       setSuccessMessage("Account created. Check your email and tap the confirmation link to return to the app.");
       setMode("login");
       return;
     }
 
+    setPendingConfirmationEmail(null);
     setSuccessMessage("Account created and logged in.");
   };
 
@@ -1416,6 +1539,10 @@ export default function App() {
       return;
     }
 
+    if (profileState.residentStatus !== "resident") {
+      return;
+    }
+
     const normalizedAddress = profileState.addressPurok.trim();
 
     setIsSavingAddress(true);
@@ -1423,6 +1550,7 @@ export default function App() {
     const { error: profileError } = await supabase.from("profiles").upsert(
       {
         auth_user_id: session.user.id,
+        resident_status: profileState.residentStatus,
         address_purok: normalizedAddress,
       },
       {
@@ -1439,6 +1567,7 @@ export default function App() {
     const { data, error } = await supabase.auth.updateUser({
       data: {
         ...(session.user.user_metadata ?? {}),
+        resident_status: profileState.residentStatus,
         address_purok: normalizedAddress,
       },
     });
@@ -1791,7 +1920,7 @@ export default function App() {
             <Text style={styles.profileName}>{profileState.fullName}</Text>
             <View style={styles.profileRoleRow}>
               <Text style={styles.profileRoleBadge}>{displayRoleLabel}</Text>
-              <Text style={styles.profileRoleText}>Barangay Sta. Rita</Text>
+              <Text style={styles.profileRoleText}>{residentStatusCaption}</Text>
             </View>
           </View>
           <Pressable style={styles.profileInlineEditBtn} onPress={() => setIsAvatarPickerOpen((prev) => !prev)}>
@@ -1836,24 +1965,28 @@ export default function App() {
             <Text style={styles.profileInfoLabel}>Email Address</Text>
             <Text style={styles.profileInfoValue}>{profileState.email}</Text>
           </View>
-          <View style={styles.profileInfoDivider} />
-          <View style={styles.profileInfoRow}>
-            <Text style={styles.profileInfoLabel}>Address / Purok</Text>
-            <TextInput
-              value={profileState.addressPurok}
-              onChangeText={(value) =>
-                setProfileState((prev) => ({
-                  ...prev,
-                  addressPurok: value,
-                }))
-              }
-              onBlur={() => void handleSaveAddressPurok()}
-              style={styles.profileAddressInput}
-              placeholder="Purok 4, Riverside St."
-              placeholderTextColor="#9ca3af"
-              editable={!isSavingAddress}
-            />
-          </View>
+          {profileState.residentStatus === "resident" ? (
+            <>
+              <View style={styles.profileInfoDivider} />
+              <View style={styles.profileInfoRow}>
+                <Text style={styles.profileInfoLabel}>Address / Purok</Text>
+                <TextInput
+                  value={profileState.addressPurok}
+                  onChangeText={(value) =>
+                    setProfileState((prev) => ({
+                      ...prev,
+                      addressPurok: value,
+                    }))
+                  }
+                  onBlur={() => void handleSaveAddressPurok()}
+                  style={styles.profileAddressInput}
+                  placeholder="Purok 4, Riverside St."
+                  placeholderTextColor="#9ca3af"
+                  editable={!isSavingAddress}
+                />
+              </View>
+            </>
+          ) : null}
         </View>
 
         <Text style={styles.profileSectionTitle}>Change Password</Text>
@@ -1961,6 +2094,13 @@ export default function App() {
         <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
         <View style={styles.dashboardWrapper}>
           <LoadingToast visible={isRefreshToastVisible} message={refreshToastMessage} topOffset={66} />
+          <StatusToast
+            visible={Boolean(statusModalMessage)}
+            message={statusModalMessage}
+            variant={statusVariant}
+            topOffset={66}
+            onClose={clearAlerts}
+          />
           {isUsingCachedData && cachedDataBanner ? (
             <View style={styles.cachedBanner}>
               <Ionicons name="cloud-offline-outline" size={14} color="#b45309" />
@@ -2031,6 +2171,13 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
+      <StatusToast
+        visible={Boolean(statusModalMessage)}
+        message={statusModalMessage}
+        variant={statusVariant}
+        topOffset={56}
+        onClose={clearAlerts}
+      />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
           <View style={styles.container}>
@@ -2148,6 +2295,67 @@ export default function App() {
                   keyboardType="phone-pad"
                 />
 
+                <Text style={styles.inputLabelRegister}>Resident Type</Text>
+                <View style={styles.registerResidentRow}>
+                  <Pressable
+                    style={[
+                      styles.registerResidentChip,
+                      registerForm.residentStatus === "resident" && styles.registerResidentChipActive,
+                    ]}
+                    onPress={() =>
+                      setRegisterForm((prev) => ({
+                        ...prev,
+                        residentStatus: "resident",
+                      }))
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.registerResidentChipText,
+                        registerForm.residentStatus === "resident" && styles.registerResidentChipTextActive,
+                      ]}
+                    >
+                      Resident of Sta. Rita
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.registerResidentChip,
+                      registerForm.residentStatus === "non_resident" && styles.registerResidentChipActive,
+                    ]}
+                    onPress={() =>
+                      setRegisterForm((prev) => ({
+                        ...prev,
+                        residentStatus: "non_resident",
+                        addressPurok: "",
+                      }))
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.registerResidentChipText,
+                        registerForm.residentStatus === "non_resident" && styles.registerResidentChipTextActive,
+                      ]}
+                    >
+                      Non-Resident
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {registerForm.residentStatus === "resident" ? (
+                  <>
+                    <Text style={styles.inputLabelRegister}>Address / Purok</Text>
+                    <TextInput
+                      value={registerForm.addressPurok}
+                      onChangeText={(value) => setRegisterForm((prev) => ({ ...prev, addressPurok: value }))}
+                      style={styles.input}
+                      placeholder="Purok 4, Riverside St."
+                      placeholderTextColor="#9ca3af"
+                    />
+                  </>
+                ) : null}
+
                 <Text style={styles.inputLabelRegister}>Password</Text>
                 <View style={styles.passwordRow}>
                   <TextInput
@@ -2204,8 +2412,6 @@ export default function App() {
               </View>
             )}
 
-            {!!errorMessage && <Text style={styles.errorMessage}>{errorMessage}</Text>}
-            {!!successMessage && <Text style={styles.successMessage}>{successMessage}</Text>}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -2867,6 +3073,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#111827",
   },
+  registerResidentRow: {
+    flexDirection: "row",
+    flexWrap: "nowrap",
+    gap: 8,
+    marginTop: 2,
+  },
+  registerResidentChip: {
+    flex: 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#f3f4f6",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  registerResidentChipActive: {
+    borderColor: "#4caf50",
+    backgroundColor: "#e9f7ec",
+  },
+  registerResidentChipText: {
+    color: "#4b5563",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  registerResidentChipTextActive: {
+    color: "#166534",
+  },
   passwordHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2978,18 +3213,6 @@ const styles = StyleSheet.create({
   modeAction: {
     color: "#2f9e44",
     fontWeight: "700",
-    fontSize: 13,
-  },
-  errorMessage: {
-    marginTop: 14,
-    textAlign: "center",
-    color: "#dc2626",
-    fontSize: 13,
-  },
-  successMessage: {
-    marginTop: 14,
-    textAlign: "center",
-    color: "#15803d",
     fontSize: 13,
   },
 });

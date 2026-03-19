@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
+import StatusFeedbackModal from "../components/status-feedback-modal";
 
 type Role = "admin" | "member";
 
@@ -65,12 +66,9 @@ export default function AdminProfilePage() {
   const [myRole, setMyRole] = useState<Role>("member");
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
 
-  // Main profile section feedback only.
-  const [profileMessage, setProfileMessage] = useState<string | null>(null);
-  const [profileError, setProfileError] = useState<string | null>(null);
-
-  // Invite/update/delete modal feedback only.
-  const [modalError, setModalError] = useState<string | null>(null);
+  const [statusVisible, setStatusVisible] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [statusVariant, setStatusVariant] = useState<"success" | "error" | "info">("info");
 
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
@@ -112,6 +110,12 @@ export default function AdminProfilePage() {
   const isUpdateTargetLastAdmin =
     updateTarget?.role === "admin" && updateUserForm.role === "admin" && adminCount <= 1;
 
+  const showStatus = (variant: "success" | "error" | "info", message: string) => {
+    setStatusVariant(variant);
+    setStatusMessage(message);
+    setStatusVisible(true);
+  };
+
   const loadProfiles = async (currentUserId: string, currentEmail: string) => {
     const { data: rows, error } = await supabase
       .from("profiles")
@@ -119,7 +123,7 @@ export default function AdminProfilePage() {
       .order("created_at", { ascending: true });
 
     if (error) {
-      setProfileError(error.message);
+      showStatus("error", error.message);
       return;
     }
 
@@ -142,7 +146,7 @@ export default function AdminProfilePage() {
       });
 
       if (insertError) {
-        setProfileError(insertError.message);
+        showStatus("error", insertError.message);
       }
 
       const { data: reloadRows } = await supabase
@@ -201,8 +205,6 @@ export default function AdminProfilePage() {
     }
 
     setIsSaving(true);
-    setProfileMessage(null);
-    setProfileError(null);
 
     try {
       const fullName = buildFullName(firstName, middleName, lastName);
@@ -235,10 +237,10 @@ export default function AdminProfilePage() {
       }
 
       await loadProfiles(sessionUserId, sessionEmail);
-      setProfileMessage("Profile updated successfully.");
+      showStatus("success", "Profile updated successfully.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save profile.";
-      setProfileError(message);
+      showStatus("error", message);
     } finally {
       setIsSaving(false);
     }
@@ -246,7 +248,7 @@ export default function AdminProfilePage() {
 
   const requestPositionChange = (nextRole: Role) => {
     if (isCurrentUserLastAdmin && nextRole === "member") {
-      setProfileError("At least one admin is required.");
+      showStatus("error", "At least one admin is required.");
       return;
     }
 
@@ -271,7 +273,7 @@ export default function AdminProfilePage() {
 
   const requestUpdatePositionChange = (nextRole: Role) => {
     if (isUpdateTargetLastAdmin && nextRole === "member") {
-      setModalError("At least one admin is required.");
+      showStatus("error", "At least one admin is required.");
       return;
     }
 
@@ -300,16 +302,15 @@ export default function AdminProfilePage() {
     }
 
     if (!sessionUserId || row.auth_user_id === sessionUserId) {
-      setModalError("You cannot remove your own admin profile.");
+      showStatus("error", "You cannot remove your own admin profile.");
       return;
     }
 
     if (row.role === "admin" && adminCount <= 1) {
-      setModalError("At least one admin is required.");
+      showStatus("error", "At least one admin is required.");
       return;
     }
 
-    setModalError(null);
     setDeleteTarget(row);
   };
 
@@ -319,7 +320,6 @@ export default function AdminProfilePage() {
     }
 
     setIsDeletingUserId(deleteTarget.id);
-    setModalError(null);
 
     try {
       const res = await fetch("/api/admin/delete-user", {
@@ -335,8 +335,9 @@ export default function AdminProfilePage() {
 
       await loadProfiles(sessionUserId, sessionEmail);
       setDeleteTarget(null);
+      showStatus("success", "User removed successfully.");
     } catch (error) {
-      setModalError(error instanceof Error ? error.message : "Unable to remove user.");
+      showStatus("error", error instanceof Error ? error.message : "Unable to remove user.");
     } finally {
       setIsDeletingUserId(null);
     }
@@ -355,7 +356,6 @@ export default function AdminProfilePage() {
       email: row.email,
       role: row.role,
     });
-    setModalError(null);
     setIsUpdateUserModalOpen(true);
   };
 
@@ -366,12 +366,11 @@ export default function AdminProfilePage() {
 
     const fullName = buildFullName(updateUserForm.firstName, updateUserForm.middleName, updateUserForm.lastName);
     if (!fullName || !updateUserForm.email.trim()) {
-      setModalError("First name, last name, and email are required.");
+      showStatus("error", "First name, last name, and email are required.");
       return;
     }
 
     setIsUpdatingUser(true);
-    setModalError(null);
 
     try {
       const res = await fetch("/api/admin/update-user", {
@@ -395,8 +394,9 @@ export default function AdminProfilePage() {
       await loadProfiles(sessionUserId, sessionEmail);
       setIsUpdateUserModalOpen(false);
       setUpdateTarget(null);
+      showStatus("success", "User details updated.");
     } catch (error) {
-      setModalError(error instanceof Error ? error.message : "Unable to update user.");
+      showStatus("error", error instanceof Error ? error.message : "Unable to update user.");
     } finally {
       setIsUpdatingUser(false);
     }
@@ -410,27 +410,26 @@ export default function AdminProfilePage() {
     const fullName = buildFullName(addUserForm.firstName, addUserForm.middleName, addUserForm.lastName);
 
     if (!fullName || !addUserForm.email.trim()) {
-      setModalError("First name, last name, and email are required.");
+      showStatus("error", "First name, last name, and email are required.");
       return;
     }
 
     if (!addUserForm.confirmEmail.trim()) {
-      setModalError("Please confirm the invite email address.");
+      showStatus("error", "Please confirm the invite email address.");
       return;
     }
 
     if (addUserForm.email.trim().toLowerCase() !== addUserForm.confirmEmail.trim().toLowerCase()) {
-      setModalError("Email and confirm email do not match.");
+      showStatus("error", "Email and confirm email do not match.");
       return;
     }
 
     if (!addUserForm.password.trim() || addUserForm.password.trim().length < 6) {
-      setModalError("Default password must be at least 6 characters.");
+      showStatus("error", "Default password must be at least 6 characters.");
       return;
     }
 
     setIsAddingUser(true);
-    setModalError(null);
 
     try {
       const res = await fetch("/api/admin/create-user", {
@@ -464,8 +463,9 @@ export default function AdminProfilePage() {
         password: "admin123",
       });
       await loadProfiles(sessionUserId, sessionEmail);
+      showStatus("success", "Invite sent successfully.");
     } catch (error) {
-      setModalError(error instanceof Error ? error.message : "Unable to send invite.");
+      showStatus("error", error instanceof Error ? error.message : "Unable to send invite.");
     } finally {
       setIsAddingUser(false);
     }
@@ -557,9 +557,6 @@ export default function AdminProfilePage() {
                 />
               </label>
 
-              {profileError ? <p className="text-sm text-[#b91c1c]">{profileError}</p> : null}
-              {profileMessage ? <p className="text-sm text-[#15803d]">{profileMessage}</p> : null}
-
               <button
                 type="button"
                 onClick={() => void handleSaveProfile()}
@@ -581,7 +578,6 @@ export default function AdminProfilePage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setModalError(null);
                     setIsAddUserModalOpen(true);
                   }}
                   className="rounded-lg bg-[#4CAF50] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#3f9a43]"
@@ -722,13 +718,10 @@ export default function AdminProfilePage() {
               </label>
             </div>
 
-            {modalError ? <p className="px-6 pb-2 text-sm text-[#b91c1c]">{modalError}</p> : null}
-
             <div className="flex items-center justify-between border-t border-[#e5e7eb] px-6 py-4">
               <button
                 type="button"
                 onClick={() => {
-                  setModalError(null);
                   setIsAddUserModalOpen(false);
                 }}
                 className="rounded-lg px-3 py-2 text-sm text-[#374151] hover:bg-[#f3f4f6]"
@@ -805,8 +798,6 @@ export default function AdminProfilePage() {
               </label>
             </div>
 
-            {modalError ? <p className="px-6 pb-2 text-sm text-[#b91c1c]">{modalError}</p> : null}
-
             <div className="flex items-center justify-between border-t border-[#e5e7eb] px-6 py-4">
               <button
                 type="button"
@@ -831,7 +822,6 @@ export default function AdminProfilePage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setModalError(null);
                     setIsUpdateUserModalOpen(false);
                     setUpdateTarget(null);
                   }}
@@ -932,13 +922,10 @@ export default function AdminProfilePage() {
               Are you sure you want to delete <span className="font-semibold">{deleteTarget.full_name}</span>? This action cannot be undone.
             </div>
 
-            {modalError ? <p className="px-6 pb-2 text-sm text-[#b91c1c]">{modalError}</p> : null}
-
             <div className="flex items-center justify-between border-t border-[#e5e7eb] px-6 py-4">
               <button
                 type="button"
                 onClick={() => {
-                  setModalError(null);
                   setDeleteTarget(null);
                 }}
                 className="rounded-lg px-3 py-2 text-sm text-[#374151] hover:bg-[#f3f4f6]"
@@ -957,6 +944,16 @@ export default function AdminProfilePage() {
           </div>
         </div>
       ) : null}
+
+      <StatusFeedbackModal
+        visible={statusVisible}
+        message={statusMessage}
+        variant={statusVariant}
+        onClose={() => {
+          setStatusVisible(false);
+          setStatusMessage("");
+        }}
+      />
     </>
   );
 }

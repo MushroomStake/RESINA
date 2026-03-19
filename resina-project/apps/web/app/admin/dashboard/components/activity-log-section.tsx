@@ -11,6 +11,8 @@ type ActivityLogRow = {
   created_at: string;
 };
 
+const PAGE_SIZE = 10;
+
 function formatLogDateTime(value: string): string {
   return new Date(value).toLocaleString("en-PH", {
     timeZone: "Asia/Manila",
@@ -33,19 +35,29 @@ export function ActivityLogSection() {
   const supabase = useMemo(() => createClient(), []);
   const [logs, setLogs] = useState<ActivityLogRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   useEffect(() => {
     let isMounted = true;
 
     const loadLogs = async () => {
-      const { data } = await supabase
+      setIsLoading(true);
+
+      const from = (currentPage - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      const { data, count } = await supabase
         .from("activity_logs")
-        .select("id, action_type, actor_name, detail, created_at")
+        .select("id, action_type, actor_name, detail, created_at", { count: "exact" })
         .order("created_at", { ascending: false })
-        .limit(20);
+        .range(from, to);
 
       if (isMounted) {
         setLogs((data ?? []) as ActivityLogRow[]);
+        setTotalCount(count ?? 0);
         setIsLoading(false);
       }
     };
@@ -60,7 +72,10 @@ export function ActivityLogSection() {
         (payload) => {
           if (isMounted) {
             const newRow = payload.new as ActivityLogRow;
-            setLogs((prev) => [newRow, ...prev].slice(0, 20));
+            setTotalCount((prev) => prev + 1);
+            if (currentPage === 1) {
+              setLogs((prev) => [newRow, ...prev].slice(0, PAGE_SIZE));
+            }
           }
         },
       )
@@ -70,13 +85,15 @@ export function ActivityLogSection() {
       isMounted = false;
       void supabase.removeChannel(channel);
     };
-  }, [supabase]);
+  }, [currentPage, supabase]);
 
   return (
     <section className="mt-6 rounded-2xl border border-[#e5e7eb] bg-white p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h3 className="text-lg font-bold text-[#111827]">Activity Log</h3>
-        <span className="text-xs text-[#6b7280]">{logs.length > 0 ? `${logs.length} recent event${logs.length !== 1 ? "s" : ""}` : "No events yet"}</span>
+        <span className="text-xs text-[#6b7280]">
+          {totalCount > 0 ? `${totalCount} total event${totalCount !== 1 ? "s" : ""}` : "No events yet"}
+        </span>
       </div>
 
       <div className="overflow-x-auto">
@@ -118,6 +135,28 @@ export function ActivityLogSection() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-[#f0f2f4] pt-3">
+        <p className="text-xs text-[#6b7280]">Page {currentPage} of {totalPages}</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage <= 1 || isLoading}
+            className="rounded-md border border-[#d1d5db] px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#f3f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+            disabled={currentPage >= totalPages || isLoading}
+            className="rounded-md border border-[#d1d5db] px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#f3f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </section>
   );

@@ -9,10 +9,24 @@ create table if not exists public.profiles (
   last_name text,
   full_name text not null,
   email text not null unique,
+  address_purok text,
+  resident_status text not null check (resident_status in ('resident', 'non_resident')) default 'resident',
   role text not null check (role in ('admin', 'member', 'user')) default 'user',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+  add column if not exists address_purok text;
+
+alter table public.profiles
+  add column if not exists resident_status text not null default 'resident';
+
+alter table public.profiles
+  drop constraint if exists profiles_resident_status_check;
+
+alter table public.profiles
+  add constraint profiles_resident_status_check check (resident_status in ('resident', 'non_resident'));
 
 -- Keep existing databases in sync with the role policy above.
 alter table public.profiles

@@ -20,8 +20,6 @@ type WeatherUpdateSectionProps = {
   weatherState: WeatherView;
   weatherDraft: WeatherView;
   weatherCardClass: string;
-  weatherSaveMessage: string | null;
-  weatherError: string | null;
   isWeatherModalOpen: boolean;
   isFetchingWeather: boolean;
   isSavingWeather: boolean;
@@ -40,8 +38,6 @@ export function WeatherUpdateSection({
   weatherState,
   weatherDraft,
   weatherCardClass,
-  weatherSaveMessage,
-  weatherError,
   isWeatherModalOpen,
   isFetchingWeather,
   isSavingWeather,
@@ -147,8 +143,6 @@ export function WeatherUpdateSection({
                 {weatherState.manualDescription || "-"}
               </span>
             </p>
-            {weatherSaveMessage ? <p className="text-xs text-[#15803d]">{weatherSaveMessage}</p> : null}
-            {weatherError ? <p className="text-xs text-[#b91c1c]">{weatherError}</p> : null}
           </div>
         </div>
       </section>
@@ -317,7 +311,6 @@ export function WeatherUpdateSection({
                 />
               </div>
 
-              {weatherError ? <p className="text-sm text-[#b91c1c]">{weatherError}</p> : null}
             </div>
 
             <div className="flex items-center justify-between border-t border-[#e5e7eb] px-6 py-4">

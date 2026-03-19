@@ -2,8 +2,33 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
+import StatusFeedbackModal from "./components/status-feedback-modal";
+
+function normalizeAuthMessage(message: string): string {
+  const trimmed = message.trim();
+  if (!trimmed) return "Unable to sign in.";
+
+  const normalized = trimmed.toLowerCase();
+  if (normalized.includes("invalid login credentials") || normalized.includes("invalid credentials")) {
+    return "Wrong email or password. Please try again.";
+  }
+
+  if (normalized.includes("email not confirmed")) {
+    return "Your email is not confirmed yet. Please check your inbox and confirm your account.";
+  }
+
+  if (normalized.includes("network") || normalized.includes("fetch")) {
+    return "Cannot connect right now. Please check your internet connection and try again.";
+  }
+
+  if (normalized.includes("unauthorized") || normalized.includes("forbidden") || normalized.includes("permission")) {
+    return "You have no access privilege in this portal.";
+  }
+
+  return trimmed;
+}
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -12,10 +37,21 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage(null);
+    setSuccessMessage(null);
     setIsLoading(true);
 
     try {
@@ -26,21 +62,36 @@ export default function AdminLoginPage() {
       });
 
       if (error) {
-        setErrorMessage(error.message);
+        setErrorMessage(normalizeAuthMessage(error.message));
         return;
       }
 
-      router.push("/admin/dashboard");
+      setSuccessMessage("Login successful.");
+      redirectTimerRef.current = setTimeout(() => {
+        router.push("/admin/dashboard");
+      }, 900);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to sign in.";
-      setErrorMessage(message);
+      setErrorMessage(normalizeAuthMessage(message));
     } finally {
       setIsLoading(false);
     }
   };
 
+  const feedbackMessage = errorMessage || successMessage || "";
+
   return (
     <main className="flex min-h-dvh flex-col items-center justify-between bg-[#f3f5f5] px-4 py-10">
+      <StatusFeedbackModal
+        visible={Boolean(feedbackMessage)}
+        message={feedbackMessage}
+        variant={errorMessage ? "error" : "success"}
+        onClose={() => {
+          setErrorMessage(null);
+          setSuccessMessage(null);
+        }}
+      />
+
       <div className="flex flex-1 flex-col items-center justify-center w-full">
         {/* Logo */}
         <div className="mb-4 flex flex-col items-center gap-2">
@@ -130,10 +181,6 @@ export default function AdminLoginPage() {
                 </button>
               </div>
             </div>
-
-            {errorMessage ? (
-              <p className="mb-4 rounded-lg bg-[#fef2f2] px-3 py-2 text-sm text-[#b91c1c]">{errorMessage}</p>
-            ) : null}
 
             {/* Submit */}
             <button

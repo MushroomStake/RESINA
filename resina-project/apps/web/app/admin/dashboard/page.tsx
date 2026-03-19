@@ -6,6 +6,7 @@ import { createClient } from "../../../lib/supabase/client";
 import { ActivityLogSection } from "./components/activity-log-section";
 import { CurrentSensorStatus } from "./components/current-sensor-status";
 import { WeatherUpdateSection } from "./components/weather-update-section";
+import StatusFeedbackModal from "../components/status-feedback-modal";
 
 type AlertLevelKey = "normal" | "critical" | "evacuation" | "spilling";
 
@@ -428,7 +429,9 @@ export default function AdminDashboardPage() {
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [isSavingWeather, setIsSavingWeather] = useState(false);
-  const [weatherSaveMessage, setWeatherSaveMessage] = useState<string | null>(null);
+  const [statusVisible, setStatusVisible] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [statusVariant, setStatusVariant] = useState<"success" | "error" | "info">("info");
 
   const [weatherState, setWeatherState] = useState<WeatherState>({
     id: null,
@@ -480,6 +483,12 @@ export default function AdminDashboardPage() {
     weatherState.colorCodedWarning,
     weatherState.heatIndex,
   );
+
+  const showStatus = (variant: "success" | "error" | "info", message: string) => {
+    setStatusVariant(variant);
+    setStatusMessage(message);
+    setStatusVisible(true);
+  };
 
   const loadWeatherFromSupabase = async (): Promise<boolean> => {
     const supabase = createClient();
@@ -572,9 +581,12 @@ export default function AdminDashboardPage() {
     };
   };
 
-  const fetchLatestWeather = async (applyToPublishedCard: boolean) => {
+  const fetchLatestWeather = async (applyToPublishedCard: boolean, notifyError = false) => {
     if (!openWeatherApiKey) {
       setWeatherError("Weather API key is missing in the web environment.");
+      if (notifyError) {
+        showStatus("error", "Weather API key is missing in the web environment.");
+      }
       return;
     }
 
@@ -648,6 +660,9 @@ export default function AdminDashboardPage() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load weather data.";
       setWeatherError(message);
+      if (notifyError) {
+        showStatus("error", message);
+      }
     } finally {
       setIsFetchingWeather(false);
     }
@@ -656,7 +671,7 @@ export default function AdminDashboardPage() {
   const openWeatherUpdateModal = async () => {
     setWeatherError(null);
     setIsWeatherModalOpen(true);
-    await fetchLatestWeather(false);
+    await fetchLatestWeather(false, true);
   };
 
   const handlePublishWeather = async () => {
@@ -667,7 +682,6 @@ export default function AdminDashboardPage() {
     };
 
     setIsSavingWeather(true);
-    setWeatherSaveMessage(null);
     setWeatherError(null);
 
     try {
@@ -675,11 +689,11 @@ export default function AdminDashboardPage() {
       setWeatherState(saved);
       setWeatherDraft(saved);
       setIsWeatherModalOpen(false);
-      setWeatherSaveMessage("Saved.");
-      setTimeout(() => setWeatherSaveMessage(null), 3000);
+      showStatus("success", "Weather update published.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save weather.";
       setWeatherError(message);
+      showStatus("error", message);
     } finally {
       setIsSavingWeather(false);
     }
@@ -939,8 +953,6 @@ export default function AdminDashboardPage() {
             weatherState={weatherState}
             weatherDraft={weatherDraft}
             weatherCardClass={weatherCardClass}
-            weatherSaveMessage={weatherSaveMessage}
-            weatherError={weatherError}
             isWeatherModalOpen={isWeatherModalOpen}
             isFetchingWeather={isFetchingWeather}
             isSavingWeather={isSavingWeather}
@@ -948,7 +960,7 @@ export default function AdminDashboardPage() {
             signalOptions={SIGNAL_OPTIONS}
             onOpenWeatherUpdateModal={() => void openWeatherUpdateModal()}
             onCloseWeatherModal={() => setIsWeatherModalOpen(false)}
-            onRefreshWeather={() => void fetchLatestWeather(false)}
+            onRefreshWeather={() => void fetchLatestWeather(false, true)}
             onPublishWeather={() => void handlePublishWeather()}
             onWarningChange={(value) => setWeatherDraft((current) => ({ ...current, colorCodedWarning: value }))}
             onSignalChange={(value) => setWeatherDraft((current) => ({ ...current, signalNo: value }))}
@@ -959,6 +971,16 @@ export default function AdminDashboardPage() {
 
           <ActivityLogSection />
       </section>
+
+      <StatusFeedbackModal
+        visible={statusVisible}
+        message={statusMessage}
+        variant={statusVariant}
+        onClose={() => {
+          setStatusVisible(false);
+          setStatusMessage("");
+        }}
+      />
     </>
   );
 }
