@@ -19,6 +19,7 @@ import {
   View,
 } from "react-native";
 import type { Session } from "@supabase/supabase-js";
+import { clearExpiredCaches, readCache, writeCache } from "./lib/cache";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import { BottomNav, type DashboardTab } from "./components/bottom-nav";
 import { AnnouncementCard } from "./components/announcement-card";
@@ -130,6 +131,38 @@ type ProfileState = {
   avatarKey: ProfileAvatarKey;
 };
 
+type DashboardLoadSource = "live" | "cache" | "none";
+
+type CacheAwareLoadResult = {
+  source: DashboardLoadSource;
+  cachedAt: number | null;
+};
+
+type ProfileCachePayload = {
+  role: string;
+  profileState: ProfileState;
+};
+
+const CACHE_KEYS = {
+  sensor: "resina:cache:sensor-snapshot",
+  weather: "resina:cache:weather-snapshot",
+  announcements: "resina:cache:announcements",
+  history: "resina:cache:history-records",
+  profile: (userId: string) => `resina:cache:profile:${userId}`,
+};
+
+const CACHE_TTL_MS = {
+  sensor: 5 * 60 * 1000,
+  weather: 5 * 60 * 1000,
+  announcements: 30 * 60 * 1000,
+  history: 60 * 60 * 1000,
+  profile: 24 * 60 * 60 * 1000,
+};
+
+const HISTORY_CACHE_MAX_DAYS = 30;
+const HISTORY_CACHE_MAX_ITEMS = 400;
+const ANNOUNCEMENTS_CACHE_MAX_ITEMS = 20;
+
 const PROFILE_AVATAR_OPTIONS: Array<{ key: ProfileAvatarKey; label: string; source: ReturnType<typeof require> }> = [
   { key: "user", label: "User", source: require("./assets/Profile/user.png") },
   { key: "man", label: "Man", source: require("./assets/Profile/man.png") },
@@ -139,9 +172,8 @@ const PROFILE_AVATAR_OPTIONS: Array<{ key: ProfileAvatarKey; label: string; sour
 ];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const expoEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
 const mobileEmailRedirectUrl =
-  expoEnv?.EXPO_PUBLIC_MOBILE_EMAIL_REDIRECT_URL ?? "https://resina-two.vercel.app/";
+  process.env.EXPO_PUBLIC_MOBILE_EMAIL_REDIRECT_URL ?? "https://resina-two.vercel.app/";
 const DASHBOARD_TOP_PADDING = Platform.OS === "android" ? 14 : 16;
 const DEFAULT_WEATHER_ADVISORY =
   "No urgent advisory right now. Keep alerts enabled and monitor weather updates from Barangay Sta. Rita.";
@@ -447,6 +479,63 @@ function mapWeatherRowToSnapshot(row: WeatherRow): WeatherSnapshot {
   };
 }
 
+function formatCachedTimestamp(updatedAt: number | null): string {
+  if (!updatedAt) {
+    return "";
+  }
+
+  return new Date(updatedAt).toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function trimHistoryForCache(records: HistoryRecord[]): HistoryRecord[] {
+  const cutoff = Date.now() - HISTORY_CACHE_MAX_DAYS * 24 * 60 * 60 * 1000;
+  return records
+    .filter((record) => getHistorySourceTimestamp(record) >= cutoff)
+    .slice(0, HISTORY_CACHE_MAX_ITEMS);
+}
+
+function resolveLoadBanner(result: CacheAwareLoadResult[]): { showCached: boolean; message: string } {
+  const hasLive = result.some((entry) => entry.source === "live");
+  if (hasLive) {
+    return {
+      showCached: false,
+      message: "",
+    };
+  }
+
+  const newestCachedAt = result.reduce<number | null>((current, entry) => {
+    if (entry.source !== "cache" || !entry.cachedAt) {
+      return current;
+    }
+
+    if (!current || entry.cachedAt > current) {
+      return entry.cachedAt;
+    }
+
+    return current;
+  }, null);
+
+  if (!newestCachedAt) {
+    return {
+      showCached: false,
+      message: "",
+    };
+  }
+
+  return {
+    showCached: true,
+    message: `Offline mode: showing cached data (last synced ${formatCachedTimestamp(newestCachedAt)}).`,
+  };
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<string>("user");
@@ -460,6 +549,8 @@ export default function App() {
   const [isRefreshingDashboard, setIsRefreshingDashboard] = useState(false);
   const [isRefreshToastVisible, setIsRefreshToastVisible] = useState(false);
   const [refreshToastMessage, setRefreshToastMessage] = useState("Refreshing live data...");
+  const [cachedDataBanner, setCachedDataBanner] = useState("");
+  const [isUsingCachedData, setIsUsingCachedData] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -641,7 +732,15 @@ export default function App() {
     const refreshStart = Date.now();
 
     try {
-      await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadAnnouncements(), loadHistoryRecords()]);
+      const results = await Promise.all([
+        loadSensorSnapshot(),
+        loadWeatherSnapshot(),
+        loadAnnouncements(),
+        loadHistoryRecords(),
+      ]);
+      const banner = resolveLoadBanner(results);
+      setIsUsingCachedData(banner.showCached);
+      setCachedDataBanner(banner.message);
     } finally {
       setIsRefreshingDashboard(false);
       const elapsed = Date.now() - refreshStart;
@@ -701,6 +800,14 @@ export default function App() {
   };
 
   const loadProfileData = async (authUserId: string, fallbackUser?: Session["user"]) => {
+    const profileCacheKey = CACHE_KEYS.profile(authUserId);
+    const cachedProfile = await readCache<ProfileCachePayload>(profileCacheKey, CACHE_TTL_MS.profile);
+
+    if (cachedProfile && !cachedProfile.isExpired) {
+      setRole(cachedProfile.value.role);
+      setProfileState(cachedProfile.value.profileState);
+    }
+
     const { data } = await supabase.from("profiles").select("*").eq("auth_user_id", authUserId).maybeSingle();
 
     const row = (data ?? {}) as Record<string, unknown>;
@@ -722,18 +829,30 @@ export default function App() {
     const metadataAddress = String(metadata.address_purok ?? "").trim();
     const addressPurok = rowAddress || metadataAddress;
 
-    setRole(roleValue);
-    setProfileState({
+    const nextProfileState: ProfileState = {
       fullName,
       email: email || "-",
       phoneNumber: phoneNumber || "-",
       addressPurok,
       role: roleValue,
       avatarKey,
+    };
+
+    setRole(roleValue);
+    setProfileState(nextProfileState);
+
+    await writeCache(profileCacheKey, {
+      role: roleValue,
+      profileState: nextProfileState,
     });
   };
 
-  const loadSensorSnapshot = async () => {
+  const loadSensorSnapshot = async (): Promise<CacheAwareLoadResult> => {
+    const cached = await readCache<SensorSnapshot>(CACHE_KEYS.sensor, CACHE_TTL_MS.sensor);
+    if (cached && !cached.isExpired) {
+      setSensorSnapshot(cached.value);
+    }
+
     const sources = [
       { table: "sensor_readings", orderBy: "created_at" },
       { table: "sensor_status", orderBy: "created_at" },
@@ -741,81 +860,186 @@ export default function App() {
       { table: "sensor_logs", orderBy: "timestamp" },
     ];
 
-    for (const source of sources) {
-      const { data, error } = await supabase.from(source.table).select("*").order(source.orderBy, { ascending: false }).limit(1);
+    try {
+      for (const source of sources) {
+        const { data, error } = await supabase
+          .from(source.table)
+          .select("*")
+          .order(source.orderBy, { ascending: false })
+          .limit(1);
 
-      if (error || !data || data.length === 0) {
-        continue;
+        if (error || !data || data.length === 0) {
+          continue;
+        }
+
+        const row = data[0] as Record<string, unknown>;
+        const waterLevel = Number(
+          row.water_level ?? row.level ?? row.sensor_level ?? row.reading ?? row.value ?? Number.NaN,
+        );
+
+        const nextSnapshot: SensorSnapshot = {
+          waterLevel: Number.isNaN(waterLevel) ? null : waterLevel,
+          statusText: (row.status ?? row.level_status ?? row.alert_status ?? row.alert_level ?? null) as string | null,
+          updatedAt: (row.created_at ?? row.timestamp ?? row.recorded_at ?? null) as string | null,
+        };
+
+        setSensorSnapshot(nextSnapshot);
+        await writeCache(CACHE_KEYS.sensor, nextSnapshot);
+        return {
+          source: "live",
+          cachedAt: null,
+        };
       }
-
-      const row = data[0] as Record<string, unknown>;
-      const waterLevel = Number(row.water_level ?? row.level ?? row.sensor_level ?? row.reading ?? row.value ?? Number.NaN);
-
-      setSensorSnapshot({
-        waterLevel: Number.isNaN(waterLevel) ? null : waterLevel,
-        statusText: (row.status ?? row.level_status ?? row.alert_status ?? row.alert_level ?? null) as string | null,
-        updatedAt: (row.created_at ?? row.timestamp ?? row.recorded_at ?? null) as string | null,
-      });
-      return;
-    }
-  };
-
-  const loadWeatherSnapshot = async () => {
-    const { data } = await supabase
-      .from("weather_logs")
-      .select("recorded_at, temperature, icon_path, humidity, heat_index, weather_description, intensity, color_coded_warning, signal_no, manual_description")
-      .order("recorded_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!data) {
-      return;
+    } catch {
+      // Fall back to cached data.
     }
 
-    setWeatherSnapshot(mapWeatherRowToSnapshot(data as WeatherRow));
+    if (cached && !cached.isExpired) {
+      return {
+        source: "cache",
+        cachedAt: cached.updatedAt,
+      };
+    }
+
+    return {
+      source: "none",
+      cachedAt: null,
+    };
   };
 
-  const loadAnnouncements = async () => {
+  const loadWeatherSnapshot = async (): Promise<CacheAwareLoadResult> => {
+    const cached = await readCache<WeatherSnapshot>(CACHE_KEYS.weather, CACHE_TTL_MS.weather);
+    if (cached && !cached.isExpired) {
+      setWeatherSnapshot(cached.value);
+    }
+
+    try {
+      const { data } = await supabase
+        .from("weather_logs")
+        .select(
+          "recorded_at, temperature, icon_path, humidity, heat_index, weather_description, intensity, color_coded_warning, signal_no, manual_description",
+        )
+        .order("recorded_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        const nextSnapshot = mapWeatherRowToSnapshot(data as WeatherRow);
+        setWeatherSnapshot(nextSnapshot);
+        await writeCache(CACHE_KEYS.weather, nextSnapshot);
+        return {
+          source: "live",
+          cachedAt: null,
+        };
+      }
+    } catch {
+      // Fall back to cached data.
+    }
+
+    if (cached && !cached.isExpired) {
+      return {
+        source: "cache",
+        cachedAt: cached.updatedAt,
+      };
+    }
+
+    return {
+      source: "none",
+      cachedAt: null,
+    };
+  };
+
+  const loadAnnouncements = async (): Promise<CacheAwareLoadResult> => {
     setIsAnnouncementsLoading(true);
+    const cached = await readCache<AnnouncementItem[]>(CACHE_KEYS.announcements, CACHE_TTL_MS.announcements);
+    if (cached && !cached.isExpired) {
+      setAnnouncements(cached.value);
+    }
 
-    const { data } = await supabase
-      .from("announcements")
-      .select(
-        "id, title, description, alert_level, posted_by_name, created_at, announcement_media(id, file_name, public_url, display_order)",
-      )
-      .order("created_at", { ascending: false })
-      .limit(20);
+    try {
+      const { data } = await supabase
+        .from("announcements")
+        .select(
+          "id, title, description, alert_level, posted_by_name, created_at, announcement_media(id, file_name, public_url, display_order)",
+        )
+        .order("created_at", { ascending: false })
+        .limit(ANNOUNCEMENTS_CACHE_MAX_ITEMS);
 
-    const rows = ((data ?? []) as AnnouncementItem[]).map((entry) => ({
-      ...entry,
-      announcement_media: [...(entry.announcement_media ?? [])].sort((a, b) => a.display_order - b.display_order),
-    }));
+      const rows = ((data ?? []) as AnnouncementItem[]).map((entry) => ({
+        ...entry,
+        announcement_media: [...(entry.announcement_media ?? [])].sort((a, b) => a.display_order - b.display_order),
+      }));
 
-    setAnnouncements(rows);
-    setIsAnnouncementsLoading(false);
+      setAnnouncements(rows);
+      await writeCache(CACHE_KEYS.announcements, rows.slice(0, ANNOUNCEMENTS_CACHE_MAX_ITEMS));
+      return {
+        source: "live",
+        cachedAt: null,
+      };
+    } catch {
+      // Fall back to cached data.
+    } finally {
+      setIsAnnouncementsLoading(false);
+    }
+
+    if (cached && !cached.isExpired) {
+      return {
+        source: "cache",
+        cachedAt: cached.updatedAt,
+      };
+    }
+
+    return {
+      source: "none",
+      cachedAt: null,
+    };
   };
 
-  const loadHistoryRecords = async () => {
+  const loadHistoryRecords = async (): Promise<CacheAwareLoadResult> => {
     setIsHistoryLoading(true);
 
-    const { data, error } = await supabase
-      .from("sensor_readings")
-      .select("id, water_level, status, reading_date, reading_time, created_at")
-      .order("created_at", { ascending: false })
-      .limit(500);
-
-    if (error) {
-      setIsHistoryLoading(false);
-      return;
+    const cached = await readCache<HistoryRecord[]>(CACHE_KEYS.history, CACHE_TTL_MS.history);
+    if (cached && !cached.isExpired) {
+      setHistoryRecords(cached.value);
     }
 
-    const normalized = (data ?? [])
-      .map((row) => mapHistoryRowToRecord(row as Record<string, unknown>))
-      .filter((row): row is HistoryRecord => row !== null)
-      .sort((left, right) => getHistorySourceTimestamp(right) - getHistorySourceTimestamp(left));
+    try {
+      const { data, error } = await supabase
+        .from("sensor_readings")
+        .select("id, water_level, status, reading_date, reading_time, created_at")
+        .order("created_at", { ascending: false })
+        .limit(500);
 
-    setHistoryRecords(normalized);
-    setIsHistoryLoading(false);
+      if (!error) {
+        const normalized = (data ?? [])
+          .map((row) => mapHistoryRowToRecord(row as Record<string, unknown>))
+          .filter((row): row is HistoryRecord => row !== null)
+          .sort((left, right) => getHistorySourceTimestamp(right) - getHistorySourceTimestamp(left));
+
+        setHistoryRecords(normalized);
+        await writeCache(CACHE_KEYS.history, trimHistoryForCache(normalized));
+        return {
+          source: "live",
+          cachedAt: null,
+        };
+      }
+    } catch {
+      // Fall back to cached data.
+    } finally {
+      setIsHistoryLoading(false);
+    }
+
+    if (cached && !cached.isExpired) {
+      return {
+        source: "cache",
+        cachedAt: cached.updatedAt,
+      };
+    }
+
+    return {
+      source: "none",
+      cachedAt: null,
+    };
   };
 
   const openCommentsForAnnouncement = (entry: AnnouncementItem) => {
@@ -830,7 +1054,10 @@ export default function App() {
 
   const loadDashboard = async () => {
     setIsDashboardLoading(true);
-    await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadAnnouncements(), loadHistoryRecords()]);
+    const results = await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadAnnouncements(), loadHistoryRecords()]);
+    const banner = resolveLoadBanner(results);
+    setIsUsingCachedData(banner.showCached);
+    setCachedDataBanner(banner.message);
     setIsDashboardLoading(false);
   };
 
@@ -838,6 +1065,13 @@ export default function App() {
     let isMounted = true;
 
     const boot = async () => {
+      await clearExpiredCaches([
+        { key: CACHE_KEYS.sensor, maxAgeMs: CACHE_TTL_MS.sensor },
+        { key: CACHE_KEYS.weather, maxAgeMs: CACHE_TTL_MS.weather },
+        { key: CACHE_KEYS.announcements, maxAgeMs: CACHE_TTL_MS.announcements },
+        { key: CACHE_KEYS.history, maxAgeMs: CACHE_TTL_MS.history },
+      ]);
+
       const {
         data: { session: initialSession },
       } = await supabase.auth.getSession();
@@ -927,7 +1161,9 @@ export default function App() {
           const row = (payload.new ?? null) as WeatherRow | null;
 
           if (row && Object.keys(row).length > 0) {
-            setWeatherSnapshot(mapWeatherRowToSnapshot(row));
+            const nextSnapshot = mapWeatherRowToSnapshot(row);
+            setWeatherSnapshot(nextSnapshot);
+            void writeCache(CACHE_KEYS.weather, nextSnapshot);
             return;
           }
 
@@ -1030,7 +1266,12 @@ export default function App() {
 
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        void Promise.all([loadWeatherSnapshot(), loadAnnouncements(), loadHistoryRecords()]);
+        void (async () => {
+          const results = await Promise.all([loadWeatherSnapshot(), loadAnnouncements(), loadHistoryRecords()]);
+          const banner = resolveLoadBanner(results);
+          setIsUsingCachedData(banner.showCached);
+          setCachedDataBanner(banner.message);
+        })();
       }
     });
 
@@ -1720,6 +1961,12 @@ export default function App() {
         <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
         <View style={styles.dashboardWrapper}>
           <LoadingToast visible={isRefreshToastVisible} message={refreshToastMessage} topOffset={66} />
+          {isUsingCachedData && cachedDataBanner ? (
+            <View style={styles.cachedBanner}>
+              <Ionicons name="cloud-offline-outline" size={14} color="#b45309" />
+              <Text style={styles.cachedBannerText}>{cachedDataBanner}</Text>
+            </View>
+          ) : null}
           <ScrollView
             contentContainerStyle={styles.dashboardContainer}
             alwaysBounceVertical
@@ -1995,6 +2242,27 @@ const styles = StyleSheet.create({
   },
   dashboardWrapper: {
     flex: 1,
+  },
+  cachedBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: -4,
+    borderWidth: 1,
+    borderColor: "#fcd34d",
+    backgroundColor: "#fffbeb",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  cachedBannerText: {
+    flex: 1,
+    color: "#92400e",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
   },
   dashboardContainer: {
     paddingHorizontal: 16,
