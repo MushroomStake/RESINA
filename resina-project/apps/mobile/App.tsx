@@ -19,7 +19,7 @@ import {
   View,
 } from "react-native";
 import type { Session } from "@supabase/supabase-js";
-import { supabase } from "./lib/supabase";
+import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import { BottomNav, type DashboardTab } from "./components/bottom-nav";
 import { AnnouncementCard } from "./components/announcement-card";
 import { LoadingToast } from "./components/loading-toast";
@@ -612,6 +612,12 @@ export default function App() {
         clearTimeout(refreshToastTimerRef.current);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setErrorMessage("App config is incomplete. Please rebuild with EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.");
+    }
   }, []);
 
   const clearAlerts = () => {
