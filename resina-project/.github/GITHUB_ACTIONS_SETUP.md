@@ -18,7 +18,7 @@ Click **"New repository secret"** and add:
 |-------------|-------|
 | `SUPABASE_URL` | `https://your-project.supabase.co` |
 | `SUPABASE_SERVICE_KEY` | Your service role key from Supabase Settings > API |
-| `STORMGLASS_API_KEY` | `edf68678-2e4b-11f1-a882-0242ac120004-edf686e6-2e4b-11f1-a882-0242ac120004` |
+| `STORMGLASS_API_KEY` | `your-stormglass-api-key` |
 
 ### Step 3: Verify Workflow
 Go to **Actions** tab → Click **Daily Tide Fetch**

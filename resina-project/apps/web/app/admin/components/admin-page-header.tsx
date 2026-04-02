@@ -29,8 +29,12 @@ const HEADER_CONTENT: Record<AdminSidebarPage, { eyebrow: string; title: string 
 
 export function AdminPageHeader({ activePage }: AdminPageHeaderProps) {
   const [phNow, setPhNow] = useState(() => new Date());
+  const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
+    setIsHydrated(true);
+    setPhNow(new Date());
+
     const timer = setInterval(() => {
       setPhNow(new Date());
     }, 30000);
@@ -38,24 +42,28 @@ export function AdminPageHeader({ activePage }: AdminPageHeaderProps) {
     return () => clearInterval(timer);
   }, []);
 
-  const phTime = phNow
-    .toLocaleTimeString("en-PH", {
-      timeZone: "Asia/Manila",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    })
-    .replace(" ", "")
-    .toUpperCase();
+  const phTime = isHydrated
+    ? phNow
+        .toLocaleTimeString("en-PH", {
+          timeZone: "Asia/Manila",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        })
+        .replace(" ", "")
+        .toUpperCase()
+    : "--:--";
 
-  const phDate = phNow
-    .toLocaleDateString("en-PH", {
-      timeZone: "Asia/Manila",
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-    })
-    .toUpperCase();
+  const phDate = isHydrated
+    ? phNow
+        .toLocaleDateString("en-PH", {
+          timeZone: "Asia/Manila",
+          month: "short",
+          day: "2-digit",
+          year: "numeric",
+        })
+        .toUpperCase()
+    : "--- --, ----";
 
   const content = HEADER_CONTENT[activePage];
 

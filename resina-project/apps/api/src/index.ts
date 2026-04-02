@@ -8,6 +8,25 @@ import express, { Request, Response } from "express";
 import { getTidePredictionFromDB, supabase } from "./services/tide.service.js";
 import { estimateTideHeight, getTideStatus, generateHourlyTideEstimates, InterpolationMethod } from "./services/tide-interpolation.js";
 
+function getManilaDate(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    throw new Error("Failed to resolve Manila date");
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -24,7 +43,7 @@ app.get("/health", (req: Request, res: Response) => {
  */
 app.get("/api/tide/current", async (req: Request, res: Response) => {
   try {
-    const today = new Date().toISOString().split("T")[0];
+    const today = getManilaDate();
     const tideData = await getTidePredictionFromDB(today);
 
     if (!tideData) {
@@ -58,7 +77,7 @@ app.get("/api/tide/current", async (req: Request, res: Response) => {
  */
 app.get("/api/tide/hourly", async (req: Request, res: Response) => {
   try {
-    const date = (req.query.date as string) || new Date().toISOString().split("T")[0];
+    const date = (req.query.date as string) || getManilaDate();
     const method = (req.query.method as InterpolationMethod) || "rule-of-twelfths";
 
     // Try to fetch pre-computed hourly data from tide_hourly table
@@ -120,7 +139,7 @@ app.get("/api/tide/estimate", async (req: Request, res: Response) => {
       queryTime = new Date(req.query.time as string);
     } else {
       // Use date and hour parameters
-      const date = (req.query.date as string) || new Date().toISOString().split("T")[0];
+      const date = (req.query.date as string) || getManilaDate();
       const hour = parseInt(req.query.hour as string) || new Date().getUTCHours();
       queryTime = new Date(`${date}T${String(hour).padStart(2, "0")}:00:00Z`);
     }
@@ -160,7 +179,7 @@ app.get("/api/tide/estimate", async (req: Request, res: Response) => {
  */
 app.get("/api/tide/extremes", async (req: Request, res: Response) => {
   try {
-    const date = (req.query.date as string) || new Date().toISOString().split("T")[0];
+    const date = (req.query.date as string) || getManilaDate();
     const tideData = await getTidePredictionFromDB(date);
 
     if (!tideData) {

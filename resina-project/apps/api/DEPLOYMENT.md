@@ -19,7 +19,7 @@ Select project, set environment variables, and deploy.
 ```
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_KEY=eyJhbGc...
-STORMGLASS_API_KEY=edf68678-2e4b-11f1-a882-0242ac120004-...
+STORMGLASS_API_KEY=your-stormglass-api-key
 PORT=3001
 NODE_ENV=production
 ```

@@ -1,3 +1,4 @@
+import "./global.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -10,7 +11,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,6 +18,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { Session } from "@supabase/supabase-js";
 import { clearExpiredCaches, readCache, writeCache } from "./lib/cache";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
@@ -28,7 +29,7 @@ import { StatusToast } from "./components/status-toast";
 import { AnnouncementCommentsModal } from "./components/announcement-comments-modal";
 import { SensorStatusCard } from "./components/sensor-status-card";
 import { WeatherUpdateCard } from "./components/weather-update-card";
-import { TideCard } from "./components/tide-card";
+import { TideCard } from "./components/tide-monitor-card";
 import { MobileSectionHeader } from "./components/mobile-section-header";
 
 type AuthMode = "login" | "register";
@@ -189,6 +190,7 @@ const CACHE_KEYS = {
   history: "resina:cache:history-records",
   tide: "resina:cache:tide-status",
   tideHourly: "resina:cache:tide-hourly",
+  tideExtremes: "resina:cache:tide-extremes",
   profile: (userId: string) => `resina:cache:profile:${userId}`,
 };
 
@@ -199,6 +201,7 @@ const CACHE_TTL_MS = {
   history: 60 * 60 * 1000,
   tide: 60 * 60 * 1000, // Update hourly
   tideHourly: 60 * 60 * 1000,
+  tideExtremes: 60 * 60 * 1000,
   profile: 24 * 60 * 60 * 1000,
 };
 
@@ -631,6 +634,35 @@ function normalizeResidentStatus(value: unknown): ResidentStatus {
   return String(value).toLowerCase() === "non_resident" ? "non_resident" : "resident";
 }
 
+function getManilaHourNow(): number {
+  const raw = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Manila",
+    hour: "2-digit",
+    hour12: false,
+  }).format(new Date());
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isNaN(parsed) ? 0 : parsed % 24;
+}
+
+function getManilaDate(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return new Date().toISOString().split("T")[0];
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
 function buildTideStatus(tideData: TideExtreme[], hourlyData: TideHourly[]): TideStatus | null {
   if (!tideData.length) {
     return null;
@@ -638,7 +670,8 @@ function buildTideStatus(tideData: TideExtreme[], hourlyData: TideHourly[]): Tid
 
   const sortedExtremes = [...tideData].sort((left, right) => new Date(left.time).getTime() - new Date(right.time).getTime());
   const now = new Date();
-  const currentHour = now.getUTCHours();
+  const currentHourManila = getManilaHourNow();
+  const currentHour = (currentHourManila - 8 + 24) % 24;
   const currentHourEntry = hourlyData.find((entry) => entry.hour === currentHour) ?? null;
   const previousHourEntry =
     hourlyData.find((entry) => entry.hour === (currentHour + 23) % 24) ??
@@ -707,6 +740,7 @@ export default function App() {
 
   const [tideStatus, setTideStatus] = useState<TideStatus | null>(null);
   const [tideHourly, setTideHourly] = useState<TideHourly[]>([]);
+  const [tideExtremes, setTideExtremes] = useState<TideExtreme[]>([]);
   const [isTideLoading, setIsTideLoading] = useState(false);
   const [tideError, setTideError] = useState<string | null>(null);
 
@@ -1127,13 +1161,17 @@ export default function App() {
   const loadTideStatus = async (): Promise<CacheAwareLoadResult> => {
     setIsTideLoading(true);
     const cached = await readCache<TideStatus>(CACHE_KEYS.tide, CACHE_TTL_MS.tide);
+    const cachedExtremes = await readCache<TideExtreme[]>(CACHE_KEYS.tideExtremes, CACHE_TTL_MS.tideExtremes);
     if (cached && !cached.isExpired) {
       setTideStatus(cached.value);
       setTideError(null);
     }
+    if (cachedExtremes && !cachedExtremes.isExpired) {
+      setTideExtremes(cachedExtremes.value);
+    }
 
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = getManilaDate();
       const { data: predictionRow, error: predictionError } = await supabase
         .from("tide_predictions")
         .select("prediction_date, tide_data")
@@ -1152,7 +1190,9 @@ export default function App() {
 
       const prediction = predictionRow as TidePredictionRow;
       const predictionDate = prediction.prediction_date;
-      const tideData = Array.isArray(prediction.tide_data) ? prediction.tide_data : [];
+      const tideData = Array.isArray(prediction.tide_data)
+        ? [...prediction.tide_data].sort((left, right) => new Date(left.time).getTime() - new Date(right.time).getTime())
+        : [];
 
       const { data: hourlyRows, error: hourlyError } = await supabase
         .from("tide_hourly")
@@ -1177,9 +1217,11 @@ export default function App() {
 
       setTideStatus(tideStatus);
       setTideHourly(hourlyTides);
+      setTideExtremes(tideData);
       setTideError(null);
       await writeCache(CACHE_KEYS.tide, tideStatus);
       await writeCache(CACHE_KEYS.tideHourly, hourlyTides);
+      await writeCache(CACHE_KEYS.tideExtremes, tideData);
       setIsTideLoading(false);
       return {
         source: "live",
@@ -1206,7 +1248,7 @@ export default function App() {
 
   const loadTideHourly = async (): Promise<void> => {
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = getManilaDate();
       const cached = await readCache<TideHourly[]>(CACHE_KEYS.tideHourly, CACHE_TTL_MS.tideHourly);
       if (cached && !cached.isExpired) {
         setTideHourly(cached.value);
@@ -1901,6 +1943,7 @@ export default function App() {
           alertBadge={alertConfig.badge}
           alertDescription={alertConfig.description}
           backgroundColor={alertConfig.cardColor}
+          waterLevel={sensorSnapshot.waterLevel}
         />
 
         <WeatherUpdateCard
@@ -1920,6 +1963,7 @@ export default function App() {
         <TideCard
           tideStatus={tideStatus}
           hourlyTides={tideHourly}
+          tideExtremes={tideExtremes}
           isLoading={isTideLoading}
           error={tideError}
         />
@@ -2292,121 +2336,128 @@ export default function App() {
 
   if (isBootstrapping) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
-        <View style={styles.centeredLoader}>
-          <Text style={styles.loaderText}>Loading...</Text>
-        </View>
-      </SafeAreaView>
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.safe}>
+          <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
+          <View style={styles.centeredLoader}>
+            <Text style={styles.loaderText}>Loading...</Text>
+          </View>
+        </SafeAreaView>
+      </SafeAreaProvider>
     );
   }
 
   if (isConfirmingAccount) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
-        <View style={styles.centeredLoader}>
-          <Text style={styles.confirmTitle}>Confirming your account...</Text>
-          <Text style={styles.confirmSubtitle}>Please wait while we sign you in.</Text>
-        </View>
-      </SafeAreaView>
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.safe}>
+          <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
+          <View style={styles.centeredLoader}>
+            <Text style={styles.confirmTitle}>Confirming your account...</Text>
+            <Text style={styles.confirmSubtitle}>Please wait while we sign you in.</Text>
+          </View>
+        </SafeAreaView>
+      </SafeAreaProvider>
     );
   }
 
   if (session) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
-        <View style={styles.dashboardWrapper}>
-          <LoadingToast visible={isRefreshToastVisible} message={refreshToastMessage} topOffset={66} />
-          <StatusToast
-            visible={Boolean(statusModalMessage)}
-            message={statusModalMessage}
-            variant={statusVariant}
-            topOffset={66}
-            onClose={clearAlerts}
-          />
-          {isUsingCachedData && cachedDataBanner ? (
-            <View style={styles.cachedBanner}>
-              <Ionicons name="cloud-offline-outline" size={14} color="#b45309" />
-              <Text style={styles.cachedBannerText}>{cachedDataBanner}</Text>
-            </View>
-          ) : null}
-          <ScrollView
-            contentContainerStyle={styles.dashboardContainer}
-            alwaysBounceVertical
-            onScrollEndDrag={(event) => {
-              if (activeTab === "profile") return;
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.safe}>
+          <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
+          <View style={styles.dashboardWrapper}>
+            <LoadingToast visible={isRefreshToastVisible} message={refreshToastMessage} topOffset={66} />
+            <StatusToast
+              visible={Boolean(statusModalMessage)}
+              message={statusModalMessage}
+              variant={statusVariant}
+              topOffset={66}
+              onClose={clearAlerts}
+            />
+            {isUsingCachedData && cachedDataBanner ? (
+              <View style={styles.cachedBanner}>
+                <Ionicons name="cloud-offline-outline" size={14} color="#b45309" />
+                <Text style={styles.cachedBannerText}>{cachedDataBanner}</Text>
+              </View>
+            ) : null}
+            <ScrollView
+              contentContainerStyle={styles.dashboardContainer}
+              alwaysBounceVertical
+              onScrollEndDrag={(event) => {
+                if (activeTab === "profile") return;
 
-              const y = event.nativeEvent.contentOffset.y;
-              const now = Date.now();
-              const cooldownMs = 5000;
+                const y = event.nativeEvent.contentOffset.y;
+                const now = Date.now();
+                const cooldownMs = 5000;
 
-              if (y <= 0 && now - lastScrollRefreshAtRef.current >= cooldownMs) {
-                lastScrollRefreshAtRef.current = now;
-                const label = activeTab === "news" ? "Refreshing News..." : "Refreshing Home...";
-                void runManualRefresh(label);
+                if (y <= 0 && now - lastScrollRefreshAtRef.current >= cooldownMs) {
+                  lastScrollRefreshAtRef.current = now;
+                  const label = activeTab === "news" ? "Refreshing News..." : "Refreshing Home...";
+                  void runManualRefresh(label);
+                }
+              }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshingDashboard}
+                  onRefresh={() => void runManualRefresh("Refreshing dashboard...")}
+                  tintColor="#2f8d41"
+                  colors={["#2f8d41"]}
+                />
               }
-            }}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshingDashboard}
-                onRefresh={() => void runManualRefresh("Refreshing dashboard...")}
-                tintColor="#2f8d41"
-                colors={["#2f8d41"]}
-              />
-            }
-          >
-            {isDashboardLoading ? <Text style={styles.loaderText}>Refreshing live data...</Text> : renderDashboardBody()}
-          </ScrollView>
-          <BottomNav
-            activeTab={activeTab}
-            onChange={setActiveTab}
-            onReselect={(tab) => {
-              if (tab === "home") {
-                void runManualRefresh("Refreshing Home...");
-                return;
-              }
+            >
+              {isDashboardLoading ? <Text style={styles.loaderText}>Refreshing live data...</Text> : renderDashboardBody()}
+            </ScrollView>
+            <BottomNav
+              activeTab={activeTab}
+              onChange={setActiveTab}
+              onReselect={(tab) => {
+                if (tab === "home") {
+                  void runManualRefresh("Refreshing Home...");
+                  return;
+                }
 
-              if (tab === "news") {
-                void runManualRefresh("Refreshing News...");
-                return;
-              }
+                if (tab === "news") {
+                  void runManualRefresh("Refreshing News...");
+                  return;
+                }
 
-              if (tab === "history") {
-                void runManualRefresh("Refreshing History...");
-              }
-            }}
-          />
+                if (tab === "history") {
+                  void runManualRefresh("Refreshing History...");
+                }
+              }}
+            />
 
-          <AnnouncementCommentsModal
-            visible={isCommentsModalOpen}
-            announcement={selectedAnnouncementForComments}
-            currentCommenterName={currentCommenterName}
-            currentUserAvatarSource={selectedAvatar.source}
-            sessionUserId={session.user.id}
-            onRequestClose={closeCommentsModal}
-            onError={setErrorMessage}
-          />
-        </View>
-      </SafeAreaView>
+            <AnnouncementCommentsModal
+              visible={isCommentsModalOpen}
+              announcement={selectedAnnouncementForComments}
+              currentCommenterName={currentCommenterName}
+              currentUserAvatarSource={selectedAvatar.source}
+              sessionUserId={session.user.id}
+              onRequestClose={closeCommentsModal}
+              onError={setErrorMessage}
+            />
+          </View>
+        </SafeAreaView>
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
-      <StatusToast
-        visible={Boolean(statusModalMessage)}
-        message={statusModalMessage}
-        variant={statusVariant}
-        topOffset={56}
-        onClose={clearAlerts}
-      />
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-          <View style={styles.container}>
-            <Image source={require("./assets/images/Sta Rita.png")} style={styles.logo} resizeMode="contain" />
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
+        <StatusToast
+          visible={Boolean(statusModalMessage)}
+          message={statusModalMessage}
+          variant={statusVariant}
+          topOffset={56}
+          onClose={clearAlerts}
+        />
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
+          <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+            <View style={styles.container}>
+              <Image source={require("./assets/images/Sta Rita.png")} style={styles.logo} resizeMode="contain" />
 
             <Text style={styles.brandTitle}>RESINA</Text>
             <Text style={styles.brandSubtitle}>Citizen Access Portal</Text>
@@ -2637,10 +2688,11 @@ export default function App() {
               </View>
             )}
 
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

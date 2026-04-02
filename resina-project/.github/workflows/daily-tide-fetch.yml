@@ -2,8 +2,8 @@ name: Daily Tide Fetch
 
 on:
   schedule:
-    # Run at 12:01 AM UTC every day
-    - cron: '1 0 * * *'
+    # Run at 12:05 AM Asia/Manila (UTC+8) every day
+    - cron: '5 16 * * *'
   
   # Allow manual trigger from Actions tab
   workflow_dispatch:

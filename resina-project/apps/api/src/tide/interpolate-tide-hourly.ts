@@ -9,8 +9,27 @@ import "dotenv/config";
 import { getTidePredictionFromDB, saveTidePredictionToDB, supabase } from "../services/tide.service.js";
 import { generateHourlyTideEstimates } from "../services/tide-interpolation.js";
 
+function getManilaDate(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    throw new Error("Failed to resolve Manila date");
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
 async function main() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getManilaDate();
 
   console.log(`\n🌊 RESINA Tide Interpolation Script`);
   console.log(`📅 Date: ${today}`);

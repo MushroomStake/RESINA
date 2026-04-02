@@ -6,6 +6,7 @@ import { createClient } from "../../../lib/supabase/client";
 import { ActivityLogSection } from "./components/activity-log-section";
 import { CurrentSensorStatus } from "./components/current-sensor-status";
 import { WeatherUpdateSection } from "./components/weather-update-section";
+import { TideMonitorSection } from "./components/tide-monitor-section";
 import StatusFeedbackModal from "../components/status-feedback-modal";
 
 type AlertLevelKey = "normal" | "critical" | "evacuation" | "spilling";
@@ -33,6 +34,29 @@ type WeatherState = {
   broadcastTime: string | null;
   recordedAt: string | null;
   iconPath: string;
+};
+
+type TideExtreme = {
+  type: "high" | "low";
+  height: number;
+  time: string;
+};
+
+type TideHourlyPoint = {
+  hour: number;
+  estimatedHeight: number;
+  confidence: "high" | "medium" | "low";
+};
+
+type TidePredictionRow = {
+  prediction_date: string;
+  tide_data: TideExtreme[] | null;
+};
+
+type TideHourlyRow = {
+  hour_of_day: number;
+  estimated_height: number;
+  confidence: "high" | "medium" | "low" | null;
 };
 
 const WARNING_OPTIONS = ["No Warning", "Yellow Warning", "Orange Warning", "Red Warning"] as const;
@@ -432,6 +456,15 @@ export default function AdminDashboardPage() {
   const [statusVisible, setStatusVisible] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [statusVariant, setStatusVariant] = useState<"success" | "error" | "info">("info");
+  const [isTideLoading, setIsTideLoading] = useState(true);
+  const [tideError, setTideError] = useState<string | null>(null);
+  const [tidePredictionDate, setTidePredictionDate] = useState<string | null>(null);
+  const [tideHourly, setTideHourly] = useState<TideHourlyPoint[]>([]);
+  const [tideExtremes, setTideExtremes] = useState<TideExtreme[]>([]);
+  const [lastTideExtreme, setLastTideExtreme] = useState<TideExtreme | null>(null);
+  const [nextTideExtreme, setNextTideExtreme] = useState<TideExtreme | null>(null);
+  const [currentTideHeight, setCurrentTideHeight] = useState<number | null>(null);
+  const [tideTrend, setTideTrend] = useState<"rising" | "falling" | null>(null);
 
   const [weatherState, setWeatherState] = useState<WeatherState>({
     id: null,
@@ -542,6 +575,100 @@ export default function AdminDashboardPage() {
     setWeatherDraft(loadedState);
 
     return true;
+  };
+
+  const loadTideFromSupabase = async (silent = false): Promise<void> => {
+    if (!silent) {
+      setIsTideLoading(true);
+    }
+
+    const supabase = createClient();
+
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const { data: predictionData, error: predictionError } = await supabase
+        .from("tide_predictions")
+        .select("prediction_date, tide_data")
+        .lte("prediction_date", today)
+        .order("prediction_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (predictionError) {
+        throw new Error(predictionError.message);
+      }
+
+      if (!predictionData) {
+        setTidePredictionDate(null);
+        setTideHourly([]);
+        setTideExtremes([]);
+        setLastTideExtreme(null);
+        setNextTideExtreme(null);
+        setCurrentTideHeight(null);
+        setTideTrend(null);
+        setTideError("No tide prediction records found yet.");
+        return;
+      }
+
+      const prediction = predictionData as TidePredictionRow;
+      const tideData = Array.isArray(prediction.tide_data)
+        ? prediction.tide_data
+            .filter((entry) => entry && typeof entry.time === "string" && typeof entry.height === "number")
+            .sort((left, right) => new Date(left.time).getTime() - new Date(right.time).getTime())
+        : [];
+
+      const { data: hourlyRows, error: hourlyError } = await supabase
+        .from("tide_hourly")
+        .select("hour_of_day, estimated_height, confidence")
+        .eq("prediction_date", prediction.prediction_date)
+        .order("hour_of_day", { ascending: true });
+
+      if (hourlyError) {
+        throw new Error(hourlyError.message);
+      }
+
+      const hourly = ((hourlyRows ?? []) as TideHourlyRow[]).map((row) => ({
+        hour: row.hour_of_day,
+        estimatedHeight: Number(row.estimated_height),
+        confidence: row.confidence ?? "medium",
+      }));
+
+      const nowMs = Date.now();
+      const lastExtreme = [...tideData].reverse().find((entry) => new Date(entry.time).getTime() <= nowMs) ?? tideData[tideData.length - 1] ?? null;
+      const nextExtreme = tideData.find((entry) => new Date(entry.time).getTime() > nowMs) ?? tideData[0] ?? null;
+      const manilaNowRaw = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Manila",
+        hour: "2-digit",
+        hour12: false,
+      }).format(new Date());
+      const currentHourManila = Number.parseInt(manilaNowRaw, 10);
+      const currentHourUtc = (currentHourManila - 8 + 24) % 24;
+      const currentHourPoint = hourly.find((entry) => entry.hour === currentHourUtc) ?? null;
+      const prevHour = (currentHourUtc + 23) % 24;
+      const prevHourPoint = hourly.find((entry) => entry.hour === prevHour) ?? null;
+
+      setTidePredictionDate(prediction.prediction_date);
+      setTideHourly(hourly);
+      setTideExtremes(tideData);
+      setLastTideExtreme(lastExtreme);
+      setNextTideExtreme(nextExtreme);
+      setCurrentTideHeight(currentHourPoint?.estimatedHeight ?? null);
+      setTideTrend(
+        currentHourPoint && prevHourPoint
+          ? currentHourPoint.estimatedHeight >= prevHourPoint.estimatedHeight
+            ? "rising"
+            : "falling"
+          : null,
+      );
+      setTideError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load tide monitor data.";
+      setTideError(message);
+    } finally {
+      if (!silent) {
+        setIsTideLoading(false);
+      }
+    }
   };
 
   const persistWeatherRecord = async (nextState: WeatherState) => {
@@ -853,6 +980,32 @@ export default function AdminDashboardPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const initialize = async () => {
+      if (!mounted) return;
+      await loadTideFromSupabase();
+      if (!mounted) return;
+
+      intervalId = setInterval(() => {
+        if (mounted) {
+          void loadTideFromSupabase(true);
+        }
+      }, 5 * 60 * 1000);
+    };
+
+    void initialize();
+
+    return () => {
+      mounted = false;
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+      }
+    };
+  }, []);
+
   if (isChecking) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-[#f3f5f5]">
@@ -967,6 +1120,18 @@ export default function AdminDashboardPage() {
             onManualDescriptionChange={(value) =>
               setWeatherDraft((current) => ({ ...current, manualDescription: value }))
             }
+          />
+
+          <TideMonitorSection
+            isLoading={isTideLoading}
+            error={tideError}
+            predictionDate={tidePredictionDate}
+            currentHeight={currentTideHeight}
+            trend={tideTrend}
+            extremes={tideExtremes}
+            lastExtreme={lastTideExtreme}
+            nextExtreme={nextTideExtreme}
+            hourly={tideHourly}
           />
 
           <ActivityLogSection />

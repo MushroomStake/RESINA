@@ -270,13 +270,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     overflow: "hidden",
-    shadowColor: "#111827",
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
+    boxShadow: "0px 3px 8px rgba(17, 24, 39, 0.12)",
     elevation: 3,
   },
   successIconWrap: {

@@ -53,6 +53,7 @@ Execute the tide schema script in Supabase SQL Editor:
 ```
 
 This creates:
+
 - `tide_predictions` table: stores daily tide extremes (high/low)
 - `tide_hourly` table: stores hourly interpolated estimates
 - RLS policies for secure read/write
@@ -67,6 +68,7 @@ WHERE table_schema = 'public' AND table_name LIKE 'tide%';
 ```
 
 Should return:
+
 - `tide_predictions`
 - `tide_hourly`
 
@@ -91,7 +93,7 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_KEY=eyJhbGc...  (copy from Settings > API Keys > Service Role)
 
 # StormGlass
-STORMGLASS_API_KEY=edf68678-2e4b-11f1-a882-0242ac120004-edf686e6-2e4b-11f1-a882-0242ac120004
+STORMGLASS_API_KEY=your-stormglass-api-key
 
 # Server
 PORT=3001
@@ -105,6 +107,7 @@ npm run dev
 ```
 
 Expected output:
+
 ```
 🌊 RESINA API Server running on http://localhost:3001
 📋 Endpoints:
@@ -127,6 +130,7 @@ npm run tide:fetch
 ```
 
 Expected output:
+
 ```
 📊 RESINA Tide Fetch Script
 📅 Prediction Date: 2026-04-02
@@ -147,6 +151,7 @@ npm run tide:interpolate
 ```
 
 Expected output:
+
 ```
 🌊 RESINA Tide Interpolation Script
 📅 Date: 2026-04-02
@@ -177,6 +182,7 @@ EXPO_PUBLIC_API_URL=http://localhost:3001
 ```
 
 **For production:** set to your deployed API domain:
+
 ```env
 EXPO_PUBLIC_API_URL=https://resina-api.example.com
 ```
@@ -190,6 +196,7 @@ npm start
 ```
 
 The TideCard will appear on the dashboard below the WeatherUpdateCard showing:
+
 - Current tide level
 - Rising/Falling trend
 - Next high/low tide countdown
@@ -202,11 +209,13 @@ The TideCard will appear on the dashboard below the WeatherUpdateCard showing:
 ### Option A: Cron Job (Linux/Mac)
 
 Edit crontab:
+
 ```bash
 crontab -e
 ```
 
 Add to run at 12:01 AM UTC daily:
+
 ```bash
 1 0 * * * cd /path/to/resina-project/apps/api && npm run tide:fetch && npm run tide:interpolate
 ```
@@ -218,6 +227,7 @@ Create a scheduled function to call the fetch endpoint daily at midnight UTC.
 ### Option C: Vercel Cron (if deployed)
 
 Add to `vercel.json`:
+
 ```json
 {
   "crons": [{
@@ -238,6 +248,7 @@ GET /api/tide/current
 ```
 
 **Response:**
+
 ```json
 {
   "date": "2026-04-02",
@@ -267,6 +278,7 @@ GET /api/tide/hourly?date=2026-04-02&method=rule-of-twelfths
 ```
 
 **Response:**
+
 ```json
 {
   "date": "2026-04-02",
@@ -288,6 +300,7 @@ GET /api/tide/estimate?date=2026-04-02&hour=14
 ```
 
 **Response:**
+
 ```json
 {
   "queryTime": "2026-04-02T14:00:00Z",
@@ -311,24 +324,27 @@ GET /api/tide/extremes?date=2026-04-02
 ### Rule of Twelfths (Default)
 
 Divides each 6-hour tidal cycle into 12ths following the pattern:
+
 ```
 1/12, 2/12, 3/12, 3/12, 2/12, 1/12
 ```
 
-**Pros:** Simple, efficient, accurate for ±2 hours from extremes  
+**Pros:** Simple, efficient, accurate for ±2 hours from extremes
 **Cons:** Less smooth curve
 
 ### Sine Wave (Alternative)
 
 Uses sinusoidal curve for smooth height variation:
+
 ```
 height = midpoint + amplitude × sin(π × position)
 ```
 
-**Pros:** Smooth, continuous curve  
+**Pros:** Smooth, continuous curve
 **Cons:** Slightly less accurate near extremes
 
 Switch method with:
+
 ```
 GET /api/tide/estimate?...&method=sine-wave
 ```
@@ -340,6 +356,7 @@ GET /api/tide/estimate?...&method=sine-wave
 ### Check Cache Hit Rate
 
 Query Supabase:
+
 ```sql
 SELECT 
   DATE(fetched_at) as date,
@@ -363,6 +380,7 @@ ORDER BY hour_of_day ASC;
 ### Clear Old Data
 
 Keep only last 90 days:
+
 ```sql
 DELETE FROM tide_predictions
 WHERE prediction_date < CURRENT_DATE - INTERVAL '90 days';
@@ -382,18 +400,20 @@ WHERE prediction_date < CURRENT_DATE - INTERVAL '90 days';
 ### API Returns 404
 
 **Check:**
+
 1. API server is running: `curl http://localhost:3001/health`
 2. `EXPO_PUBLIC_API_URL` env var is set correctly
 3. Supabase tables exist and have data
 
 ### "No tide data available"
 
-**Cause:** Fetch script hasn't run yet or DB is empty.  
+**Cause:** Fetch script hasn't run yet or DB is empty.
 **Solution:** Run `npm run tide:fetch` manually
 
 ### Hourly estimates seem incorrect
 
 **Possible causes:**
+
 - Extremes are missing or out of order
 - Timezone mismatch (UTC assumed)
 - Interpolation window boundary
@@ -404,14 +424,14 @@ WHERE prediction_date < CURRENT_DATE - INTERVAL '90 days';
 
 ## Performance Notes
 
-| Metric | Value |
-|--------|-------|
-| API Credit Usage | 1/day (caching enabled) |
-| Cache TTL | 1 hour (hourly, adjustable) |
-| Interpolation Time | <1ms per estimate |
-| Mobile UI Refresh | 5 min (with cache) |
-| DB Query Time | < 50ms |
-| Network Latency Addition | ~100-200ms |
+| Metric                   | Value                       |
+| ------------------------ | --------------------------- |
+| API Credit Usage         | 1/day (caching enabled)     |
+| Cache TTL                | 1 hour (hourly, adjustable) |
+| Interpolation Time       | <1ms per estimate           |
+| Mobile UI Refresh        | 5 min (with cache)          |
+| DB Query Time            | < 50ms                      |
+| Network Latency Addition | ~100-200ms                  |
 
 ---
 

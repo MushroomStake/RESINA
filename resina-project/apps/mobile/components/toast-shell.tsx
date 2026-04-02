@@ -48,13 +48,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    shadowColor: "#111827",
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    boxShadow: "0px 2px 8px rgba(17, 24, 39, 0.08)",
     elevation: 2,
   },
 });

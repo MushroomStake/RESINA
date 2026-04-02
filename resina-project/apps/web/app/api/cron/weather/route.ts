@@ -5,6 +5,7 @@ import { createAdminClient } from "../../../../lib/supabase/admin";
 
 type WetSeverity = "none" | "light" | "moderate" | "heavy" | "torrential";
 type HeatSeverity = "normal" | "caution" | "extreme-caution" | "danger" | "extreme-danger";
+type ColorWarning = "No Warning" | "Yellow Warning" | "Orange Warning" | "Red Warning";
 
 const SUNRISE_SUNSET_WINDOW_MS = 30 * 60 * 1000;
 const DRY_NORMAL_ICON_PATH = "/weather/dry-season/sun Normal.png";
@@ -95,6 +96,33 @@ function resolveIntensityLabel(wet: WetSeverity, heat: HeatSeverity): string {
   if (heat === "extreme-caution") return "Extreme Caution";
   if (heat === "caution") return "Caution";
   return "Normal";
+}
+
+function warningRank(warning: ColorWarning): number {
+  if (warning === "Yellow Warning") return 1;
+  if (warning === "Orange Warning") return 2;
+  if (warning === "Red Warning") return 3;
+  return 0;
+}
+
+function resolveRainWarning(wet: WetSeverity): ColorWarning {
+  if (wet === "torrential") return "Red Warning";
+  if (wet === "heavy") return "Orange Warning";
+  if (wet === "moderate" || wet === "light") return "Yellow Warning";
+  return "No Warning";
+}
+
+function resolveHeatWarning(heat: HeatSeverity): ColorWarning {
+  if (heat === "extreme-danger") return "Red Warning";
+  if (heat === "danger") return "Orange Warning";
+  if (heat === "extreme-caution") return "Yellow Warning";
+  return "No Warning";
+}
+
+function resolveColorCodedWarning(wet: WetSeverity, heat: HeatSeverity): ColorWarning {
+  const rain = resolveRainWarning(wet);
+  const thermal = resolveHeatWarning(heat);
+  return warningRank(thermal) > warningRank(rain) ? thermal : rain;
 }
 
 function resolveDrySeasonNightIcon(main: string, description: string): string {
@@ -224,6 +252,7 @@ export async function GET(request: NextRequest) {
   const heatIndex = computeHeatIndexC(temperature, humidity);
   const heatSeverity = resolveHeatSeverity(heatIndex);
   const intensity = resolveIntensityLabel(wetSeverity, heatSeverity);
+  const colorCodedWarning = resolveColorCodedWarning(wetSeverity, heatSeverity);
   const iconPath = wetSeverity === "none"
     ? resolveDrySeasonPhaseIcon(
         weatherMain,
@@ -245,7 +274,7 @@ export async function GET(request: NextRequest) {
     weather_main: weatherMain,
     weather_description: weatherDescription,
     intensity,
-    color_coded_warning: "No Warning",
+    color_coded_warning: colorCodedWarning,
     signal_no: "No Signal",
     manual_description: manualDescription,
     icon_path: iconPath,
@@ -260,5 +289,12 @@ export async function GET(request: NextRequest) {
   cutoff.setDate(cutoff.getDate() - 60);
   await adminSupabase.from("weather_logs").delete().lt("recorded_at", cutoff.toISOString());
 
-  return NextResponse.json({ ok: true, intensity, temperature, humidity, heatIndex: Math.round(heatIndex) });
+  return NextResponse.json({
+    ok: true,
+    intensity,
+    temperature,
+    humidity,
+    heatIndex: Math.round(heatIndex),
+    colorCodedWarning,
+  });
 }
