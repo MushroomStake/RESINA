@@ -1,0 +1,53 @@
+name: Daily Tide Fetch
+
+on:
+  schedule:
+    # Run at 12:01 AM UTC every day
+    - cron: '1 0 * * *'
+  
+  # Allow manual trigger from Actions tab
+  workflow_dispatch:
+
+jobs:
+  fetch-tide:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'apps/api/package-lock.json'
+      
+      - name: Install dependencies
+        working-directory: apps/api
+        run: npm ci
+      
+      - name: Fetch tide data from StormGlass
+        working-directory: apps/api
+        run: npm run tide:fetch
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          STORMGLASS_API_KEY: ${{ secrets.STORMGLASS_API_KEY }}
+      
+      - name: Generate hourly tide interpolations
+        working-directory: apps/api
+        run: npm run tide:interpolate
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      
+      - name: Notify on success
+        if: success()
+        run: echo "✅ Tide data updated successfully for $(date -u +'%Y-%m-%d')"
+      
+      - name: Notify on failure  
+        if: failure()
+        run: |
+          echo "❌ Tide fetch failed"
+          exit 1

@@ -28,6 +28,7 @@ import { StatusToast } from "./components/status-toast";
 import { AnnouncementCommentsModal } from "./components/announcement-comments-modal";
 import { SensorStatusCard } from "./components/sensor-status-card";
 import { WeatherUpdateCard } from "./components/weather-update-card";
+import { TideCard } from "./components/tide-card";
 import { MobileSectionHeader } from "./components/mobile-section-header";
 
 type AuthMode = "login" | "register";
@@ -126,6 +127,39 @@ type AnnouncementItem = {
 
 type ProfileAvatarKey = "boy" | "man" | "user" | "woman" | "woman2";
 
+type TideStatus = {
+  currentHeight: number | null;
+  nextExtreme: {
+    type: "high" | "low";
+    height: number;
+    time: string;
+  };
+  state: "rising" | "falling";
+};
+
+type TideHourly = {
+  hour: number;
+  estimatedHeight: number;
+  confidence: "high" | "medium" | "low";
+};
+
+type TideExtreme = {
+  type: "high" | "low";
+  height: number;
+  time: string;
+};
+
+type TidePredictionRow = {
+  prediction_date: string;
+  tide_data: TideExtreme[] | null;
+};
+
+type TideHourlyRow = {
+  hour_of_day: number;
+  estimated_height: number;
+  confidence: "high" | "medium" | "low" | null;
+};
+
 type ProfileState = {
   fullName: string;
   email: string;
@@ -153,6 +187,8 @@ const CACHE_KEYS = {
   weather: "resina:cache:weather-snapshot",
   announcements: "resina:cache:announcements",
   history: "resina:cache:history-records",
+  tide: "resina:cache:tide-status",
+  tideHourly: "resina:cache:tide-hourly",
   profile: (userId: string) => `resina:cache:profile:${userId}`,
 };
 
@@ -161,6 +197,8 @@ const CACHE_TTL_MS = {
   weather: 5 * 60 * 1000,
   announcements: 30 * 60 * 1000,
   history: 60 * 60 * 1000,
+  tide: 60 * 60 * 1000, // Update hourly
+  tideHourly: 60 * 60 * 1000,
   profile: 24 * 60 * 60 * 1000,
 };
 
@@ -593,6 +631,38 @@ function normalizeResidentStatus(value: unknown): ResidentStatus {
   return String(value).toLowerCase() === "non_resident" ? "non_resident" : "resident";
 }
 
+function buildTideStatus(tideData: TideExtreme[], hourlyData: TideHourly[]): TideStatus | null {
+  if (!tideData.length) {
+    return null;
+  }
+
+  const sortedExtremes = [...tideData].sort((left, right) => new Date(left.time).getTime() - new Date(right.time).getTime());
+  const now = new Date();
+  const currentHour = now.getUTCHours();
+  const currentHourEntry = hourlyData.find((entry) => entry.hour === currentHour) ?? null;
+  const previousHourEntry =
+    hourlyData.find((entry) => entry.hour === (currentHour + 23) % 24) ??
+    hourlyData.find((entry) => entry.hour < currentHour) ??
+    null;
+  const currentHeight = currentHourEntry?.estimatedHeight ?? null;
+
+  const nextExtreme = sortedExtremes.find((entry) => new Date(entry.time).getTime() > now.getTime()) ?? sortedExtremes[0];
+  const state =
+    currentHeight !== null && previousHourEntry?.estimatedHeight !== undefined
+      ? currentHeight >= previousHourEntry.estimatedHeight
+        ? "rising"
+        : "falling"
+      : nextExtreme.type === "low"
+        ? "falling"
+        : "rising";
+
+  return {
+    currentHeight,
+    nextExtreme,
+    state,
+  };
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<string>("user");
@@ -634,6 +704,12 @@ export default function App() {
     colorCodedWarning: "No Warning",
     signalNo: "No Signal",
   });
+
+  const [tideStatus, setTideStatus] = useState<TideStatus | null>(null);
+  const [tideHourly, setTideHourly] = useState<TideHourly[]>([]);
+  const [isTideLoading, setIsTideLoading] = useState(false);
+  const [tideError, setTideError] = useState<string | null>(null);
+
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [announcementFilter, setAnnouncementFilter] = useState<AnnouncementFilterKey>("all");
   const [isAnnouncementsLoading, setIsAnnouncementsLoading] = useState(false);
@@ -1048,6 +1124,129 @@ export default function App() {
     };
   };
 
+  const loadTideStatus = async (): Promise<CacheAwareLoadResult> => {
+    setIsTideLoading(true);
+    const cached = await readCache<TideStatus>(CACHE_KEYS.tide, CACHE_TTL_MS.tide);
+    if (cached && !cached.isExpired) {
+      setTideStatus(cached.value);
+      setTideError(null);
+    }
+
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const { data: predictionRow, error: predictionError } = await supabase
+        .from("tide_predictions")
+        .select("prediction_date, tide_data")
+        .lte("prediction_date", today)
+        .order("prediction_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (predictionError) {
+        throw predictionError;
+      }
+
+      if (!predictionRow) {
+        throw new Error("No tide predictions found in the database yet.");
+      }
+
+      const prediction = predictionRow as TidePredictionRow;
+      const predictionDate = prediction.prediction_date;
+      const tideData = Array.isArray(prediction.tide_data) ? prediction.tide_data : [];
+
+      const { data: hourlyRows, error: hourlyError } = await supabase
+        .from("tide_hourly")
+        .select("hour_of_day, estimated_height, confidence")
+        .eq("prediction_date", predictionDate)
+        .order("hour_of_day", { ascending: true });
+
+      if (hourlyError) {
+        throw hourlyError;
+      }
+
+      const hourlyTides = ((hourlyRows ?? []) as TideHourlyRow[]).map((row) => ({
+        hour: row.hour_of_day,
+        estimatedHeight: Number(row.estimated_height),
+        confidence: row.confidence ?? "medium",
+      }));
+
+      const tideStatus = buildTideStatus(tideData, hourlyTides);
+      if (!tideStatus) {
+        throw new Error("Tide data exists but could not be parsed.");
+      }
+
+      setTideStatus(tideStatus);
+      setTideHourly(hourlyTides);
+      setTideError(null);
+      await writeCache(CACHE_KEYS.tide, tideStatus);
+      await writeCache(CACHE_KEYS.tideHourly, hourlyTides);
+      setIsTideLoading(false);
+      return {
+        source: "live",
+        cachedAt: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load tide data from database";
+      setTideError(message);
+      setIsTideLoading(false);
+
+      if (cached && !cached.isExpired) {
+        return {
+          source: "cache",
+          cachedAt: cached.updatedAt,
+        };
+      }
+
+      return {
+        source: "none",
+        cachedAt: null,
+      };
+    }
+  };
+
+  const loadTideHourly = async (): Promise<void> => {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const cached = await readCache<TideHourly[]>(CACHE_KEYS.tideHourly, CACHE_TTL_MS.tideHourly);
+      if (cached && !cached.isExpired) {
+        setTideHourly(cached.value);
+      }
+
+      const { data: predictionRow, error: predictionError } = await supabase
+        .from("tide_predictions")
+        .select("prediction_date")
+        .lte("prediction_date", today)
+        .order("prediction_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (predictionError || !predictionRow) {
+        return;
+      }
+
+      const { data: hourlyRows, error: hourlyError } = await supabase
+        .from("tide_hourly")
+        .select("hour_of_day, estimated_height, confidence")
+        .eq("prediction_date", predictionRow.prediction_date)
+        .order("hour_of_day", { ascending: true });
+
+      if (hourlyError) {
+        return;
+      }
+
+      const hourly = ((hourlyRows ?? []) as TideHourlyRow[]).map((row) => ({
+        hour: row.hour_of_day,
+        estimatedHeight: Number(row.estimated_height),
+        confidence: row.confidence ?? "medium",
+      }));
+
+      setTideHourly(hourly);
+      await writeCache(CACHE_KEYS.tideHourly, hourly);
+    } catch {
+      // Silently fail for hourly; it's optional
+    }
+  };
+
   const loadAnnouncements = async (): Promise<CacheAwareLoadResult> => {
     setIsAnnouncementsLoading(true);
     const cached = await readCache<AnnouncementItem[]>(CACHE_KEYS.announcements, CACHE_TTL_MS.announcements);
@@ -1153,7 +1352,7 @@ export default function App() {
 
   const loadDashboard = async () => {
     setIsDashboardLoading(true);
-    const results = await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadAnnouncements(), loadHistoryRecords()]);
+    const results = await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadTideStatus(), loadAnnouncements(), loadHistoryRecords()]);
     const banner = resolveLoadBanner(results);
     setIsUsingCachedData(banner.showCached);
     setCachedDataBanner(banner.message);
@@ -1716,6 +1915,13 @@ export default function App() {
           backgroundColor={weatherCardBackground}
           colorCodedWarning={weatherSnapshot.colorCodedWarning}
           signalNo={weatherSnapshot.signalNo}
+        />
+
+        <TideCard
+          tideStatus={tideStatus}
+          hourlyTides={tideHourly}
+          isLoading={isTideLoading}
+          error={tideError}
         />
 
         <Text style={styles.quickActionsTitle}>Quick Actions</Text>

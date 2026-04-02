@@ -26,7 +26,24 @@ export const supabase = createClient(
 
 AppState.addEventListener("change", (nextState) => {
   if (nextState === "active") {
-    supabase.auth.startAutoRefresh();
+    // Only start the auto-refresh loop when we actually have a stored session
+    // containing a refresh token. In some environments the stored session may
+    // be absent or expired and starting auto-refresh can cause an
+    // unhandled/auth API error (Invalid Refresh Token).
+    (async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.refresh_token) {
+          supabase.auth.startAutoRefresh();
+        }
+      } catch {
+        // ignore and avoid starting auto-refresh
+      }
+    })();
+
     return;
   }
 
