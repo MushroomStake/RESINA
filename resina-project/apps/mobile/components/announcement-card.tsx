@@ -44,10 +44,12 @@ export const AnnouncementCard = memo(function AnnouncementCard({
   const { width } = useWindowDimensions();
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [galleryViewportWidth, setGalleryViewportWidth] = useState(0);
 
   const hasImages = (entry.announcement_media ?? []).length > 0;
   const imageCount = (entry.announcement_media ?? []).length;
-  const galleryImageWidth = Math.max(220, Math.min(width - 96, 320));
+  const fallbackWidth = Math.max(220, width - 80);
+  const slideWidth = Math.max(220, galleryViewportWidth || fallbackWidth);
 
   const handleImagePress = (index: number) => {
     setSelectedImageIndex(index);
@@ -70,11 +72,19 @@ export const AnnouncementCard = memo(function AnnouncementCard({
         <Text style={styles.newsDescription}>{entry.description}</Text>
 
         {hasImages ? (
-          <View style={styles.imageGalleryContainer}>
+          <View
+            style={styles.imageGalleryContainer}
+            onLayout={(event) => {
+              const nextWidth = Math.floor(event.nativeEvent.layout.width);
+              if (nextWidth > 0 && nextWidth !== galleryViewportWidth) {
+                setGalleryViewportWidth(nextWidth);
+              }
+            }}
+          >
             {imageCount === 1 ? (
               <Pressable
                 onPress={() => handleImagePress(0)}
-                style={[styles.singleImageWrapper, { width: galleryImageWidth }]}
+                style={styles.singleImageWrapper}
               >
                 <Image source={{ uri: entry.announcement_media[0]?.public_url }} style={styles.newsImage} resizeMode="cover" />
               </Pressable>
@@ -83,7 +93,8 @@ export const AnnouncementCard = memo(function AnnouncementCard({
                 horizontal
                 pagingEnabled
                 decelerationRate="fast"
-                snapToInterval={galleryImageWidth + 10}
+                snapToInterval={slideWidth}
+                snapToAlignment="start"
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
                 contentContainerStyle={styles.imageGalleryContent}
@@ -92,7 +103,7 @@ export const AnnouncementCard = memo(function AnnouncementCard({
                 <Pressable
                   key={media.id}
                   onPress={() => handleImagePress(index)}
-                  style={[styles.imageWrapper, { width: galleryImageWidth }, index === imageCount - 1 && styles.imageWrapperLast]}
+                  style={[styles.imageWrapper, { width: slideWidth }]}
                 >
                   <Image source={{ uri: media.public_url }} style={styles.newsImage} resizeMode="cover" />
                   {imageCount > 1 ? (
@@ -179,24 +190,22 @@ const styles = StyleSheet.create({
   imageGalleryContainer: {
     marginTop: 12,
     marginBottom: 0,
-    alignItems: "center",
+    width: "100%",
+    overflow: "hidden",
   },
   imageGalleryContent: {
-    paddingHorizontal: 2,
+    paddingHorizontal: 0,
   },
   singleImageWrapper: {
     position: "relative",
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
   },
   imageWrapper: {
     position: "relative",
-    marginRight: 8,
     alignItems: "center",
     justifyContent: "center",
-  },
-  imageWrapperLast: {
-    marginRight: 0,
   },
   newsImage: {
     width: "100%",

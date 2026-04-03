@@ -204,6 +204,25 @@ function formatWeatherDateForCard(date: Date): string {
     .toUpperCase();
 }
 
+function getManilaDate(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return new Date().toISOString().split("T")[0];
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
 function inferWetSeverity(main: string, description: string): WetSeverity {
   const lowerMain = main.toLowerCase();
   const lowerDescription = description.toLowerCase();
@@ -585,7 +604,7 @@ export default function AdminDashboardPage() {
     const supabase = createClient();
 
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = getManilaDate();
       const { data: predictionData, error: predictionError } = await supabase
         .from("tide_predictions")
         .select("prediction_date, tide_data")
@@ -613,7 +632,12 @@ export default function AdminDashboardPage() {
       const prediction = predictionData as TidePredictionRow;
       const tideData = Array.isArray(prediction.tide_data)
         ? prediction.tide_data
-            .filter((entry) => entry && typeof entry.time === "string" && typeof entry.height === "number")
+            .map((entry) => ({
+              type: entry?.type === "high" ? "high" : "low",
+              time: typeof entry?.time === "string" ? entry.time : "",
+              height: Number(entry?.height),
+            }))
+            .filter((entry) => entry.time && Number.isFinite(entry.height))
             .sort((left, right) => new Date(left.time).getTime() - new Date(right.time).getTime())
         : [];
 
@@ -642,9 +666,8 @@ export default function AdminDashboardPage() {
         hour12: false,
       }).format(new Date());
       const currentHourManila = Number.parseInt(manilaNowRaw, 10);
-      const currentHourUtc = (currentHourManila - 8 + 24) % 24;
-      const currentHourPoint = hourly.find((entry) => entry.hour === currentHourUtc) ?? null;
-      const prevHour = (currentHourUtc + 23) % 24;
+      const currentHourPoint = hourly.find((entry) => entry.hour === currentHourManila) ?? null;
+      const prevHour = (currentHourManila + 23) % 24;
       const prevHourPoint = hourly.find((entry) => entry.hour === prevHour) ?? null;
 
       setTidePredictionDate(prediction.prediction_date);

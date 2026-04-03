@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  fetch-tide:
+  refresh-tide-window:
     runs-on: ubuntu-latest
     
     steps:
@@ -27,20 +27,18 @@ jobs:
         working-directory: apps/api
         run: npm ci
       
-      - name: Fetch tide data from StormGlass
+      - name: Refresh tide data window (yesterday + today)
         working-directory: apps/api
-        run: npm run tide:fetch
+        run: |
+          npm run tide:refresh-window || (
+            echo "First attempt failed, retrying in 20s..." &&
+            sleep 20 &&
+            npm run tide:refresh-window
+          )
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           STORMGLASS_API_KEY: ${{ secrets.STORMGLASS_API_KEY }}
-      
-      - name: Generate hourly tide interpolations
-        working-directory: apps/api
-        run: npm run tide:interpolate
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       
       - name: Notify on success
         if: success()

@@ -173,6 +173,8 @@ export function SensorStatusCard({
 
   return (
     <View style={[styles.sensorCard, { backgroundColor }]}>
+      <View style={styles.cardBackdropA} />
+      <View style={styles.cardBackdropB} />
       <View style={styles.sensorMetaRow}>
         <Text style={styles.sensorChip}>{stationLabel}</Text>
         <Text style={styles.sensorUpdated}>UPDATED • {normalizeUpdatedLabel(updatedLabel)}</Text>
@@ -239,8 +241,36 @@ export function SensorStatusCard({
 
 const styles = StyleSheet.create({
   sensorCard: {
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.28)",
+    overflow: "hidden",
+    position: "relative",
+    minHeight: 214,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  cardBackdropA: {
+    position: "absolute",
+    top: -34,
+    right: -18,
+    width: 120,
+    height: 120,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  cardBackdropB: {
+    position: "absolute",
+    left: -26,
+    bottom: -28,
+    width: 130,
+    height: 130,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.07)",
   },
   sensorMetaRow: {
     flexDirection: "row",
@@ -267,16 +297,17 @@ const styles = StyleSheet.create({
   visualRow: {
     flexDirection: "row",
     gap: 10,
-    minHeight: 248,
+    minHeight: 208,
+    marginTop: 2,
   },
   meterWrap: {
-    width: 108,
-    borderRadius: 14,
+    width: 114,
+    borderRadius: 18,
     backgroundColor: "#ffffff12",
     borderWidth: 1,
     borderColor: "#ffffff2f",
-    paddingVertical: 12,
-    paddingHorizontal: 9,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
     position: "relative",
     justifyContent: "space-between",
     overflow: "hidden",
@@ -369,7 +400,7 @@ const styles = StyleSheet.create({
   },
   tankWrap: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "#ffffff32",
@@ -409,14 +440,14 @@ const styles = StyleSheet.create({
   },
   blurOverlay: {
     marginHorizontal: 12,
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: "#ffffff78",
     backgroundColor: "rgba(16,34,62,0.54)",
-    paddingHorizontal: 15,
-    paddingVertical: 13,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     alignItems: "center",
-    minWidth: 176,
+    minWidth: 182,
     overflow: "hidden",
   },
   glassBase: {
@@ -500,15 +531,15 @@ const styles = StyleSheet.create({
   },
   bigMeterText: {
     color: "#ffffff",
-    fontSize: 40,
+    fontSize: 42,
     fontWeight: "900",
-    lineHeight: 46,
+    lineHeight: 48,
     letterSpacing: 0.2,
   },
   levelTitle: {
     marginTop: 2,
     color: "#ffffff",
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
   },
   alertBadge: {
@@ -534,13 +565,13 @@ const styles = StyleSheet.create({
     opacity: 0.95,
   },
   sensorDescriptionWrap: {
-    marginTop: 12,
-    borderRadius: 10,
+    marginTop: 10,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#ffffff66",
     backgroundColor: "#ffffff1f",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   sensorDescriptionLabel: {
     color: "#f6fff7",
@@ -551,7 +582,7 @@ const styles = StyleSheet.create({
   sensorDescriptionText: {
     color: "#ffffff",
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 17,
     marginTop: 4,
     fontWeight: "500",
   },

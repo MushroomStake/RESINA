@@ -171,9 +171,21 @@ export function generateHourlyTideEstimates(
 ): Array<{ hour: number; estimatedHeight: number; confidence: "high" | "medium" | "low" }> {
   const estimates: Array<{ hour: number; estimatedHeight: number; confidence: "high" | "medium" | "low" }> = [];
 
+  const [yearRaw, monthRaw, dayRaw] = predictionDate.split("-");
+  const year = Number.parseInt(yearRaw ?? "", 10);
+  const month = Number.parseInt(monthRaw ?? "", 10);
+  const day = Number.parseInt(dayRaw ?? "", 10);
+
+  if ([year, month, day].some((value) => Number.isNaN(value))) {
+    return estimates;
+  }
+
+  const manilaOffsetHours = 8;
+
   for (let hour = 0; hour < 24; hour++) {
-    // Construct UTC time for this hour
-    const queryTime = new Date(`${predictionDate}T${String(hour).padStart(2, "0")}:00:00Z`);
+    // Construct query time for Manila local hour and convert to UTC instant.
+    const queryTimeUtcMs = Date.UTC(year, month - 1, day, hour, 0, 0) - manilaOffsetHours * 60 * 60 * 1000;
+    const queryTime = new Date(queryTimeUtcMs);
     const height = estimateTideHeight(tideData, queryTime, method);
 
     if (height !== null) {

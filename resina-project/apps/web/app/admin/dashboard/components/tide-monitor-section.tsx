@@ -37,8 +37,53 @@ function getManilaHourNow(): number {
   return Number.isNaN(parsed) ? 0 : parsed % 24;
 }
 
-function toManilaHour(utcHour: number): number {
-  return (utcHour + 8) % 24;
+function toManilaHourFraction(value: string): number | null {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Manila",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(parsed);
+
+  const hourRaw = parts.find((part) => part.type === "hour")?.value;
+  const minuteRaw = parts.find((part) => part.type === "minute")?.value;
+  const hour = Number.parseInt(hourRaw ?? "", 10);
+  const minute = Number.parseInt(minuteRaw ?? "", 10);
+
+  if (Number.isNaN(hour) || Number.isNaN(minute)) {
+    return null;
+  }
+
+  return hour + minute / 60;
+}
+
+function toManilaDateISO(value: string): string | null {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(parsed);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  return `${year}-${month}-${day}`;
 }
 
 function formatHour24(hour: number): string {
@@ -61,6 +106,15 @@ function formatDateTimeLabel(value: string): string {
   });
 }
 
+function formatTodayManila(): string {
+  return new Date().toLocaleDateString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
 function formatDurationUntil(value: string): string {
   const target = new Date(value).getTime();
   if (Number.isNaN(target)) {
@@ -79,6 +133,35 @@ function formatDurationUntil(value: string): string {
   return `${hours}h ${minutes}m`;
 }
 
+function buildSmoothPath(points: Array<{ x: number; y: number }>): string {
+  if (!points.length) {
+    return "";
+  }
+
+  if (points.length === 1) {
+    return `M${points[0].x},${points[0].y}`;
+  }
+
+  let d = `M${points[0].x},${points[0].y}`;
+  const tension = 0.12;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+
+    const cp1x = p1.x + (p2.x - p0.x) * tension;
+    const cp1y = p1.y + (p2.y - p0.y) * tension;
+    const cp2x = p2.x - (p3.x - p1.x) * tension;
+    const cp2y = p2.y - (p3.y - p1.y) * tension;
+
+    d += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+  }
+
+  return d;
+}
+
 export function TideMonitorSection({
   isLoading,
   error,
@@ -91,6 +174,8 @@ export function TideMonitorSection({
   hourly,
 }: TideMonitorSectionProps) {
   const manilaNowHour = getManilaHourNow();
+  const currentDateLabel = formatTodayManila();
+  const chartWidthClass = "w-[920px] sm:w-[1120px] xl:w-[1260px]";
 
   const tideStats = useMemo(() => {
     if (!hourly.length) {
@@ -131,6 +216,7 @@ export function TideMonitorSection({
         linePath: "",
         fillPath: "",
         points: [] as Array<{ x: number; y: number; hour: number; value: number; confidence: "high" | "medium" | "low" }>,
+        eventAnchors: [] as Array<{ x: number; y: number; type: "high" | "low"; time: string }>,
         yTicks: [] as Array<{ value: number; y: number }>,
         currentX: 0,
         lowestPoint: null as null | { x: number; y: number; hour: number; value: number },
@@ -149,7 +235,7 @@ export function TideMonitorSection({
 
     const byManilaHour = new Map<number, TideHourlyPoint>();
     for (const entry of hourly) {
-      byManilaHour.set(toManilaHour(entry.hour), entry);
+      byManilaHour.set(entry.hour, entry);
     }
 
     const orderedHours = Array.from({ length: 24 }, (_, hour) => hour);
@@ -162,8 +248,57 @@ export function TideMonitorSection({
       return { x, y, hour, value: entry.estimatedHeight, confidence: entry.confidence };
     });
 
-    const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
-    const fillPath = `${linePath} L ${points[points.length - 1].x},${height - bottomPad} L ${points[0].x},${height - bottomPad} Z`;
+    const eventAnchors = extremes
+      .filter((entry) => {
+        if (!predictionDate) {
+          return false;
+        }
+        return toManilaDateISO(entry.time) === predictionDate;
+      })
+      .map((entry) => {
+        const hourFraction = toManilaHourFraction(entry.time);
+        if (hourFraction === null) {
+          return null;
+        }
+
+        const x = leftPad + (Math.max(0, Math.min(23, hourFraction)) / 23) * usableW;
+        const normalized = (entry.height - tideStats.lowest) / range;
+        const y = topPad + (1 - normalized) * usableH;
+
+        return {
+          x,
+          y,
+          type: entry.type,
+          time: entry.time,
+        };
+      })
+      .filter((entry): entry is { x: number; y: number; type: "high" | "low"; time: string } => entry !== null)
+      .sort((a, b) => a.x - b.x);
+
+    const combinedCurvePoints = [...points.map((point) => ({ x: point.x, y: point.y, anchor: false as const })), ...eventAnchors.map((anchor) => ({ x: anchor.x, y: anchor.y, anchor: true as const }))]
+      .sort((a, b) => a.x - b.x)
+      .reduce<Array<{ x: number; y: number; anchor: boolean }>>((acc, point) => {
+        if (!acc.length) {
+          acc.push(point);
+          return acc;
+        }
+
+        const last = acc[acc.length - 1];
+        if (Math.abs(last.x - point.x) < 0.35) {
+          if (point.anchor) {
+            acc[acc.length - 1] = point;
+          }
+          return acc;
+        }
+
+        acc.push(point);
+        return acc;
+      }, []);
+
+    const linePath = buildSmoothPath(combinedCurvePoints);
+    const fillPath = combinedCurvePoints.length
+      ? `${linePath} L ${combinedCurvePoints[combinedCurvePoints.length - 1].x},${height - bottomPad} L ${combinedCurvePoints[0].x},${height - bottomPad} Z`
+      : "";
 
     const yTicks = Array.from({ length: 5 }, (_, index) => {
       const value = tideStats.lowest + ((4 - index) / 4) * range;
@@ -176,8 +311,8 @@ export function TideMonitorSection({
     const lowestPoint = points.reduce((lowest, point) => (point.value < lowest.value ? point : lowest), points[0]);
     const highestPoint = points.reduce((highest, point) => (point.value > highest.value ? point : highest), points[0]);
 
-    return { linePath, fillPath, points, yTicks, currentX, lowestPoint, highestPoint };
-  }, [hourly, manilaNowHour, tideStats]);
+    return { linePath, fillPath, points, eventAnchors, yTicks, currentX, lowestPoint, highestPoint };
+  }, [extremes, hourly, manilaNowHour, predictionDate, tideStats]);
 
   const nextHigh = useMemo(() => {
     const now = Date.now();
@@ -192,6 +327,37 @@ export function TideMonitorSection({
       .filter((entry) => entry.type === "low" && new Date(entry.time).getTime() >= now)
       .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())[0] ?? null;
   }, [extremes]);
+
+  const nextHighPoint = useMemo(() => {
+    if (!nextHigh) {
+      return null;
+    }
+    return chart.eventAnchors.find((entry) => entry.type === "high" && entry.time === nextHigh.time) ?? null;
+  }, [chart.eventAnchors, nextHigh]);
+
+  const nextLowPoint = useMemo(() => {
+    if (!nextLow) {
+      return null;
+    }
+    return chart.eventAnchors.find((entry) => entry.type === "low" && entry.time === nextLow.time) ?? null;
+  }, [chart.eventAnchors, nextLow]);
+
+  const lowMarker = nextLowPoint ?? chart.lowestPoint;
+  const highMarker = nextHighPoint ?? chart.highestPoint;
+  const lowLabelY = lowMarker ? (lowMarker.y > 246 ? lowMarker.y - 12 : lowMarker.y + 20) : 0;
+  const highLabelY = highMarker ? (highMarker.y < 42 ? highMarker.y + 20 : highMarker.y - 12) : 0;
+
+  const nextHighLabel = nextHigh
+    ? formatDateTimeLabel(nextHigh.time).split(", ")[1]
+    : chart.highestPoint
+      ? `${formatHour24(chart.highestPoint.hour)}:00`
+      : "N/A";
+
+  const nextLowLabel = nextLow
+    ? formatDateTimeLabel(nextLow.time).split(", ")[1]
+    : chart.lowestPoint
+      ? `${formatHour24(chart.lowestPoint.hour)}:00`
+      : "N/A";
 
   const currentTideLabel = tideStats?.currentValue === null || tideStats?.currentValue === undefined ? "-" : `${tideStats.currentValue.toFixed(2)}m`;
 
@@ -225,12 +391,12 @@ export function TideMonitorSection({
                 <p className="mt-1 text-sm font-semibold text-[#2d5fa3]">{tideStats.trendLabel}</p>
               </div>
               <div className="rounded-2xl bg-[#f6f9ff] p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748b]">Last Tide Today</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748b]">Last Tide</p>
                 <p className="mt-2 text-base font-bold text-[#1f3b61]">{tideStats.lastSummary}</p>
                 <p className="mt-1 text-xs text-[#5f7898]">{tideStats.lastTime}</p>
               </div>
               <div className="rounded-2xl bg-[#f6f9ff] p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748b]">Next Tide Today</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748b]">Next Tide</p>
                 <p className="mt-2 text-base font-bold text-[#1f3b61]">{tideStats.nextSummary}</p>
                 <p className="mt-1 text-xs text-[#5f7898]">{tideStats.nextTime}</p>
               </div>
@@ -241,7 +407,7 @@ export function TideMonitorSection({
                 <Image src="/Tides/high-tide.png" alt="High tide" width={74} height={74} className="h-[74px] w-[74px] object-contain" />
                 <div className="text-right">
                   <p className="text-[30px] leading-none text-[#1f3657]">Next high tide is at</p>
-                  <p className="mt-2 text-[44px] font-black leading-none text-[#1e63a8]">{nextHigh ? formatDateTimeLabel(nextHigh.time).split(", ")[1] : "N/A"}</p>
+                  <p className="mt-2 text-[44px] font-black leading-none text-[#1e63a8]">{nextHighLabel}</p>
                 </div>
               </div>
 
@@ -249,7 +415,7 @@ export function TideMonitorSection({
                 <Image src="/Tides/low-tide.png" alt="Low tide" width={74} height={74} className="h-[74px] w-[74px] object-contain" />
                 <div className="text-right">
                   <p className="text-[30px] leading-none text-[#1f3657]">Next low tide is at</p>
-                  <p className="mt-2 text-[44px] font-black leading-none text-[#1e63a8]">{nextLow ? formatDateTimeLabel(nextLow.time).split(", ")[1] : "N/A"}</p>
+                  <p className="mt-2 text-[44px] font-black leading-none text-[#1e63a8]">{nextLowLabel}</p>
                 </div>
               </div>
             </div>
@@ -258,7 +424,7 @@ export function TideMonitorSection({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-bold uppercase tracking-wide text-[#4b5563]">Hourly Tide Flow</p>
-                  <p className="mt-1 text-xs text-[#748299]">One-day view in Manila time with hourly tide levels.</p>
+                  <p className="mt-1 text-xs text-[#748299]">One-day view in Olongapo (PHT, UTC+8) with hourly tide levels.</p>
                 </div>
 
                 <div className="flex flex-wrap gap-2 text-[11px] text-[#60748f]">
@@ -269,9 +435,9 @@ export function TideMonitorSection({
               </div>
 
               <div className="mt-4 min-w-0 rounded-[22px] border border-[#dbeafe] bg-gradient-to-b from-[#eef6ff] to-[#f9fcff] p-4">
-                <div className="overflow-x-auto pb-2">
-                  <div className="w-[1260px]">
-                    <svg viewBox="0 0 1260 320" className="h-[320px] w-[1260px] rounded-[18px] bg-[#eef6ff]">
+                <div className="scrollbar-hide overflow-x-auto pb-2">
+                  <div className={chartWidthClass}>
+                    <svg viewBox="0 0 1260 320" className={`h-[320px] ${chartWidthClass} rounded-[18px] bg-[#eef6ff]`}>
                       <defs>
                         <linearGradient id="tideAreaGradient" x1="0" x2="0" y1="0" y2="1">
                           <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.35" />
@@ -290,28 +456,28 @@ export function TideMonitorSection({
                         </g>
                       ))}
 
+                      <g>
+                        <rect x="1088" y="10" rx="999" ry="999" width="154" height="24" fill="rgba(255,255,255,0.95)" stroke="#d8e4f8" />
+                        <text x="1165" y="26" textAnchor="middle" fontSize="11" fill="#27518f" fontWeight="700">
+                          {currentDateLabel}
+                        </text>
+                      </g>
+
                       <path d={chart.fillPath} fill="url(#tideAreaGradient)" />
                       <path d={chart.linePath} fill="none" stroke="url(#tideLineGradient)" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
 
                       <line x1={chart.currentX} y1="20" x2={chart.currentX} y2="268" stroke="#ef4444" strokeWidth="1.4" />
 
-                      {chart.points.map((point) => (
-                        <circle
-                          key={`point-${point.hour}`}
-                          cx={point.x}
-                          cy={point.y}
-                          r="4"
-                          fill="#1d4ed8"
-                          opacity={point.confidence === "high" ? 1 : point.confidence === "medium" ? 0.82 : 0.62}
-                        />
-                      ))}
-
-                      {chart.lowestPoint ? <circle cx={chart.lowestPoint.x} cy={chart.lowestPoint.y} r="6" fill="#ef4444" /> : null}
-                      {chart.highestPoint ? <circle cx={chart.highestPoint.x} cy={chart.highestPoint.y} r="6" fill="#1d4ed8" /> : null}
-                      {chart.lowestPoint ? (
+                      {lowMarker ? (
+                        <circle cx={lowMarker.x} cy={lowMarker.y} r="6" fill="#ef4444" />
+                      ) : null}
+                      {highMarker ? (
+                        <circle cx={highMarker.x} cy={highMarker.y} r="6" fill="#1d4ed8" />
+                      ) : null}
+                      {lowMarker ? (
                         <text
-                          x={Math.max(66, Math.min(1168, chart.lowestPoint.x - 40))}
-                          y={chart.lowestPoint.y - 12}
+                          x={Math.max(66, Math.min(1168, lowMarker.x - 40))}
+                          y={lowLabelY}
                           fontSize="14"
                           fill="#ef4444"
                           fontWeight="700"
@@ -319,13 +485,13 @@ export function TideMonitorSection({
                           strokeWidth="3"
                           paintOrder="stroke"
                         >
-                          Low {formatHour24(chart.lowestPoint.hour)}:00
+                          Low {nextLowPoint ? nextLowLabel : `${formatHour24(chart.lowestPoint!.hour)}:00`}
                         </text>
                       ) : null}
-                      {chart.highestPoint ? (
+                      {highMarker ? (
                         <text
-                          x={Math.max(66, Math.min(1168, chart.highestPoint.x - 44))}
-                          y={chart.highestPoint.y - 12}
+                          x={Math.max(66, Math.min(1168, highMarker.x - 44))}
+                          y={highLabelY}
                           fontSize="14"
                           fill="#1d4ed8"
                           fontWeight="700"
@@ -333,7 +499,7 @@ export function TideMonitorSection({
                           strokeWidth="3"
                           paintOrder="stroke"
                         >
-                          High {formatHour24(chart.highestPoint.hour)}:00
+                          High {nextHighPoint ? nextHighLabel : `${formatHour24(chart.highestPoint!.hour)}:00`}
                         </text>
                       ) : null}
 

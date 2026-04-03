@@ -3,8 +3,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import type { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import { BlurView } from "expo-blur";
 import {
+  Animated,
   AppState,
+  Easing,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -23,14 +26,16 @@ import type { Session } from "@supabase/supabase-js";
 import { clearExpiredCaches, readCache, writeCache } from "./lib/cache";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import { BottomNav, type DashboardTab } from "./components/bottom-nav";
-import { AnnouncementCard } from "./components/announcement-card";
 import { LoadingToast } from "./components/loading-toast";
 import { StatusToast } from "./components/status-toast";
 import { AnnouncementCommentsModal } from "./components/announcement-comments-modal";
-import { SensorStatusCard } from "./components/sensor-status-card";
-import { WeatherUpdateCard } from "./components/weather-update-card";
-import { TideCard } from "./components/tide-monitor-card";
-import { MobileSectionHeader } from "./components/mobile-section-header";
+import { HomeHeroSection } from "./components/home-hero-section";
+import { WeatherSection } from "./components/weather-section";
+import { TideSection } from "./components/tide-section";
+import { QuickActionsGrid } from "./components/quick-actions-grid";
+import { AnnouncementsSection } from "./components/announcements-section";
+import { HistorySection } from "./components/history-section";
+import { ProfileSection } from "./components/profile-section";
 
 type AuthMode = "login" | "register";
 type AlertLevelKey = "normal" | "critical" | "evacuation" | "spilling";
@@ -85,6 +90,55 @@ type WeatherRow = {
   signal_no?: string | null;
   manual_description?: string | null;
 };
+
+type HomeAtmosphereTheme = {
+  base: string;
+  auraTop: string;
+  auraBottom: string;
+  veil: string;
+  blurTint: "light" | "dark";
+  textVariant: "light" | "dark";
+  blurIntensity: number;
+};
+
+type WeatherVisualMode = "sunny" | "cloudy" | "night" | "rainy-day" | "rainy-night";
+
+type WeatherShowcaseScene = {
+  mode: WeatherVisualMode;
+  theme: HomeAtmosphereTheme;
+};
+
+const DASHBOARD_TAB_ATMOSPHERE: Record<Exclude<DashboardTab, "home">, HomeAtmosphereTheme> = {
+  news: {
+    base: "#0c1e39",
+    auraTop: "rgba(55, 121, 206, 0.24)",
+    auraBottom: "rgba(28, 79, 150, 0.18)",
+    veil: "rgba(8, 18, 35, 0.22)",
+    blurTint: "dark",
+    textVariant: "light",
+    blurIntensity: 12,
+  },
+  history: {
+    base: "#0d213b",
+    auraTop: "rgba(64, 146, 141, 0.22)",
+    auraBottom: "rgba(30, 106, 116, 0.16)",
+    veil: "rgba(8, 18, 35, 0.22)",
+    blurTint: "dark",
+    textVariant: "light",
+    blurIntensity: 12,
+  },
+  profile: {
+    base: "#10233f",
+    auraTop: "rgba(100, 120, 193, 0.2)",
+    auraBottom: "rgba(65, 88, 156, 0.15)",
+    veil: "rgba(8, 18, 35, 0.22)",
+    blurTint: "dark",
+    textVariant: "light",
+    blurIntensity: 12,
+  },
+};
+
+const IS_BACKGROUND_SHOWCASE_ENABLED = true;
 
 type HistoryAlertLevel = "normal" | "critical" | "evacuation" | "spilling";
 
@@ -383,6 +437,221 @@ function getWeatherBackground(intensity: string, colorCodedWarning: string, heat
   if (heatIndex <= 41) return "#FDDC00";
   if (heatIndex <= 51) return "#FF7E1C";
   return "#E74C4C";
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const value = hex.trim().replace("#", "");
+  if (value.length !== 6) {
+    return null;
+  }
+
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
+    return null;
+  }
+
+  return { r, g, b };
+}
+
+function getAdaptiveTextVariant(baseColor: string): "light" | "dark" {
+  const rgb = hexToRgb(baseColor);
+  if (!rgb) {
+    return "dark";
+  }
+
+  const luminance = rgb.r * 0.299 + rgb.g * 0.587 + rgb.b * 0.114;
+  return luminance < 142 ? "light" : "dark";
+}
+
+function shadeHexColor(hex: string, factor: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) {
+    return hex;
+  }
+
+  const apply = (value: number) => Math.max(0, Math.min(255, Math.round(value * factor)));
+  const toHex = (value: number) => value.toString(16).padStart(2, "0").toUpperCase();
+
+  return `#${toHex(apply(rgb.r))}${toHex(apply(rgb.g))}${toHex(apply(rgb.b))}`;
+}
+
+function getWeatherVisualMode(snapshot: WeatherSnapshot): WeatherVisualMode {
+  const context = [
+    snapshot.intensityDescription,
+    snapshot.conditionDescription,
+    snapshot.colorCodedWarning,
+    snapshot.manualDescription,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const isNight = getManilaHourNow() < 6 || getManilaHourNow() >= 18;
+  const isRainy = /(rain|storm|thunder|shower|drizzle|downpour|bagyo|typhoon|cyclone)/.test(context);
+  const isCloudy = /(cloud|overcast|fog|mist|haze)/.test(context);
+
+  if (isRainy) {
+    return isNight ? "rainy-night" : "rainy-day";
+  }
+
+  if (isNight) {
+    return "night";
+  }
+
+  if (isCloudy) {
+    return "cloudy";
+  }
+
+  return "sunny";
+}
+
+function buildShowcaseThemeFromWeatherColor(baseColor: string): HomeAtmosphereTheme {
+  const rgb = hexToRgb(baseColor);
+  if (!rgb) {
+    return {
+      base: "#dfeaf7",
+      auraTop: "rgba(122, 168, 220, 0.32)",
+      auraBottom: "rgba(85, 128, 180, 0.22)",
+      veil: "rgba(255, 255, 255, 0.18)",
+      blurTint: "light",
+      textVariant: "dark",
+      blurIntensity: 14,
+    };
+  }
+
+  const darken = (value: number, factor: number) => Math.max(0, Math.min(255, Math.round(value * factor)));
+  const luminance = rgb.r * 0.299 + rgb.g * 0.587 + rgb.b * 0.114;
+  const isDark = luminance < 145;
+
+  const auraTop = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${isDark ? "0.42" : "0.3"})`;
+  const auraBottom = `rgba(${darken(rgb.r, 0.66)}, ${darken(rgb.g, 0.66)}, ${darken(rgb.b, 0.66)}, ${isDark ? "0.34" : "0.22"})`;
+
+  return {
+    base: baseColor,
+    auraTop,
+    auraBottom,
+    veil: isDark ? "rgba(7, 16, 30, 0.24)" : "rgba(255, 255, 255, 0.2)",
+    blurTint: isDark ? "dark" : "light",
+    textVariant: isDark ? "light" : "dark",
+    blurIntensity: 14,
+  };
+}
+
+function getWeatherShowcaseThemes(): HomeAtmosphereTheme[] {
+  const showcaseInputs = [
+    { intensity: "Light Rain", warning: "No Warning", heat: 25 },
+    { intensity: "Normal", warning: "No Warning", heat: 24 },
+    { intensity: "Normal", warning: "No Warning", heat: 30 },
+    { intensity: "Normal", warning: "No Warning", heat: 38 },
+    { intensity: "Normal", warning: "No Warning", heat: 46 },
+    { intensity: "Normal", warning: "No Warning", heat: 55 },
+    { intensity: "Normal", warning: "Yellow Warning", heat: 27 },
+    { intensity: "Normal", warning: "Orange Warning", heat: 27 },
+    { intensity: "Normal", warning: "Red Warning", heat: 27 },
+  ];
+
+  const uniqueColors = Array.from(
+    new Set(showcaseInputs.map((entry) => getWeatherBackground(entry.intensity, entry.warning, entry.heat).toUpperCase())),
+  );
+
+  return uniqueColors.map((color) => buildShowcaseThemeFromWeatherColor(color));
+}
+
+function getWeatherShowcaseScenes(): WeatherShowcaseScene[] {
+  const buildSnapshot = (
+    intensityDescription: string,
+    conditionDescription: string,
+    heatIndex: number,
+    colorCodedWarning = "No Warning",
+  ): WeatherSnapshot => ({
+    recordedAt: null,
+    dateLabel: "TODAY",
+    temperature: heatIndex,
+    iconPath: "",
+    intensityDescription,
+    conditionDescription,
+    humidity: 0,
+    heatIndex,
+    manualDescription: "",
+    colorCodedWarning,
+    signalNo: "No Signal",
+  });
+
+  const snapshots = [
+    buildSnapshot("Normal", "Sunny", 31),
+    buildSnapshot("Normal", "Sunny", 45),
+    buildSnapshot("Normal", "Overcast clouds", 27),
+    buildSnapshot("Normal", "Clear sky", 26),
+    buildSnapshot("Light Rain", "Light rain", 26),
+    buildSnapshot("Heavy Rain", "Thunderstorm rain", 26),
+    buildSnapshot("Normal", "Sunny", 27, "Yellow Warning"),
+    buildSnapshot("Normal", "Sunny", 27, "Orange Warning"),
+    buildSnapshot("Normal", "Sunny", 27, "Red Warning"),
+  ];
+
+  return snapshots.map((snapshot) => ({
+    mode: getWeatherVisualMode(snapshot),
+    theme: getHomeAtmosphereTheme(snapshot),
+  }));
+}
+
+function getHomeAtmosphereTheme(snapshot: WeatherSnapshot): HomeAtmosphereTheme {
+  const mode = getWeatherVisualMode(snapshot);
+  const weatherCardBase = getWeatherBackground(
+    snapshot.intensityDescription,
+    snapshot.colorCodedWarning,
+    snapshot.heatIndex,
+  );
+
+  if (mode === "rainy-night") {
+    return {
+      base: "#0A162A",
+      auraTop: "rgba(46, 89, 148, 0.34)",
+      auraBottom: "rgba(16, 48, 92, 0.3)",
+      veil: "rgba(4, 10, 20, 0.42)",
+      blurTint: "dark",
+      textVariant: "light",
+      blurIntensity: 18,
+    };
+  }
+
+  if (mode === "night") {
+    return {
+      base: "#0D1A33",
+      auraTop: "rgba(70, 117, 191, 0.3)",
+      auraBottom: "rgba(25, 70, 136, 0.24)",
+      veil: "rgba(8, 14, 28, 0.34)",
+      blurTint: "dark",
+      textVariant: "light",
+      blurIntensity: 16,
+    };
+  }
+
+  if (mode === "cloudy") {
+    const base = "#B3B7C0";
+    return {
+      base,
+      auraTop: "rgba(160, 169, 184, 0.38)",
+      auraBottom: "rgba(118, 129, 146, 0.24)",
+      veil: "rgba(255, 255, 255, 0.2)",
+      blurTint: "light",
+      textVariant: getAdaptiveTextVariant(base),
+      blurIntensity: 14,
+    };
+  }
+
+  const base = mode === "rainy-day" ? "#B3B7C0" : weatherCardBase;
+  return {
+    base,
+    auraTop: `${shadeHexColor(base, 1.06)}55`,
+    auraBottom: `${shadeHexColor(base, 0.72)}44`,
+    veil: getAdaptiveTextVariant(base) === "light" ? "rgba(8, 16, 30, 0.24)" : "rgba(255, 255, 255, 0.22)",
+    blurTint: getAdaptiveTextVariant(base) === "light" ? "dark" : "light",
+    textVariant: getAdaptiveTextVariant(base),
+    blurIntensity: 14,
+  };
 }
 
 function buildFullName(firstName: string, middleName: string, lastName: string): string {
@@ -779,6 +1048,17 @@ export default function App() {
   const latestWeatherRecordedAtRef = useRef<string | null>(null);
   const refreshToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastScrollRefreshAtRef = useRef(0);
+  const atmosphereFloat = useRef(new Animated.Value(0)).current;
+  const atmospherePulse = useRef(new Animated.Value(0)).current;
+  const sectionTransition = useRef(new Animated.Value(1)).current;
+  const skeletonPulse = useRef(new Animated.Value(0)).current;
+  const atmosphereFade = useRef(new Animated.Value(1)).current;
+  const [showcaseThemeIndex, setShowcaseThemeIndex] = useState(0);
+  const cloudDrift = useRef(new Animated.Value(0)).current;
+  const sunPulse = useRef(new Animated.Value(0)).current;
+  const starTwinkle = useRef(new Animated.Value(0)).current;
+  const rainFall = useRef(new Animated.Value(0)).current;
+  const rainFallSoft = useRef(new Animated.Value(0)).current;
 
   const [loginForm, setLoginForm] = useState<LoginForm>({
     email: "",
@@ -1927,15 +2207,48 @@ export default function App() {
       weatherSnapshot.heatIndex,
     );
 
+    const quickActions = [
+      {
+        id: "history",
+        title: "Water Level History",
+        subtitle: "View historical water level trends and logs",
+        icon: "time-outline" as const,
+        tone: "primary" as const,
+        onPress: () => setActiveTab("history"),
+      },
+      {
+        id: "announcements",
+        title: "Announcements",
+        subtitle: "Official updates from Barangay Sta. Rita",
+        icon: "megaphone-outline" as const,
+        tone: "secondary" as const,
+        onPress: () => setActiveTab("news"),
+      },
+      {
+        id: "profile",
+        title: "Profile",
+        subtitle: "Edit your account and alert settings",
+        icon: "person-outline" as const,
+        tone: "muted" as const,
+        onPress: () => setActiveTab("profile"),
+      },
+      {
+        id: "map",
+        title: "Map Location",
+        subtitle: "Open Sta. Rita Bridge on the map",
+        icon: "location-outline" as const,
+        tone: "primary" as const,
+        onPress: () => {
+          void Linking.openURL("https://maps.google.com/?q=Sta.+Rita+Bridge+Olongapo");
+        },
+      },
+    ];
+
     return (
       <>
-        <MobileSectionHeader title="HOME" />
-
-        <View style={styles.locationRow}>
-          <Text style={styles.locationText}>BRIDGE WATER LEVEL AT STA. RITA, OLONGAPO CITY.</Text>
-        </View>
-
-        <SensorStatusCard
+        <HomeHeroSection
+          title="BRIDGE WATER LEVEL AT STA. RITA, OLONGAPO CITY."
+          subtitle="Current water level and alert status for Sta. Rita Bridge."
           stationLabel="Sta. Rita Bridge"
           updatedLabel={waterUpdatedLabel}
           rangeLabel={waterRange}
@@ -1944,9 +2257,10 @@ export default function App() {
           alertDescription={alertConfig.description}
           backgroundColor={alertConfig.cardColor}
           waterLevel={sensorSnapshot.waterLevel}
+          textVariant={homeTextVariant}
         />
 
-        <WeatherUpdateCard
+        <WeatherSection
           intensityLabel={weatherSnapshot.intensityDescription}
           iconPath={weatherSnapshot.iconPath}
           conditionDescription={weatherSnapshot.conditionDescription}
@@ -1960,7 +2274,7 @@ export default function App() {
           signalNo={weatherSnapshot.signalNo}
         />
 
-        <TideCard
+        <TideSection
           tideStatus={tideStatus}
           hourlyTides={tideHourly}
           tideExtremes={tideExtremes}
@@ -1968,22 +2282,7 @@ export default function App() {
           error={tideError}
         />
 
-        <Text style={styles.quickActionsTitle}>Quick Actions</Text>
-        <Pressable style={styles.actionCardPrimary} onPress={() => setActiveTab("history")}>
-          <View>
-            <Text style={styles.actionTitle}>Water Level History</Text>
-            <Text style={styles.actionSubtitle}>View historical water level trends and logs</Text>
-          </View>
-          <Text style={styles.actionArrow}>›</Text>
-        </Pressable>
-
-        <Pressable style={styles.actionCardSecondary} onPress={() => setActiveTab("news")}>
-          <View>
-            <Text style={styles.actionTitle}>Announcements</Text>
-            <Text style={styles.actionSubtitle}>Official updates from Barangay Sta. Rita</Text>
-          </View>
-          <Text style={styles.actionArrow}>›</Text>
-        </Pressable>
+        <QuickActionsGrid actions={quickActions} textVariant={homeTextVariant} />
       </>
     );
   };
@@ -1994,342 +2293,367 @@ export default function App() {
     }
 
     if (activeTab === "news") {
-      const badgeStyleByAlert: Record<AnnouncementAlertLevel, { bg: string; text: string; label: string }> = {
-        normal: { bg: "#ecfdf3", text: "#15803d", label: "General Update" },
-        warning: { bg: "#fff7ed", text: "#c2410c", label: "Warning Alert" },
-        emergency: { bg: "#fff1f2", text: "#be123c", label: "Emergency Alert" },
-      };
-
-      const filterOptions: Array<{ key: AnnouncementFilterKey; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
-        { key: "all", label: "All / Lahat", icon: "funnel-outline" },
-        { key: "warning", label: "Warning", icon: "warning-outline" },
-        { key: "emergency", label: "Emergency", icon: "alert-circle-outline" },
-      ];
-
       return (
-        <View>
-          <MobileSectionHeader title="ANNOUNCEMENT" />
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.newsFiltersScroll}
-            contentContainerStyle={styles.newsFiltersRow}
-          >
-            {filterOptions.map((option) => {
-              const isActive = announcementFilter === option.key;
+        <AnnouncementsSection
+          announcements={filteredAnnouncements}
+          isLoading={isAnnouncementsLoading}
+          filter={announcementFilter}
+          textVariant={dashboardAtmosphere.textVariant}
+          onChangeFilter={setAnnouncementFilter}
+          onOpenComments={openCommentsForAnnouncement}
+        />
+      );
+    }
 
-              return (
-                <Pressable
-                  key={option.key}
-                  style={[styles.newsFilterChip, isActive && styles.newsFilterChipActive]}
-                  onPress={() => setAnnouncementFilter(option.key)}
-                >
-                  <Ionicons
-                    name={option.icon}
-                    size={15}
-                    color={isActive ? "#ffffff" : "#4b5563"}
-                    style={styles.newsFilterIcon}
-                  />
-                  <Text style={[styles.newsFilterText, isActive && styles.newsFilterTextActive]}>{option.label}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+    if (activeTab === "history") {
+      return (
+        <HistorySection
+          groups={groupedVisibleHistoryRecords}
+          isLoading={isHistoryLoading}
+          canLoadMore={visibleHistoryRecords.length < filteredHistoryRecords.length}
+          textVariant={dashboardAtmosphere.textVariant}
+          selectedDateLabel={selectedHistoryDateLabel}
+          selectedDateValue={selectedHistoryDateValue}
+          showDatePicker={showHistoryDatePicker}
+          onToggleDatePicker={() => setShowHistoryDatePicker((prev) => !prev)}
+          onDateChange={handleHistoryDateChange}
+          onClearDate={() => setSelectedHistoryDateKey(null)}
+          onLoadMore={() => setHistoryVisibleCount((count) => count + 5)}
+          statusFilter={historyStatusFilter}
+          onChangeStatusFilter={setHistoryStatusFilter}
+        />
+      );
+    }
 
-          {isAnnouncementsLoading ? <Text style={styles.loaderText}>Loading announcements...</Text> : null}
+    return (
+      <ProfileSection
+        profileState={profileState}
+        textVariant={dashboardAtmosphere.textVariant}
+        displayRoleLabel={displayRoleLabel}
+        residentStatusCaption={residentStatusCaption}
+        selectedAvatar={selectedAvatar}
+        avatarOptions={PROFILE_AVATAR_OPTIONS}
+        isAvatarPickerOpen={isAvatarPickerOpen}
+        onToggleAvatarPicker={() => setIsAvatarPickerOpen((prev) => !prev)}
+        onSelectAvatar={(avatarKey) => void handleSelectProfileAvatar(avatarKey)}
+        isSavingAvatar={isSavingAvatar}
+        isPasswordEditorOpen={isPasswordEditorOpen}
+        onTogglePasswordEditor={() => setIsPasswordEditorOpen((prev) => !prev)}
+        passwordForm={passwordForm}
+        onPasswordFormChange={(nextForm) => setPasswordForm(nextForm)}
+        onSavePassword={() => void handleChangePassword()}
+        showNewPassword={showNewPassword}
+        onToggleShowNewPassword={() => setShowNewPassword((prev) => !prev)}
+        showConfirmPassword={showConfirmPassword}
+        onToggleShowConfirmPassword={() => setShowConfirmPassword((prev) => !prev)}
+        onChangeAddress={(value) =>
+          setProfileState((prev) => ({
+            ...prev,
+            addressPurok: value,
+          }))
+        }
+        onSaveAddressPurok={() => void handleSaveAddressPurok()}
+        isSavingAddress={isSavingAddress}
+        onLogout={handleLogout}
+      />
+    );
+  };
 
-          {!isAnnouncementsLoading && filteredAnnouncements.length === 0 ? (
-            <View style={styles.placeholderWrap}>
-              <Text style={styles.placeholderTitle}>NEWS</Text>
-              <Text style={styles.placeholderText}>No announcements found for this filter.</Text>
-            </View>
-          ) : null}
+  const homeAtmosphere = getHomeAtmosphereTheme(weatherSnapshot);
+  const weatherShowcaseScenes = useMemo(() => getWeatherShowcaseScenes(), []);
+  const activeShowcaseScene = weatherShowcaseScenes[showcaseThemeIndex % weatherShowcaseScenes.length];
+  const isHomeTabActive = activeTab === "home";
+  const realHomeVisualMode = useMemo(() => getWeatherVisualMode(weatherSnapshot), [weatherSnapshot]);
+  const homeVisualMode: WeatherVisualMode = IS_BACKGROUND_SHOWCASE_ENABLED ? activeShowcaseScene.mode : realHomeVisualMode;
+  const defaultDashboardAtmosphere: HomeAtmosphereTheme =
+    activeTab === "home"
+      ? homeAtmosphere
+      : DASHBOARD_TAB_ATMOSPHERE[activeTab];
+  const dashboardAtmosphere = IS_BACKGROUND_SHOWCASE_ENABLED
+    ? activeShowcaseScene.theme
+    : defaultDashboardAtmosphere;
+  const homeTextVariant = IS_BACKGROUND_SHOWCASE_ENABLED ? dashboardAtmosphere.textVariant : homeAtmosphere.textVariant;
 
-          {filteredAnnouncements.map((entry) => {
-            const tone = badgeStyleByAlert[entry.alert_level] ?? badgeStyleByAlert.normal;
+  const shouldAnimateAtmosphere = isHomeTabActive || IS_BACKGROUND_SHOWCASE_ENABLED;
 
-            return (
-              <AnnouncementCard
-                key={entry.id}
-                entry={entry}
-                tone={tone}
-                formattedDate={formatAnnouncementDate(entry.created_at)}
-                onOpenComments={openCommentsForAnnouncement}
-              />
-            );
-          })}
+  useEffect(() => {
+    if (!shouldAnimateAtmosphere) {
+      atmosphereFloat.stopAnimation();
+      atmospherePulse.stopAnimation();
+      atmosphereFloat.setValue(0);
+      atmospherePulse.setValue(0);
+      return;
+    }
+
+    const floatLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(atmosphereFloat, {
+          toValue: 1,
+          duration: 7000,
+          useNativeDriver: false,
+        }),
+        Animated.timing(atmosphereFloat, {
+          toValue: 0,
+          duration: 7000,
+          useNativeDriver: false,
+        }),
+      ]),
+    );
+
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(atmospherePulse, {
+          toValue: 1,
+          duration: 5200,
+          useNativeDriver: false,
+        }),
+        Animated.timing(atmospherePulse, {
+          toValue: 0,
+          duration: 5200,
+          useNativeDriver: false,
+        }),
+      ]),
+    );
+
+    floatLoop.start();
+    pulseLoop.start();
+
+    return () => {
+      floatLoop.stop();
+      pulseLoop.stop();
+    };
+  }, [atmosphereFloat, atmospherePulse, shouldAnimateAtmosphere]);
+
+  useEffect(() => {
+    if (!IS_BACKGROUND_SHOWCASE_ENABLED) {
+      return;
+    }
+
+    const showcaseTimer = setInterval(() => {
+      Animated.timing(atmosphereFade, {
+        toValue: 0,
+        duration: 420,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: false,
+      }).start(() => {
+        setShowcaseThemeIndex((prev) => (prev + 1) % weatherShowcaseScenes.length);
+        Animated.timing(atmosphereFade, {
+          toValue: 1,
+          duration: 420,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: false,
+        }).start();
+      });
+    }, 10000);
+
+    return () => clearInterval(showcaseTimer);
+  }, [atmosphereFade, weatherShowcaseScenes.length]);
+
+  useEffect(() => {
+    const cloudLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(cloudDrift, { toValue: 1, duration: 12000, useNativeDriver: false }),
+        Animated.timing(cloudDrift, { toValue: 0, duration: 12000, useNativeDriver: false }),
+      ]),
+    );
+    cloudLoop.start();
+    return () => cloudLoop.stop();
+  }, [cloudDrift]);
+
+  useEffect(() => {
+    const sunLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(sunPulse, { toValue: 1, duration: 1700, useNativeDriver: false }),
+        Animated.timing(sunPulse, { toValue: 0, duration: 1700, useNativeDriver: false }),
+      ]),
+    );
+    sunLoop.start();
+    return () => sunLoop.stop();
+  }, [sunPulse]);
+
+  useEffect(() => {
+    const starLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(starTwinkle, { toValue: 1, duration: 1450, useNativeDriver: false }),
+        Animated.timing(starTwinkle, { toValue: 0, duration: 1450, useNativeDriver: false }),
+      ]),
+    );
+    starLoop.start();
+    return () => starLoop.stop();
+  }, [starTwinkle]);
+
+  useEffect(() => {
+    rainFall.setValue(0);
+    const rainLoop = Animated.loop(
+      Animated.timing(rainFall, {
+        toValue: 1,
+        duration: 1400,
+        useNativeDriver: false,
+      }),
+    );
+    rainLoop.start();
+    return () => rainLoop.stop();
+  }, [rainFall]);
+
+  useEffect(() => {
+    rainFallSoft.setValue(0.28);
+    const rainSoftLoop = Animated.loop(
+      Animated.timing(rainFallSoft, {
+        toValue: 1,
+        duration: 2100,
+        useNativeDriver: false,
+      }),
+    );
+    rainSoftLoop.start();
+    return () => rainSoftLoop.stop();
+  }, [rainFallSoft]);
+
+  const topAuraAnimatedStyle = {
+    opacity: atmospherePulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.8, 1],
+    }),
+    transform: [
+      {
+        translateX: atmosphereFloat.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -10],
+        }),
+      },
+      {
+        translateY: atmosphereFloat.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 8],
+        }),
+      },
+      {
+        scale: atmospherePulse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 1.06],
+        }),
+      },
+    ],
+  };
+
+  const bottomAuraAnimatedStyle = {
+    opacity: atmospherePulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.86, 1],
+    }),
+    transform: [
+      {
+        translateX: atmosphereFloat.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 9],
+        }),
+      },
+      {
+        translateY: atmosphereFloat.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -7],
+        }),
+      },
+      {
+        scale: atmospherePulse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 1.04],
+        }),
+      },
+    ],
+  };
+
+  useEffect(() => {
+    sectionTransition.setValue(0);
+    Animated.timing(sectionTransition, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [activeTab, sectionTransition]);
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 1,
+          duration: 720,
+          useNativeDriver: false,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0,
+          duration: 720,
+          useNativeDriver: false,
+        }),
+      ]),
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [skeletonPulse]);
+
+  const sectionAnimatedStyle = {
+    opacity: sectionTransition,
+    transform: [
+      {
+        translateY: sectionTransition.interpolate({
+          inputRange: [0, 1],
+          outputRange: [14, 0],
+        }),
+      },
+    ],
+  };
+
+  const skeletonPulseStyle = {
+    opacity: skeletonPulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.48, 0.94],
+    }),
+  };
+
+  const renderDashboardSkeleton = () => {
+    if (activeTab === "home") {
+      return (
+        <View style={styles.skeletonStack}>
+          <Animated.View style={[styles.skeletonCardHero, skeletonPulseStyle]} />
+          <Animated.View style={[styles.skeletonCardWeather, skeletonPulseStyle]} />
+          <Animated.View style={[styles.skeletonCardTide, skeletonPulseStyle]} />
+          <View style={styles.skeletonGridRow}>
+            <Animated.View style={[styles.skeletonQuickAction, skeletonPulseStyle]} />
+            <Animated.View style={[styles.skeletonQuickAction, skeletonPulseStyle]} />
+          </View>
+        </View>
+      );
+    }
+
+    if (activeTab === "news") {
+      return (
+        <View style={styles.skeletonStack}>
+          <Animated.View style={[styles.skeletonSectionHeader, skeletonPulseStyle]} />
+          <Animated.View style={[styles.skeletonFilterRow, skeletonPulseStyle]} />
+          <Animated.View style={[styles.skeletonCardNews, skeletonPulseStyle]} />
+          <Animated.View style={[styles.skeletonCardNews, skeletonPulseStyle]} />
         </View>
       );
     }
 
     if (activeTab === "history") {
-      const historyFilterOptions: Array<{ key: "all" | HistoryAlertLevel; label: string }> = [
-        { key: "all", label: "All" },
-        { key: "normal", label: "Normal" },
-        { key: "critical", label: "Critical" },
-        { key: "evacuation", label: "Evacuate" },
-        { key: "spilling", label: "Spilling" },
-      ];
-
-      const canLoadMore = visibleHistoryRecords.length < filteredHistoryRecords.length;
-
       return (
-        <View>
-          <MobileSectionHeader title="HISTORY" />
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.historyFiltersScroll}
-            contentContainerStyle={styles.historyFiltersRow}
-          >
-            {historyFilterOptions.map((option) => {
-              const isActive = historyStatusFilter === option.key;
-
-              return (
-                <Pressable
-                  key={option.key}
-                  style={[styles.historyFilterChip, isActive && styles.historyFilterChipActive]}
-                  onPress={() => setHistoryStatusFilter(option.key)}
-                >
-                  <Text style={[styles.historyFilterText, isActive && styles.historyFilterTextActive]}>{option.label}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <View style={styles.historyToolbarRow}>
-            <Pressable
-              style={styles.historyDateRangeBtn}
-              onPress={() => setShowHistoryDatePicker(true)}
-            >
-              <Ionicons name="calendar-outline" size={15} color="#374151" />
-              <Text style={styles.historyDateRangeText}>{selectedHistoryDateLabel}</Text>
-            </Pressable>
-
-            <Text style={styles.historySortedText}>SORTED: NEWEST FIRST</Text>
-          </View>
-
-          {showHistoryDatePicker ? (
-            <View style={styles.historyCalendarWrap}>
-              <DateTimePicker
-                mode="date"
-                value={selectedHistoryDateValue}
-                display={Platform.OS === "ios" ? "inline" : "default"}
-                onChange={handleHistoryDateChange}
-              />
-            </View>
-          ) : null}
-
-          {selectedHistoryDateKey ? (
-            <Pressable style={styles.historyClearDateBtn} onPress={() => setSelectedHistoryDateKey(null)}>
-              <Text style={styles.historyClearDateText}>Show all dates</Text>
-            </Pressable>
-          ) : null}
-
-          {isHistoryLoading ? <Text style={styles.loaderText}>Loading history...</Text> : null}
-
-          {!isHistoryLoading && filteredHistoryRecords.length === 0 ? (
-            <View style={styles.placeholderWrap}>
-              <Text style={styles.placeholderText}>No history records found.</Text>
-            </View>
-          ) : null}
-
-          {groupedVisibleHistoryRecords.map((group) => (
-            <View key={group.dateKey} style={styles.historyDayGroup}>
-              <Text style={styles.historyDayGroupTitle}>{group.dateLabel}</Text>
-
-              {group.entries.map((entry) => {
-                const config = HISTORY_LEVELS[entry.alertLevel];
-
-                return (
-                  <View
-                    key={entry.id}
-                    style={[
-                      styles.historyCard,
-                      {
-                        backgroundColor: config.cardBackground,
-                      },
-                    ]}
-                  >
-                    <View style={styles.historyCardTopRow}>
-                      <Text style={styles.historyDateTimeText}>{formatHistoryTimeOnly(entry)}</Text>
-                      <View style={[styles.historyStatusBadge, { borderColor: config.badgeBorder }]}>
-                        <Text style={[styles.historyStatusBadgeText, { color: config.badgeText }]}>{entry.statusLabel}</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.historyRangeText}>{entry.rangeLabel}</Text>
-                    <Text style={styles.historyDescriptionLabel}>Deskripsyon</Text>
-                    <Text style={styles.historyDescriptionText}>{entry.description}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          ))}
-
-          {!isHistoryLoading && canLoadMore ? (
-            <Pressable
-              style={styles.historyLoadMoreBtn}
-              onPress={() => setHistoryVisibleCount((count) => count + 5)}
-            >
-              <Text style={styles.historyLoadMoreText}>Load older records</Text>
-            </Pressable>
-          ) : null}
+        <View style={styles.skeletonStack}>
+          <Animated.View style={[styles.skeletonSectionHeader, skeletonPulseStyle]} />
+          <Animated.View style={[styles.skeletonFilterRow, skeletonPulseStyle]} />
+          <Animated.View style={[styles.skeletonCardHistory, skeletonPulseStyle]} />
+          <Animated.View style={[styles.skeletonCardHistory, skeletonPulseStyle]} />
         </View>
       );
     }
 
     return (
-      <View>
-        <MobileSectionHeader title="PROFILE" />
-
-        <View style={styles.profileCard}>
-          <Image source={selectedAvatar.source} style={styles.profileAvatar} resizeMode="cover" />
-          <View style={styles.profileInfoCol}>
-            <Text style={styles.profileName}>{profileState.fullName}</Text>
-            <View style={styles.profileRoleRow}>
-              <Text style={styles.profileRoleBadge}>{displayRoleLabel}</Text>
-              <Text style={styles.profileRoleText}>{residentStatusCaption}</Text>
-            </View>
-          </View>
-          <Pressable style={styles.profileInlineEditBtn} onPress={() => setIsAvatarPickerOpen((prev) => !prev)}>
-            <Text style={styles.profileInlineEditText}>{isAvatarPickerOpen ? "✕" : "✎"}</Text>
-          </Pressable>
-        </View>
-
-        {isAvatarPickerOpen ? (
-          <View style={styles.avatarPickerCard}>
-            <Text style={styles.avatarPickerTitle}>Choose your profile avatar</Text>
-            <View style={styles.avatarGrid}>
-              {PROFILE_AVATAR_OPTIONS.map((item) => {
-                const isSelected = item.key === profileState.avatarKey;
-
-                return (
-                  <Pressable
-                    key={item.key}
-                    style={[styles.avatarOption, isSelected && styles.avatarOptionActive]}
-                    onPress={() => void handleSelectProfileAvatar(item.key)}
-                    disabled={isSavingAvatar}
-                  >
-                    <Image source={item.source} style={styles.avatarOptionImage} resizeMode="cover" />
-                  </Pressable>
-                );
-              })}
-            </View>
-            {isSavingAvatar ? <Text style={styles.avatarSavingText}>Saving avatar...</Text> : null}
-          </View>
-        ) : null}
-
-        <Text style={styles.profileSectionTitle}>Contact Details</Text>
-        <View style={styles.profileInfoCard}>
-          <View style={styles.profileInfoRow}>
-            <View style={styles.profileInfoHeadingRow}>
-              <Text style={styles.profileInfoLabel}>Phone Number</Text>
-              <Text style={styles.profilePill}>SMS Active</Text>
-            </View>
-            <Text style={styles.profileInfoValue}>{profileState.phoneNumber}</Text>
-          </View>
-          <View style={styles.profileInfoDivider} />
-          <View style={styles.profileInfoRow}>
-            <Text style={styles.profileInfoLabel}>Email Address</Text>
-            <Text style={styles.profileInfoValue}>{profileState.email}</Text>
-          </View>
-          {profileState.residentStatus === "resident" ? (
-            <>
-              <View style={styles.profileInfoDivider} />
-              <View style={styles.profileInfoRow}>
-                <Text style={styles.profileInfoLabel}>Address / Purok</Text>
-                <TextInput
-                  value={profileState.addressPurok}
-                  onChangeText={(value) =>
-                    setProfileState((prev) => ({
-                      ...prev,
-                      addressPurok: value,
-                    }))
-                  }
-                  onBlur={() => void handleSaveAddressPurok()}
-                  style={styles.profileAddressInput}
-                  placeholder="Purok 4, Riverside St."
-                  placeholderTextColor="#9ca3af"
-                  editable={!isSavingAddress}
-                />
-              </View>
-            </>
-          ) : null}
-        </View>
-
-        <Text style={styles.profileSectionTitle}>Change Password</Text>
-        <View style={styles.passwordChangeRow}>
-          <Text style={styles.passwordMask}>{isPasswordEditorOpen ? "Enter new password" : "********"}</Text>
-          <View style={styles.passwordActions}>
-            <Pressable onPress={() => setIsPasswordEditorOpen((prev) => !prev)}>
-              <Text style={styles.passwordActionIcon}>✎</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {isPasswordEditorOpen ? (
-          <View style={styles.profilePasswordCard}>
-            <Text style={styles.profileInfoLabel}>Current Password</Text>
-            <TextInput
-              value={passwordForm.currentPassword}
-              onChangeText={(value) => setPasswordForm((prev) => ({ ...prev, currentPassword: value }))}
-              style={styles.profilePasswordInput}
-              secureTextEntry
-              autoCapitalize="none"
-              placeholder="Enter current password"
-              placeholderTextColor="#9ca3af"
-            />
-
-            <Text style={[styles.profileInfoLabel, styles.profilePasswordLabelSpacing]}>New Password</Text>
-            <TextInput
-              value={passwordForm.newPassword}
-              onChangeText={(value) => setPasswordForm((prev) => ({ ...prev, newPassword: value }))}
-              style={styles.profilePasswordInput}
-              secureTextEntry={!showNewPassword}
-              autoCapitalize="none"
-              placeholder="Enter new password"
-              placeholderTextColor="#9ca3af"
-            />
-            <Pressable style={styles.passwordToggleMini} onPress={() => setShowNewPassword((prev) => !prev)}>
-              <Text style={styles.passwordToggleMiniText}>{showNewPassword ? "Hide" : "Show"}</Text>
-            </Pressable>
-
-            <Text style={[styles.profileInfoLabel, styles.profilePasswordLabelSpacing]}>Confirm Password</Text>
-            <TextInput
-              value={passwordForm.confirmPassword}
-              onChangeText={(value) => setPasswordForm((prev) => ({ ...prev, confirmPassword: value }))}
-              style={styles.profilePasswordInput}
-              secureTextEntry={!showConfirmPassword}
-              autoCapitalize="none"
-              placeholder="Confirm new password"
-              placeholderTextColor="#9ca3af"
-            />
-            <Pressable style={styles.passwordToggleMini} onPress={() => setShowConfirmPassword((prev) => !prev)}>
-              <Text style={styles.passwordToggleMiniText}>{showConfirmPassword ? "Hide" : "Show"}</Text>
-            </Pressable>
-
-            <Pressable
-              style={[styles.profilePasswordSaveBtn, isChangingPassword && styles.buttonDisabled]}
-              onPress={() => void handleChangePassword()}
-              disabled={isChangingPassword}
-            >
-              <Text style={styles.profilePasswordSaveText}>{isChangingPassword ? "Updating..." : "Update Password"}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        <View style={styles.alertCard}>
-          <Text style={styles.alertCardTitle}>Alert Notifications</Text>
-          <Text style={styles.alertCardBody}>
-            Your primary phone number is registered for automated SMS alerts. In case of spills or critical levels, you
-            will be notified immediately.
-          </Text>
-        </View>
-
-        <Pressable style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Logout from Device</Text>
-        </Pressable>
+      <View style={styles.skeletonStack}>
+        <Animated.View style={[styles.skeletonSectionHeader, skeletonPulseStyle]} />
+        <Animated.View style={[styles.skeletonCardProfileTop, skeletonPulseStyle]} />
+        <Animated.View style={[styles.skeletonCardProfileInfo, skeletonPulseStyle]} />
+        <Animated.View style={[styles.skeletonCardProfileInfo, skeletonPulseStyle]} />
       </View>
     );
   };
@@ -2364,9 +2688,174 @@ export default function App() {
   if (session) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.safe}>
-          <StatusBar barStyle="dark-content" backgroundColor="#f3f5f5" />
+        <SafeAreaView style={[styles.safe, { backgroundColor: dashboardAtmosphere.base }]}> 
+          <StatusBar
+            barStyle={dashboardAtmosphere.textVariant === "light" ? "light-content" : "dark-content"}
+            backgroundColor={dashboardAtmosphere.base}
+          />
           <View style={styles.dashboardWrapper}>
+            <Animated.View style={[styles.homeAtmosphereLayer, { opacity: atmosphereFade }]}> 
+                <View style={[styles.homeAtmosphereBase, { backgroundColor: dashboardAtmosphere.base }]} />
+                {activeTab === "home" && (homeVisualMode === "sunny" ? (
+                  <Animated.View
+                    style={[
+                      styles.weatherSunCore,
+                      {
+                        opacity: sunPulse.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }),
+                        transform: [{ scale: sunPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) }],
+                      },
+                    ]}
+                  />
+                ) : null)}
+
+                {activeTab === "home" && homeVisualMode === "sunny" ? (
+                  <Animated.View
+                    style={[
+                      styles.weatherSunRays,
+                      {
+                        opacity: sunPulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.85] }),
+                        transform: [{ rotate: sunPulse.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "18deg"] }) }],
+                      },
+                    ]}
+                  />
+                ) : null}
+
+                {activeTab === "home" && homeVisualMode === "cloudy" ? (
+                  <Animated.View
+                    style={[
+                      styles.weatherCloudGroup,
+                      {
+                        transform: [{ translateX: cloudDrift.interpolate({ inputRange: [0, 1], outputRange: [-16, 10] }) }],
+                      },
+                    ]}
+                  >
+                    <View style={styles.weatherCloudBlobLarge} />
+                    <View style={styles.weatherCloudBlobMid} />
+                    <View style={styles.weatherCloudBlobSmall} />
+                  </Animated.View>
+                ) : null}
+
+                {activeTab === "home" && (homeVisualMode === "night" || homeVisualMode === "rainy-night") ? (
+                  <>
+                    {[
+                      { left: 56, top: 84, size: 2 },
+                      { left: 102, top: 58, size: 3 },
+                      { left: 168, top: 72, size: 2 },
+                      { left: 242, top: 54, size: 3 },
+                      { left: 296, top: 94, size: 2 },
+                    ].map((star, index) => (
+                      <Animated.View
+                        key={`star-${index}`}
+                        style={[
+                          styles.weatherStar,
+                          {
+                            left: star.left,
+                            top: star.top,
+                            width: star.size,
+                            height: star.size,
+                            opacity: starTwinkle.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.95] }),
+                          },
+                        ]}
+                      />
+                    ))}
+                  </>
+                ) : null}
+
+                {activeTab === "home" && (homeVisualMode === "rainy-day" || homeVisualMode === "rainy-night") ? (
+                  <>
+                    {Array.from({ length: homeVisualMode === "rainy-day" ? 22 : 28 }, (_, index) => {
+                      const laneProgress = Animated.modulo(Animated.add(rainFall, index * 0.095), 1);
+                      const baseOpacity = homeVisualMode === "rainy-night" ? 0.5 - (index % 5) * 0.05 : 0.38 - (index % 5) * 0.04;
+
+                      return (
+                        <Animated.View
+                          key={`rain-${index}`}
+                          style={[
+                            styles.weatherRainDrop,
+                            {
+                              left: `${4 + (index % 10) * 9.2}%`,
+                              opacity: laneProgress.interpolate({
+                                inputRange: [0, 0.16, 0.86, 1],
+                                outputRange: [0, baseOpacity, baseOpacity * 0.9, 0],
+                              }),
+                              transform: [
+                                {
+                                  translateY: laneProgress.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [-210 - (index % 9) * 30, 380 + (index % 6) * 18],
+                                  }),
+                                },
+                                {
+                                  translateX: laneProgress.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [0, index % 2 === 0 ? 7 : -7],
+                                  }),
+                                },
+                                { rotate: "-14deg" },
+                              ],
+                            },
+                          ]}
+                        />
+                      );
+                    })}
+
+                    {Array.from({ length: homeVisualMode === "rainy-day" ? 18 : 24 }, (_, index) => {
+                      const mistProgress = Animated.modulo(Animated.add(rainFallSoft, index * 0.12), 1);
+                      const mistOpacity = homeVisualMode === "rainy-night" ? 0.26 - (index % 4) * 0.03 : 0.2 - (index % 4) * 0.025;
+
+                      return (
+                        <Animated.View
+                          key={`rain-soft-${index}`}
+                          style={[
+                            styles.weatherRainDropSoft,
+                            {
+                              left: `${2 + (index % 12) * 8.2}%`,
+                              opacity: mistProgress.interpolate({
+                                inputRange: [0, 0.2, 0.82, 1],
+                                outputRange: [0, mistOpacity, mistOpacity * 0.85, 0],
+                              }),
+                              transform: [
+                                {
+                                  translateY: mistProgress.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [-235 - (index % 6) * 22, 382 + (index % 5) * 20],
+                                  }),
+                                },
+                                {
+                                  translateX: mistProgress.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [0, index % 2 === 0 ? 4 : -4],
+                                  }),
+                                },
+                                { rotate: "-16deg" },
+                              ],
+                            },
+                          ]}
+                        />
+                      );
+                    })}
+                  </>
+                ) : null}
+
+                <Animated.View
+                  style={[
+                    styles.homeAuraBlob,
+                    styles.homeAuraBlobTop,
+                    { backgroundColor: dashboardAtmosphere.auraTop },
+                    topAuraAnimatedStyle,
+                  ]}
+                />
+                <Animated.View
+                  style={[
+                    styles.homeAuraBlob,
+                    styles.homeAuraBlobBottom,
+                    { backgroundColor: dashboardAtmosphere.auraBottom },
+                    bottomAuraAnimatedStyle,
+                  ]}
+                />
+                <BlurView intensity={dashboardAtmosphere.blurIntensity} tint={dashboardAtmosphere.blurTint} style={styles.homeBlurLayer} />
+                <View style={[styles.homeAtmosphereVeil, { backgroundColor: dashboardAtmosphere.veil }]} />
+              </Animated.View>
             <LoadingToast visible={isRefreshToastVisible} message={refreshToastMessage} topOffset={66} />
             <StatusToast
               visible={Boolean(statusModalMessage)}
@@ -2382,7 +2871,7 @@ export default function App() {
               </View>
             ) : null}
             <ScrollView
-              contentContainerStyle={styles.dashboardContainer}
+              contentContainerStyle={[styles.dashboardContainer, styles.dashboardContainerHome]}
               alwaysBounceVertical
               onScrollEndDrag={(event) => {
                 if (activeTab === "profile") return;
@@ -2406,10 +2895,13 @@ export default function App() {
                 />
               }
             >
-              {isDashboardLoading ? <Text style={styles.loaderText}>Refreshing live data...</Text> : renderDashboardBody()}
+              <Animated.View style={[styles.dashboardBodyWrap, sectionAnimatedStyle]}>
+                {isDashboardLoading ? renderDashboardSkeleton() : renderDashboardBody()}
+              </Animated.View>
             </ScrollView>
             <BottomNav
               activeTab={activeTab}
+              themeVariant="dark"
               onChange={setActiveTab}
               onReselect={(tab) => {
                 if (tab === "home") {
@@ -2726,6 +3218,118 @@ const styles = StyleSheet.create({
   dashboardWrapper: {
     flex: 1,
   },
+  homeAtmosphereLayer: {
+    ...StyleSheet.absoluteFillObject,
+    pointerEvents: "none",
+    overflow: "hidden",
+    zIndex: 0,
+  },
+  homeAtmosphereBase: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  homeAuraBlob: {
+    position: "absolute",
+    borderRadius: 999,
+    zIndex: 1,
+  },
+  homeAuraBlobTop: {
+    width: 360,
+    height: 360,
+    top: -130,
+    right: -110,
+  },
+  homeAuraBlobBottom: {
+    width: 300,
+    height: 300,
+    bottom: 84,
+    left: -100,
+  },
+  homeBlurLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+  },
+  homeAtmosphereVeil: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 3,
+  },
+  weatherSunCore: {
+    position: "absolute",
+    width: 96,
+    height: 96,
+    borderRadius: 999,
+    top: 52,
+    right: 34,
+    backgroundColor: "rgba(255, 218, 112, 0.76)",
+    zIndex: 6,
+  },
+  weatherSunRays: {
+    position: "absolute",
+    width: 160,
+    height: 160,
+    borderRadius: 999,
+    top: 20,
+    right: 2,
+    borderWidth: 2,
+    borderColor: "rgba(255, 221, 144, 0.52)",
+    zIndex: 6,
+  },
+  weatherCloudGroup: {
+    position: "absolute",
+    top: 62,
+    right: 22,
+    width: 170,
+    height: 84,
+    zIndex: 6,
+  },
+  weatherCloudBlobLarge: {
+    position: "absolute",
+    right: 10,
+    top: 24,
+    width: 110,
+    height: 48,
+    borderRadius: 999,
+    backgroundColor: "rgba(244, 248, 255, 0.46)",
+  },
+  weatherCloudBlobMid: {
+    position: "absolute",
+    right: 60,
+    top: 10,
+    width: 76,
+    height: 48,
+    borderRadius: 999,
+    backgroundColor: "rgba(243, 248, 255, 0.44)",
+  },
+  weatherCloudBlobSmall: {
+    position: "absolute",
+    right: 0,
+    top: 18,
+    width: 58,
+    height: 38,
+    borderRadius: 999,
+    backgroundColor: "rgba(242, 247, 255, 0.42)",
+  },
+  weatherStar: {
+    position: "absolute",
+    borderRadius: 999,
+    backgroundColor: "#e5eeff",
+    zIndex: 6,
+  },
+  weatherRainDrop: {
+    position: "absolute",
+    width: 1.6,
+    height: 22,
+    borderRadius: 2,
+    backgroundColor: "rgba(219, 236, 255, 0.9)",
+    zIndex: 6,
+  },
+  weatherRainDropSoft: {
+    position: "absolute",
+    width: 1,
+    height: 14,
+    borderRadius: 1.5,
+    backgroundColor: "rgba(222, 239, 255, 0.72)",
+    zIndex: 6,
+  },
   cachedBanner: {
     marginHorizontal: 16,
     marginTop: 8,
@@ -2752,6 +3356,91 @@ const styles = StyleSheet.create({
     paddingTop: DASHBOARD_TOP_PADDING,
     paddingBottom: 22,
     gap: 12,
+  },
+  dashboardBodyWrap: {
+    minHeight: 360,
+  },
+  dashboardContainerHome: {
+    zIndex: 2,
+  },
+  skeletonStack: {
+    gap: 12,
+    paddingTop: 2,
+  },
+  skeletonCardHero: {
+    height: 228,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  skeletonCardWeather: {
+    height: 132,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+  },
+  skeletonCardTide: {
+    height: 190,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  skeletonGridRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  skeletonQuickAction: {
+    flex: 1,
+    height: 92,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  skeletonSectionHeader: {
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  skeletonFilterRow: {
+    height: 44,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  skeletonCardNews: {
+    height: 220,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.19)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  skeletonCardHistory: {
+    height: 156,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.13)",
+  },
+  skeletonCardProfileTop: {
+    height: 108,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  skeletonCardProfileInfo: {
+    height: 126,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
   },
   locationRow: {
     borderTopWidth: 1,

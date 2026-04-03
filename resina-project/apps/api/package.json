@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "tide:fetch": "tsx src/tide/fetch-tide-data.ts",
     "tide:interpolate": "tsx src/tide/interpolate-tide-hourly.ts",
+    "tide:refresh-window": "tsx src/tide/refresh-tide-window.ts",
     "weather:fetch": "tsx src/weather/fetch-weather-data.ts"
   },
   "dependencies": {

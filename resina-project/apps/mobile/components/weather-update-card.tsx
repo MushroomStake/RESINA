@@ -241,13 +241,19 @@ export function WeatherUpdateCard({
 
 const styles = StyleSheet.create({
   weatherCard: {
-    borderRadius: 14,
+    borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: "#d5d9df",
     marginTop: 12,
     overflow: "hidden",
     position: "relative",
+    minHeight: 168,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   weatherCardNight: {
     borderColor: "#22314a",
@@ -319,7 +325,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   weatherTemp: {
-    fontSize: 52,
+    fontSize: 44,
     color: "#323948",
     fontWeight: "800",
   },
@@ -327,21 +333,28 @@ const styles = StyleSheet.create({
     color: "#f2f7ff",
   },
   weatherIcon: {
-    width: 104,
-    height: 104,
+    width: 90,
+    height: 90,
     opacity: 0.9,
   },
   detailsRow: {
-    marginTop: 14,
+    marginTop: 12,
     flexDirection: "row",
     justifyContent: "space-between",
+    gap: 8,
   },
   detailItem: {
     flex: 1,
-    marginRight: 8,
+    marginRight: 0,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
+    backgroundColor: "rgba(255,255,255,0.18)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   detailLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     color: "#4a5568",
     letterSpacing: 0.4,
@@ -350,11 +363,11 @@ const styles = StyleSheet.create({
     color: "#9eb5d6",
   },
   detailValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: "#1e2635",
     marginTop: 3,
-    lineHeight: 19,
+    lineHeight: 17,
     textTransform: "capitalize",
   },
   detailValueNight: {

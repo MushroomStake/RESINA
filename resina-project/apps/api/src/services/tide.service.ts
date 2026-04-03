@@ -147,9 +147,25 @@ export async function smartFetchTideData(predictionDate: string): Promise<{ succ
     return { success: true, apiUsed: false };
   }
 
-  // Step 2: If no cache, fetch from StormGlass
-  const startIso = `${predictionDate}T00:00:00Z`;
-  const endIso = `${predictionDate}T23:59:59Z`;
+  // Step 2: If no cache, fetch from StormGlass using Manila-day boundaries.
+  // predictionDate is interpreted as Asia/Manila calendar day.
+  const [yearRaw, monthRaw, dayRaw] = predictionDate.split("-");
+  const year = Number.parseInt(yearRaw ?? "", 10);
+  const month = Number.parseInt(monthRaw ?? "", 10);
+  const day = Number.parseInt(dayRaw ?? "", 10);
+
+  if ([year, month, day].some((value) => Number.isNaN(value))) {
+    throw new Error(`Invalid predictionDate format: ${predictionDate}`);
+  }
+
+  const manilaOffsetHours = 8;
+  const startUtcMs = Date.UTC(year, month - 1, day, 0, 0, 0) - manilaOffsetHours * 60 * 60 * 1000;
+  const endUtcMs = startUtcMs + (24 * 60 * 60 * 1000 - 1000);
+
+  // Add boundary buffer so interpolation has surrounding extremes near midnight.
+  const bufferMs = 12 * 60 * 60 * 1000;
+  const startIso = new Date(startUtcMs - bufferMs).toISOString();
+  const endIso = new Date(endUtcMs + bufferMs).toISOString();
 
   const tideData = await fetchTideFromStormGlass(startIso, endIso);
   if (!tideData) {
