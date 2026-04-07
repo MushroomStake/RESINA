@@ -1,24 +1,24 @@
-name: Tide Daily Refresh
+name: Weather Auto Refresh
 
 on:
   schedule:
-    # 00:10 Asia/Manila (UTC+8) = 16:10 UTC (previous day)
-    - cron: "10 16 * * *"
+    # Every hour at minute 5 (UTC)
+    - cron: "5 * * * *"
   workflow_dispatch:
 
 jobs:
-  refresh-tide:
+  refresh-weather:
     runs-on: ubuntu-latest
     environment: Production
     timeout-minutes: 5
     steps:
-      - name: Trigger tide cron endpoint
+      - name: Trigger weather cron endpoint
         env:
-          TIDE_CRON_URL: ${{ secrets.TIDE_CRON_URL }}
+          WEATHER_CRON_URL: ${{ secrets.WEATHER_CRON_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          if [ -z "$TIDE_CRON_URL" ]; then
-            echo "Missing required secret: TIDE_CRON_URL"
+          if [ -z "$WEATHER_CRON_URL" ]; then
+            echo "Missing required secret: WEATHER_CRON_URL"
             exit 1
           fi
 
@@ -27,13 +27,13 @@ jobs:
             exit 1
           fi
 
-          echo "Calling $TIDE_CRON_URL"
+          echo "Calling $WEATHER_CRON_URL"
           response=$(curl --fail --show-error --silent \
             -H "Authorization: Bearer $CRON_SECRET" \
-            "$TIDE_CRON_URL")
+            "$WEATHER_CRON_URL")
 
           echo "Response: $response"
           echo "$response" | grep -q '"ok":true' || {
-            echo "Tide cron call did not return ok=true"
+            echo "Weather cron call did not return ok=true"
             exit 1
           }
