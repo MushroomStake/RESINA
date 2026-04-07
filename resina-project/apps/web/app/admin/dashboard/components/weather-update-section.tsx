@@ -18,59 +18,27 @@ type WeatherView = {
 
 type WeatherUpdateSectionProps = {
   weatherState: WeatherView;
-  weatherDraft: WeatherView;
   weatherCardClass: string;
-  isWeatherModalOpen: boolean;
-  isFetchingWeather: boolean;
-  isSavingWeather: boolean;
-  warningOptions: readonly string[];
-  signalOptions: readonly string[];
-  onOpenWeatherUpdateModal: () => void;
-  onCloseWeatherModal: () => void;
-  onRefreshWeather: () => void;
-  onPublishWeather: () => void;
-  onWarningChange: (value: string) => void;
-  onSignalChange: (value: string) => void;
-  onManualDescriptionChange: (value: string) => void;
 };
 
 export function WeatherUpdateSection({
   weatherState,
-  weatherDraft,
   weatherCardClass,
-  isWeatherModalOpen,
-  isFetchingWeather,
-  isSavingWeather,
-  warningOptions,
-  signalOptions,
-  onOpenWeatherUpdateModal,
-  onCloseWeatherModal,
-  onRefreshWeather,
-  onPublishWeather,
-  onWarningChange,
-  onSignalChange,
-  onManualDescriptionChange,
 }: WeatherUpdateSectionProps) {
   const isNightCard = weatherState.iconPath.toLowerCase().includes("moon");
   const isRainyCard = weatherState.intensityDescription.toLowerCase().includes("rain");
 
   return (
     <>
-      <section className="mt-6 rounded-2xl border border-[#e5e7eb] bg-white p-5">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-[#4b5563]">Weather Update</h3>
-          <button
-            type="button"
-            onClick={onOpenWeatherUpdateModal}
-            className="rounded-lg bg-[#4CAF50] px-3 py-1.5 text-xs font-semibold text-white"
-          >
-            Weather Update
-          </button>
+      <section className="relative overflow-hidden rounded-[30px] border border-[#d7e4f2] bg-[#f8fbff] p-5 shadow-[0_20px_60px_rgba(15,23,42,0.12)] md:p-6">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.2),transparent_65%)]" />
+        <div className="mb-4">
+          <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#4f709e]">Weather Monitor</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
           <div
-            className={`weather-card-animated relative min-h-[195px] overflow-hidden rounded-2xl px-7 py-7 text-[#2f3850] ${weatherCardClass} ${isNightCard ? "weather-card-night text-[#e6f0ff]" : ""}`}
+            className={`weather-card-animated relative min-h-[228px] overflow-hidden rounded-3xl border border-white/30 px-7 py-7 text-[#2f3850] shadow-[0_18px_45px_rgba(15,23,42,0.24)] ${weatherCardClass} ${isNightCard ? "weather-card-night text-[#e6f0ff]" : ""}`}
           >
             {isNightCard ? (
               <div className="weather-stars pointer-events-none absolute inset-0">
@@ -99,9 +67,7 @@ export function WeatherUpdateSection({
               <span>{weatherState.dateLabel}</span>
             </div>
 
-            <p
-              className={`weather-temp-readability absolute left-7 top-1/2 z-20 -translate-y-1/2 text-7xl font-extrabold leading-none md:text-8xl ${isNightCard ? "text-[#f3f8ff]" : "text-[#f7fbff]"}`}
-            >
+            <p className={`weather-temp-readability absolute left-7 top-1/2 z-20 -translate-y-1/2 text-7xl font-extrabold leading-none md:text-8xl ${isNightCard ? "text-[#f3f8ff]" : "text-[#f7fbff]"}`}>
               {weatherState.temperature}°C
             </p>
 
@@ -114,235 +80,35 @@ export function WeatherUpdateSection({
             />
           </div>
 
-          <div className="grid gap-2 rounded-xl border border-[#e5e7eb] bg-[#fbfcfe] p-4 text-[15px] leading-6 text-[#374151]">
-            <p className="break-words">
-              <span className="font-semibold">Weather Condition:</span> {weatherState.owmMain || "-"}
-            </p>
-            <p className="break-words">
-              <span className="font-semibold">Detailed Condition:</span> {weatherState.owmDescription || "-"}
-            </p>
-            <p className="break-words">
-              <span className="font-semibold">Weather Intensity:</span> {weatherState.intensityDescription}
-            </p>
-            <p className="break-words">
-              <span className="font-semibold">Humidity:</span> {weatherState.humidity === null ? "-" : `${weatherState.humidity}%`}
-            </p>
-            <p className="break-words">
-              <span className="font-semibold">Heat Index:</span>{" "}
-              {weatherState.heatIndex === null ? "-" : `${weatherState.heatIndex.toFixed(1)}°C`}
-            </p>
-            <p className="break-words">
-              <span className="font-semibold">Color Coded Warning:</span> {weatherState.colorCodedWarning}
-            </p>
-            <p className="break-words">
-              <span className="font-semibold">Signal Level:</span> {weatherState.signalNo}
-            </p>
-            <p className="min-w-0 text-sm leading-6 text-[#556071]">
-              <span className="font-semibold text-[#4b5563]">Description:</span>{" "}
-              <span className="inline-block max-w-full align-bottom" title={weatherState.manualDescription || "-"}>
+          <div className="grid gap-3 rounded-3xl border border-[#d8e4f1] bg-white/80 p-4 backdrop-blur-sm md:grid-cols-2 md:p-5">
+            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Condition</p>
+              <p className="mt-1 text-lg font-bold text-[#16375f]">{weatherState.owmMain || "-"}</p>
+              <p className="mt-1 text-sm text-[#5f7797]">{weatherState.owmDescription || "-"}</p>
+            </div>
+            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Intensity</p>
+              <p className="mt-1 text-lg font-bold text-[#16375f]">{weatherState.intensityDescription}</p>
+              <p className="mt-1 text-sm text-[#5f7797]">Signal: {weatherState.signalNo}</p>
+            </div>
+            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Humidity</p>
+              <p className="mt-1 text-lg font-bold text-[#16375f]">{weatherState.humidity === null ? "-" : `${weatherState.humidity}%`}</p>
+            </div>
+            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Heat Index</p>
+              <p className="mt-1 text-lg font-bold text-[#16375f]">{weatherState.heatIndex === null ? "-" : `${weatherState.heatIndex.toFixed(1)}°C`}</p>
+            </div>
+            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-4 py-3 md:col-span-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Advisory</p>
+              <p className="mt-1 text-sm leading-6 text-[#425a79]" title={weatherState.manualDescription || "-"}>
                 {weatherState.manualDescription || "-"}
-              </span>
-            </p>
+              </p>
+              <p className="mt-2 text-xs font-medium text-[#5f7797]">Color coded warning: {weatherState.colorCodedWarning}</p>
+            </div>
           </div>
         </div>
       </section>
-
-      {isWeatherModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-[820px] overflow-hidden rounded-xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#e5e7eb] px-6 py-5">
-              <h2 className="text-2xl font-bold uppercase text-[#1f2937]">Weather Update</h2>
-              <button
-                type="button"
-                onClick={onCloseWeatherModal}
-                className="rounded-md p-1 text-[#6b7280] hover:bg-[#f3f4f6]"
-                aria-label="Close modal"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="space-y-4 px-6 py-5">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label htmlFor="weather-temperature" className="mb-1 block text-sm font-medium text-[#374151]">
-                    Current Temperature (°C)
-                  </label>
-                  <input
-                    id="weather-temperature"
-                    title="Current temperature in Celsius"
-                    type="number"
-                    value={weatherDraft.temperature}
-                    readOnly
-                    disabled
-                    className="w-full rounded-lg border border-[#d1d5db] bg-[#f3f4f6] px-3 py-2 text-sm text-[#6b7280]"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="weather-humidity" className="mb-1 block text-sm font-medium text-[#374151]">
-                    Humidity (%)
-                  </label>
-                  <input
-                    id="weather-humidity"
-                    title="Current humidity percentage"
-                    value={weatherDraft.humidity ?? "-"}
-                    readOnly
-                    disabled
-                    className="w-full rounded-lg border border-[#d1d5db] bg-[#f3f4f6] px-3 py-2 text-sm text-[#6b7280]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label htmlFor="weather-main" className="mb-1 block text-sm font-medium text-[#374151]">
-                    Weather Condition
-                  </label>
-                  <input
-                    id="weather-main"
-                    title="Primary weather condition"
-                    value={weatherDraft.owmMain}
-                    readOnly
-                    disabled
-                    className="w-full rounded-lg border border-[#d1d5db] bg-[#f3f4f6] px-3 py-2 text-sm text-[#6b7280]"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="weather-description" className="mb-1 block text-sm font-medium text-[#374151]">
-                    Detailed Condition
-                  </label>
-                  <input
-                    id="weather-description"
-                    title="Detailed weather condition"
-                    value={weatherDraft.owmDescription}
-                    readOnly
-                    disabled
-                    className="w-full rounded-lg border border-[#d1d5db] bg-[#f3f4f6] px-3 py-2 text-sm text-[#6b7280]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label htmlFor="weather-intensity" className="mb-1 block text-sm font-medium text-[#374151]">
-                    Intensity Description
-                  </label>
-                  <input
-                    id="weather-intensity"
-                    title="Computed intensity description"
-                    value={weatherDraft.intensityDescription}
-                    readOnly
-                    disabled
-                    className="w-full rounded-lg border border-[#d1d5db] bg-[#f3f4f6] px-3 py-2 text-sm text-[#6b7280]"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="weather-heat-index" className="mb-1 block text-sm font-medium text-[#374151]">
-                    Heat Index (°C)
-                  </label>
-                  <input
-                    id="weather-heat-index"
-                    title="Computed heat index in Celsius"
-                    value={weatherDraft.heatIndex === null ? "-" : weatherDraft.heatIndex.toFixed(1)}
-                    readOnly
-                    disabled
-                    className="w-full rounded-lg border border-[#d1d5db] bg-[#f3f4f6] px-3 py-2 text-sm text-[#6b7280]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label htmlFor="weather-warning" className="mb-1 block text-sm font-medium text-[#374151]">
-                    Color Coded Warning
-                  </label>
-                  <select
-                    id="weather-warning"
-                    title="Color coded warning"
-                    value={weatherDraft.colorCodedWarning}
-                    onChange={(event) => onWarningChange(event.target.value)}
-                    className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm focus:border-[#4CAF50] focus:outline-none"
-                  >
-                    {warningOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="weather-signal" className="mb-1 block text-sm font-medium text-[#374151]">
-                    Signal No.
-                  </label>
-                  <select
-                    id="weather-signal"
-                    title="Weather signal number"
-                    value={weatherDraft.signalNo}
-                    onChange={(event) => onSignalChange(event.target.value)}
-                    className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm focus:border-[#4CAF50] focus:outline-none"
-                  >
-                    {signalOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="weather-manual-description" className="mb-1 block text-sm font-medium text-[#374151]">
-                  Description (Manual)
-                </label>
-                <textarea
-                  id="weather-manual-description"
-                  title="Weather manual description"
-                  placeholder="Enter any description format for broadcast"
-                  value={weatherDraft.manualDescription}
-                  onChange={(event) => onManualDescriptionChange(event.target.value)}
-                  rows={5}
-                  className="w-full resize-none rounded-lg border border-[#d1d5db] px-3 py-2 text-sm focus:border-[#4CAF50] focus:outline-none"
-                />
-              </div>
-
-            </div>
-
-            <div className="flex items-center justify-between border-t border-[#e5e7eb] px-6 py-4">
-              <button
-                type="button"
-                onClick={onCloseWeatherModal}
-                className="rounded-lg px-3 py-2 text-sm text-[#374151] hover:bg-[#f3f4f6]"
-              >
-                Cancel
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onRefreshWeather}
-                  disabled={isFetchingWeather}
-                  className="rounded-lg border border-[#d1d5db] px-3 py-2 text-sm text-[#374151] hover:bg-[#f9fafb] disabled:opacity-60"
-                >
-                  {isFetchingWeather ? "Refreshing..." : "Refresh Weather Data"}
-                </button>
-                <button
-                  type="button"
-                  onClick={onPublishWeather}
-                  disabled={isSavingWeather}
-                  className="rounded-lg bg-[#4CAF50] px-4 py-2 text-sm font-semibold text-white hover:bg-[#3d9a40] disabled:opacity-60"
-                >
-                  {isSavingWeather ? "Publishing..." : "Publish Now"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <style jsx>{`
         .weather-icon-float {

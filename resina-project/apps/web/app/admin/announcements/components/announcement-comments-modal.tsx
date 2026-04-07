@@ -42,9 +42,9 @@ function parseReplyToken(body: string): { parentId: string | null; cleanBody: st
 
 function threadIndentClass(depth: number): string {
   if (depth <= 0) return "";
-  if (depth === 1) return "ml-5 border-l border-[#d1d5db] pl-3";
-  if (depth === 2) return "ml-9 border-l border-[#d1d5db] pl-3";
-  return "ml-12 border-l border-[#d1d5db] pl-3";
+  if (depth === 1) return "ml-5 border-l border-[#d5e3f1] pl-3";
+  if (depth === 2) return "ml-9 border-l border-[#d5e3f1] pl-3";
+  return "ml-12 border-l border-[#d5e3f1] pl-3";
 }
 
 export function AnnouncementCommentsModal({
@@ -111,7 +111,7 @@ export function AnnouncementCommentsModal({
       const parentName = comment.parentId ? threadedComments.normalized.find((entry) => entry.id === comment.parentId)?.commenter_name : null;
 
       return (
-        <article key={comment.id} className={`rounded-xl bg-[#f8fafc] p-3 ${threadIndentClass(depth)}`}>
+        <article key={comment.id} className={`rounded-xl border border-[#dbe7f2] bg-white/90 p-3 shadow-sm ${threadIndentClass(depth)}`}>
           <div className="flex items-start justify-between gap-2">
             <p className="text-xs text-[#64748b]">
               <span className="font-medium text-[#334155]">{comment.commenter_name}</span> on {formatDateTime(comment.created_at)}
@@ -120,7 +120,7 @@ export function AnnouncementCommentsModal({
               <button
                 type="button"
                 onClick={() => setReplyTarget({ id: comment.id, commenterName: comment.commenter_name })}
-                className="text-xs font-semibold text-[#475569] hover:text-[#0f172a]"
+                  className="rounded-md px-1.5 py-0.5 text-xs font-semibold text-[#475569] hover:bg-[#f1f5f9] hover:text-[#0f172a]"
               >
                 Reply
               </button>
@@ -157,25 +157,27 @@ export function AnnouncementCommentsModal({
         type="button"
         aria-label="Close comments modal"
         onClick={onClose}
-        className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
       />
 
-      <div className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-5">
+      <div className="relative w-full max-w-3xl overflow-hidden rounded-[28px] border border-[#d7e4f2] bg-[#f8fbff] shadow-[0_26px_80px_rgba(15,23,42,0.25)]">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18),transparent_65%)]" />
+        <div className="relative z-10 flex items-center justify-between border-b border-[#d9e5f2] px-6 py-5">
           <div>
-            <h2 className="text-2xl font-semibold text-[#111827]">Comments</h2>
-            <p className="line-clamp-1 text-sm text-[#6b7280]">{title}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#4f709e]">Discussion Thread</p>
+            <h2 className="mt-1 text-2xl font-semibold text-[#0f2847]">Comments</h2>
+            <p className="line-clamp-1 text-sm text-[#5f7ca3]">{title}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-[#d1d5db] px-3 py-1.5 text-sm text-[#475569] hover:bg-[#f8fafc]"
+            className="rounded-lg border border-[#d0dceb] bg-white px-3 py-1.5 text-sm text-[#475569] hover:bg-[#f8fafc]"
           >
             Close
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-6 pb-5">
+        <div className="max-h-[70vh] overflow-y-auto px-6 pb-5 pt-4">
           {isLoading ? <p className="text-sm text-[#6b7280]">Loading comments...</p> : null}
           {error ? <p className="text-sm text-[#b91c1c]">{error}</p> : null}
 
@@ -189,10 +191,10 @@ export function AnnouncementCommentsModal({
             </div>
           ) : null}
 
-          <form onSubmit={(event) => void handleSubmitComment(event)} className="mt-4 rounded-xl bg-[#f8fafc] p-3">
+          <form onSubmit={(event) => void handleSubmitComment(event)} className="mt-4 rounded-xl border border-[#dbe7f2] bg-white/90 p-3 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Comment as BRGY. STA. RITA</p>
             {replyTarget ? (
-              <div className="mt-2 flex items-center justify-between rounded-lg bg-[#e2e8f0] px-3 py-1.5 text-xs text-[#334155]">
+              <div className="mt-2 flex items-center justify-between rounded-lg bg-[#e8f1fb] px-3 py-1.5 text-xs text-[#334155]">
                 <span>Replying to {replyTarget.commenterName}</span>
                 <button type="button" onClick={() => setReplyTarget(null)} className="font-semibold hover:text-[#0f172a]">
                   Clear
@@ -204,7 +206,7 @@ export function AnnouncementCommentsModal({
               value={commentInput}
               onChange={(event) => setCommentInput(event.target.value)}
               placeholder="Write a comment..."
-              className="mt-2 w-full rounded-lg border border-[#d1d5db] bg-white px-3 py-2 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#94a3b8]"
+              className="mt-2 w-full rounded-lg border border-[#d0dceb] bg-white px-3 py-2 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#9bc2e8]"
             />
             <div className="mt-2 flex justify-end">
               <button

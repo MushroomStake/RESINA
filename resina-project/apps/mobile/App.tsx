@@ -261,6 +261,8 @@ const CACHE_TTL_MS = {
 const HISTORY_CACHE_MAX_DAYS = 30;
 const HISTORY_CACHE_MAX_ITEMS = 400;
 const ANNOUNCEMENTS_CACHE_MAX_ITEMS = 20;
+const ANNOUNCEMENTS_PAGE_SIZE = 8;
+const HISTORY_PAGE_SIZE = 20;
 
 const PROFILE_AVATAR_OPTIONS: Array<{ key: ProfileAvatarKey; label: string; source: ReturnType<typeof require> }> = [
   { key: "user", label: "User", source: require("./assets/Profile/user.png") },
@@ -325,7 +327,7 @@ const ALERT_LEVELS: Record<
   spilling: {
     title: "Spilling Level",
     badge: "Alert Level 4",
-    rangeLabel: "4.0+m",
+    rangeLabel: "4.0m onwards",
     cardColor: "#a43737",
     description: "Umaapaw na ang tubig. Delikado na ang sitwasyon; unahin ang kaligtasan ng buhay at sumunod sa mga rescuer.",
   },
@@ -345,31 +347,31 @@ const HISTORY_LEVELS: Record<
   normal: {
     statusLabel: "Normal",
     rangeLabel: "1.5 - 2.49m",
-    description: "Normal ang antas ng tubig. Ligtas ang sitwasyon at walang agarang banta sa kasalukuyan.",
+    description: "Water level is normal. Conditions are stable and no immediate threat is expected.",
     cardBackground: "#dbe2dd",
     badgeBorder: "#67b56e",
     badgeText: "#2d8a39",
   },
   critical: {
-    statusLabel: "Kritikal",
+    statusLabel: "Critical",
     rangeLabel: "2.5 - 2.9m",
-    description: "Mataas ang tubig. Maging maingat, manatiling alerto, at patuloy na magmonitor ng sitwasyon.",
+    description: "Water level is high. Stay alert, prepare essentials, and monitor updates.",
     cardBackground: "#ece6c8",
     badgeBorder: "#9f8c28",
     badgeText: "#8b7300",
   },
   evacuation: {
-    statusLabel: "Paglikas",
+    statusLabel: "Evacuation",
     rangeLabel: "3.0 - 3.9m",
-    description: "Mapanganib na ang antas ng tubig. Kumilos agad at lumikas sa mas mataas o mas ligtas na lugar.",
+    description: "Water level is dangerous. Move immediately to higher and safer ground.",
     cardBackground: "#e9e5e5",
     badgeBorder: "#c36d37",
     badgeText: "#b55f2d",
   },
   spilling: {
-    statusLabel: "Umaapaw",
-    rangeLabel: "4.0+m",
-    description: "Umaapaw na ang tubig at lubhang delikado ang sitwasyon. Unahin ang kaligtasan ng lahat.",
+    statusLabel: "Spilling",
+    rangeLabel: "4.0m onwards",
+    description: "Water is overflowing and conditions are extremely dangerous. Prioritize safety.",
     cardBackground: "#ebe1e3",
     badgeBorder: "#f06868",
     badgeText: "#ef4e4e",
@@ -1031,14 +1033,19 @@ export default function App() {
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [announcementFilter, setAnnouncementFilter] = useState<AnnouncementFilterKey>("all");
   const [isAnnouncementsLoading, setIsAnnouncementsLoading] = useState(false);
+  const [isLoadingMoreAnnouncements, setIsLoadingMoreAnnouncements] = useState(false);
+  const [hasMoreAnnouncements, setHasMoreAnnouncements] = useState(true);
+  const [announcementPage, setAnnouncementPage] = useState(0);
   const [isCommentsModalOpen, setIsCommentsModalOpen] = useState(false);
   const [selectedAnnouncementForComments, setSelectedAnnouncementForComments] = useState<AnnouncementItem | null>(null);
   const [historyRecords, setHistoryRecords] = useState<HistoryRecord[]>([]);
   const [historyStatusFilter, setHistoryStatusFilter] = useState<"all" | HistoryAlertLevel>("all");
   const [selectedHistoryDateKey, setSelectedHistoryDateKey] = useState<string | null>(null);
   const [showHistoryDatePicker, setShowHistoryDatePicker] = useState(false);
-  const [historyVisibleCount, setHistoryVisibleCount] = useState(5);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
+  const [hasMoreHistoryRecords, setHasMoreHistoryRecords] = useState(true);
+  const [historyPage, setHistoryPage] = useState(0);
   const [profileState, setProfileState] = useState<ProfileState>({
     fullName: "Resident",
     email: "-",
@@ -1119,15 +1126,10 @@ export default function App() {
     });
   }, [historyRecords, historyStatusFilter, selectedHistoryDateKey]);
 
-  const visibleHistoryRecords = useMemo(
-    () => filteredHistoryRecords.slice(0, historyVisibleCount),
-    [filteredHistoryRecords, historyVisibleCount],
-  );
-
-  const groupedVisibleHistoryRecords = useMemo<HistoryDayGroup[]>(() => {
+  const groupedHistoryRecords = useMemo<HistoryDayGroup[]>(() => {
     const grouped = new Map<string, HistoryRecord[]>();
 
-    visibleHistoryRecords.forEach((entry) => {
+    filteredHistoryRecords.forEach((entry) => {
       const key = getHistoryDateKey(entry);
       const existing = grouped.get(key);
 
@@ -1143,7 +1145,7 @@ export default function App() {
       dateLabel: formatHistoryGroupDateLabel(dateKey),
       entries,
     }));
-  }, [visibleHistoryRecords]);
+  }, [filteredHistoryRecords]);
 
   const currentCommenterName = useMemo(() => {
     const name = profileState.fullName.trim();
@@ -1612,12 +1614,25 @@ export default function App() {
     }
   };
 
-  const loadAnnouncements = async (): Promise<CacheAwareLoadResult> => {
-    setIsAnnouncementsLoading(true);
-    const cached = await readCache<AnnouncementItem[]>(CACHE_KEYS.announcements, CACHE_TTL_MS.announcements);
+  const loadAnnouncements = async (
+    nextPage = 0,
+    mode: "replace" | "append" = "replace",
+  ): Promise<CacheAwareLoadResult> => {
+    if (mode === "replace") {
+      setIsAnnouncementsLoading(true);
+    } else {
+      setIsLoadingMoreAnnouncements(true);
+    }
+
+    const cached = mode === "replace"
+      ? await readCache<AnnouncementItem[]>(CACHE_KEYS.announcements, CACHE_TTL_MS.announcements)
+      : null;
     if (cached && !cached.isExpired) {
       setAnnouncements(cached.value);
     }
+
+    const start = nextPage * ANNOUNCEMENTS_PAGE_SIZE;
+    const end = start + ANNOUNCEMENTS_PAGE_SIZE - 1;
 
     try {
       const { data } = await supabase
@@ -1626,15 +1641,29 @@ export default function App() {
           "id, title, description, alert_level, posted_by_name, created_at, announcement_media(id, file_name, public_url, display_order)",
         )
         .order("created_at", { ascending: false })
-        .limit(ANNOUNCEMENTS_CACHE_MAX_ITEMS);
+        .range(start, end);
 
-      const rows = ((data ?? []) as AnnouncementItem[]).map((entry) => ({
+      const pageRows = ((data ?? []) as AnnouncementItem[]).map((entry) => ({
         ...entry,
         announcement_media: [...(entry.announcement_media ?? [])].sort((a, b) => a.display_order - b.display_order),
       }));
 
-      setAnnouncements(rows);
-      await writeCache(CACHE_KEYS.announcements, rows.slice(0, ANNOUNCEMENTS_CACHE_MAX_ITEMS));
+      setHasMoreAnnouncements(pageRows.length === ANNOUNCEMENTS_PAGE_SIZE);
+      setAnnouncementPage(nextPage);
+
+      if (mode === "append") {
+        setAnnouncements((prev) => {
+          const merged = [...prev, ...pageRows].filter(
+            (entry, index, list) => list.findIndex((candidate) => candidate.id === entry.id) === index,
+          );
+          void writeCache(CACHE_KEYS.announcements, merged.slice(0, ANNOUNCEMENTS_CACHE_MAX_ITEMS));
+          return merged;
+        });
+      } else {
+        setAnnouncements(pageRows);
+        await writeCache(CACHE_KEYS.announcements, pageRows.slice(0, ANNOUNCEMENTS_CACHE_MAX_ITEMS));
+      }
+
       return {
         source: "live",
         cachedAt: null,
@@ -1642,7 +1671,11 @@ export default function App() {
     } catch {
       // Fall back to cached data.
     } finally {
-      setIsAnnouncementsLoading(false);
+      if (mode === "replace") {
+        setIsAnnouncementsLoading(false);
+      } else {
+        setIsLoadingMoreAnnouncements(false);
+      }
     }
 
     if (cached && !cached.isExpired) {
@@ -1658,29 +1691,53 @@ export default function App() {
     };
   };
 
-  const loadHistoryRecords = async (): Promise<CacheAwareLoadResult> => {
-    setIsHistoryLoading(true);
+  const loadHistoryRecords = async (
+    nextPage = 0,
+    mode: "replace" | "append" = "replace",
+  ): Promise<CacheAwareLoadResult> => {
+    if (mode === "replace") {
+      setIsHistoryLoading(true);
+    } else {
+      setIsLoadingMoreHistory(true);
+    }
 
-    const cached = await readCache<HistoryRecord[]>(CACHE_KEYS.history, CACHE_TTL_MS.history);
+    const cached = mode === "replace" ? await readCache<HistoryRecord[]>(CACHE_KEYS.history, CACHE_TTL_MS.history) : null;
     if (cached && !cached.isExpired) {
       setHistoryRecords(cached.value);
     }
+
+    const start = nextPage * HISTORY_PAGE_SIZE;
+    const end = start + HISTORY_PAGE_SIZE - 1;
 
     try {
       const { data, error } = await supabase
         .from("sensor_readings")
         .select("id, water_level, status, reading_date, reading_time, created_at")
         .order("created_at", { ascending: false })
-        .limit(500);
+        .range(start, end);
 
       if (!error) {
-        const normalized = (data ?? [])
+        const pageRows = (data ?? [])
           .map((row) => mapHistoryRowToRecord(row as Record<string, unknown>))
           .filter((row): row is HistoryRecord => row !== null)
           .sort((left, right) => getHistorySourceTimestamp(right) - getHistorySourceTimestamp(left));
 
-        setHistoryRecords(normalized);
-        await writeCache(CACHE_KEYS.history, trimHistoryForCache(normalized));
+        setHasMoreHistoryRecords(pageRows.length === HISTORY_PAGE_SIZE);
+        setHistoryPage(nextPage);
+
+        if (mode === "append") {
+          setHistoryRecords((prev) => {
+            const merged = [...prev, ...pageRows]
+              .filter((entry, index, list) => list.findIndex((candidate) => candidate.id === entry.id) === index)
+              .sort((left, right) => getHistorySourceTimestamp(right) - getHistorySourceTimestamp(left));
+            void writeCache(CACHE_KEYS.history, trimHistoryForCache(merged));
+            return merged;
+          });
+        } else {
+          setHistoryRecords(pageRows);
+          await writeCache(CACHE_KEYS.history, trimHistoryForCache(pageRows));
+        }
+
         return {
           source: "live",
           cachedAt: null,
@@ -1689,7 +1746,11 @@ export default function App() {
     } catch {
       // Fall back to cached data.
     } finally {
-      setIsHistoryLoading(false);
+      if (mode === "replace") {
+        setIsHistoryLoading(false);
+      } else {
+        setIsLoadingMoreHistory(false);
+      }
     }
 
     if (cached && !cached.isExpired) {
@@ -1852,10 +1913,6 @@ export default function App() {
     };
   }, [session]);
 
-  useEffect(() => {
-    setHistoryVisibleCount(5);
-  }, [historyStatusFilter, selectedHistoryDateKey]);
-
   const selectedHistoryDateValue = useMemo(() => {
     if (!selectedHistoryDateKey) {
       return new Date();
@@ -1896,6 +1953,22 @@ export default function App() {
     if (Platform.OS === "android") {
       setShowHistoryDatePicker(false);
     }
+  };
+
+  const handleLoadMoreAnnouncements = () => {
+    if (isAnnouncementsLoading || isLoadingMoreAnnouncements || !hasMoreAnnouncements) {
+      return;
+    }
+
+    void loadAnnouncements(announcementPage + 1, "append");
+  };
+
+  const handleLoadMoreHistory = () => {
+    if (isHistoryLoading || isLoadingMoreHistory || !hasMoreHistoryRecords) {
+      return;
+    }
+
+    void loadHistoryRecords(historyPage + 1, "append");
   };
 
   useEffect(() => {
@@ -2344,10 +2417,13 @@ export default function App() {
         <AnnouncementsSection
           announcements={filteredAnnouncements}
           isLoading={isAnnouncementsLoading}
+          isLoadingMore={isLoadingMoreAnnouncements}
+          canLoadMore={hasMoreAnnouncements}
           filter={announcementFilter}
           textVariant={dashboardAtmosphere.textVariant}
           onChangeFilter={setAnnouncementFilter}
           onOpenComments={openCommentsForAnnouncement}
+          onLoadMore={handleLoadMoreAnnouncements}
         />
       );
     }
@@ -2355,9 +2431,9 @@ export default function App() {
     if (activeTab === "history") {
       return (
         <HistorySection
-          groups={groupedVisibleHistoryRecords}
+          groups={groupedHistoryRecords}
           isLoading={isHistoryLoading}
-          canLoadMore={visibleHistoryRecords.length < filteredHistoryRecords.length}
+          canLoadMore={hasMoreHistoryRecords}
           textVariant={dashboardAtmosphere.textVariant}
           selectedDateLabel={selectedHistoryDateLabel}
           selectedDateValue={selectedHistoryDateValue}
@@ -2365,7 +2441,7 @@ export default function App() {
           onToggleDatePicker={() => setShowHistoryDatePicker((prev) => !prev)}
           onDateChange={handleHistoryDateChange}
           onClearDate={() => setSelectedHistoryDateKey(null)}
-          onLoadMore={() => setHistoryVisibleCount((count) => count + 5)}
+          onLoadMore={handleLoadMoreHistory}
           statusFilter={historyStatusFilter}
           onChangeStatusFilter={setHistoryStatusFilter}
         />

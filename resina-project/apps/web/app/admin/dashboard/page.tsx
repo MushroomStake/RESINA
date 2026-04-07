@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
-import { ActivityLogSection } from "./components/activity-log-section";
 import { CurrentSensorStatus } from "./components/current-sensor-status";
 import { WeatherUpdateSection } from "./components/weather-update-section";
 import { TideMonitorSection } from "./components/tide-monitor-section";
@@ -59,9 +58,6 @@ type TideHourlyRow = {
   confidence: "high" | "medium" | "low" | null;
 };
 
-const WARNING_OPTIONS = ["No Warning", "Yellow Warning", "Orange Warning", "Red Warning"] as const;
-const SIGNAL_OPTIONS = ["No Signal", "Signal #1", "Signal #2", "Signal #3", "Signal #4", "Signal #5"] as const;
-const OPENWEATHER_REFRESH_MS = 3_600_000;
 const SUNRISE_SUNSET_WINDOW_MS = 30 * 60 * 1000;
 
 type WetSeverity = "none" | "light" | "moderate" | "heavy" | "torrential";
@@ -90,6 +86,7 @@ const ALERT_LEVELS: Record<
     badge: string;
     rangeLabel: string;
     leftPanelClass: string;
+    sensorGradientClass: string;
     noticeClass: string;
     description: string;
   }
@@ -99,6 +96,7 @@ const ALERT_LEVELS: Record<
     badge: "Alert Level 1",
     rangeLabel: "1.5 - 2.49m",
     leftPanelClass: "bg-[#4CAF50]",
+    sensorGradientClass: "bg-[linear-gradient(135deg,#4CAF50_0%,#3f9d57_45%,#2f8a5f_100%)]",
     noticeClass: "border-[#c9e7cd] bg-[#edf8ef] text-[#355f3a]",
     description: "Normal ang antas ng tubig. Ligtas ang sitwasyon at walang inaasahang banta sa ngayon.",
   },
@@ -107,6 +105,7 @@ const ALERT_LEVELS: Record<
     badge: "Alert Level 2",
     rangeLabel: "2.5 - 2.9m",
     leftPanelClass: "bg-[#F7C520]",
+    sensorGradientClass: "bg-[linear-gradient(135deg,#F7C520_0%,#e3b31d_48%,#c79a12_100%)]",
     noticeClass: "border-[#efdfad] bg-[#fdf9ea] text-[#6a5c28]",
     description: "Mataas ang tubig. Maging alerto, ihanda ang mga gamit, at patuloy na magmonitor sa mga balita.",
   },
@@ -115,6 +114,7 @@ const ALERT_LEVELS: Record<
     badge: "Alert Level 3",
     rangeLabel: "3.0 - 3.9m",
     leftPanelClass: "bg-[#FF7E1C]",
+    sensorGradientClass: "bg-[linear-gradient(135deg,#FF7E1C_0%,#e96d1b_50%,#c9581b_100%)]",
     noticeClass: "border-[#efcec1] bg-[#fef5f1] text-[#70402a]",
     description: "Mapanganib ang antas ng tubig. Lumikas na agad patungo sa mas mataas na lugar o evacuation center.",
   },
@@ -123,6 +123,7 @@ const ALERT_LEVELS: Record<
     badge: "Alert Level 4",
     rangeLabel: "4.0+m",
     leftPanelClass: "bg-[#A82A2A]",
+    sensorGradientClass: "bg-[linear-gradient(135deg,#A82A2A_0%,#8f2323_48%,#6f1f1f_100%)]",
     noticeClass: "border-[#efc4c6] bg-[#fff0f1] text-[#6a2830]",
     description: "Umaapaw na ang tubig. Delikado na ang sitwasyon; unahin ang kaligtasan ng buhay at sumunod sa mga rescuer.",
   },
@@ -464,14 +465,9 @@ function resolveWeatherCardClass(intensity: string, warning: string, heatIndex: 
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const openWeatherApiKey = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
   const [isChecking, setIsChecking] = useState(true);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [isWeatherModalOpen, setIsWeatherModalOpen] = useState(false);
-  const [isFetchingWeather, setIsFetchingWeather] = useState(false);
-  const [weatherError, setWeatherError] = useState<string | null>(null);
-  const [isSavingWeather, setIsSavingWeather] = useState(false);
   const [statusVisible, setStatusVisible] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [statusVariant, setStatusVariant] = useState<"success" | "error" | "info">("info");
@@ -486,23 +482,6 @@ export default function AdminDashboardPage() {
   const [tideTrend, setTideTrend] = useState<"rising" | "falling" | null>(null);
 
   const [weatherState, setWeatherState] = useState<WeatherState>({
-    id: null,
-    dateLabel: formatWeatherDateForCard(new Date()),
-    temperature: 19,
-    humidity: 60,
-    heatIndex: 19,
-    owmMain: "Clear",
-    owmDescription: "clear sky",
-    intensityDescription: "Normal",
-    colorCodedWarning: "No Warning",
-    signalNo: "No Signal",
-    manualDescription: "",
-    broadcastDate: null,
-    broadcastTime: null,
-    recordedAt: null,
-    iconPath: DRY_NORMAL_ICON_PATH,
-  });
-  const [weatherDraft, setWeatherDraft] = useState<WeatherState>({
     id: null,
     dateLabel: formatWeatherDateForCard(new Date()),
     temperature: 19,
@@ -591,8 +570,6 @@ export default function AdminDashboardPage() {
     };
 
     setWeatherState(loadedState);
-    setWeatherDraft(loadedState);
-
     return true;
   };
 
@@ -694,160 +671,6 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const persistWeatherRecord = async (nextState: WeatherState) => {
-    const supabase = createClient();
-    const { data: insertedRow, error: insertError } = await supabase
-      .from("weather_logs")
-      .insert({
-        temperature: nextState.temperature,
-        humidity: nextState.humidity,
-        heat_index: nextState.heatIndex,
-        weather_main: nextState.owmMain,
-        weather_description: nextState.owmDescription,
-        intensity: nextState.intensityDescription,
-        color_coded_warning: nextState.colorCodedWarning,
-        signal_no: nextState.signalNo,
-        manual_description: nextState.manualDescription,
-        icon_path: nextState.iconPath,
-      })
-      .select("id, recorded_at, broadcast_date, broadcast_time")
-      .single();
-
-    if (insertError) {
-      throw new Error(insertError.message);
-    }
-
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 60);
-    await supabase.from("weather_logs").delete().lt("recorded_at", cutoff.toISOString());
-
-    return {
-      ...nextState,
-      id: insertedRow?.id ?? null,
-      recordedAt: insertedRow?.recorded_at ?? null,
-      broadcastDate: insertedRow?.broadcast_date ?? null,
-      broadcastTime: insertedRow?.broadcast_time ?? null,
-      dateLabel: formatWeatherDateForCard(new Date(insertedRow?.recorded_at ?? new Date())),
-    };
-  };
-
-  const fetchLatestWeather = async (applyToPublishedCard: boolean, notifyError = false) => {
-    if (!openWeatherApiKey) {
-      setWeatherError("Weather API key is missing in the web environment.");
-      if (notifyError) {
-        showStatus("error", "Weather API key is missing in the web environment.");
-      }
-      return;
-    }
-
-    setIsFetchingWeather(true);
-    setWeatherError(null);
-
-    try {
-      const response = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?q=Olongapo,PH&units=metric&appid=${openWeatherApiKey}`,
-      );
-
-      if (!response.ok) {
-        throw new Error("Weather data request failed.");
-      }
-
-      const data = (await response.json()) as {
-        main?: { temp?: number; humidity?: number };
-        weather?: Array<{ main?: string; description?: string; icon?: string }>;
-        sys?: { sunrise?: number; sunset?: number };
-      };
-
-      const temperature = Math.round(data.main?.temp ?? 25);
-      const humidity = Math.round(data.main?.humidity ?? 60);
-      const weatherMain = data.weather?.[0]?.main ?? "Clear";
-      const weatherDescription = data.weather?.[0]?.description ?? "";
-      const weatherIconCode = data.weather?.[0]?.icon ?? "01d";
-      const analyzed = analyzeOpenWeather(
-        weatherMain,
-        weatherDescription,
-        temperature,
-        humidity,
-        weatherIconCode,
-        data.sys?.sunrise,
-        data.sys?.sunset,
-      );
-      const selectedWarning = applyToPublishedCard
-        ? weatherState.colorCodedWarning
-        : weatherDraft.colorCodedWarning;
-      const selectedSignal = applyToPublishedCard ? weatherState.signalNo : weatherDraft.signalNo;
-      const carriedDescription = weatherDraft.manualDescription.trim()
-        ? weatherDraft.manualDescription
-        : weatherState.manualDescription;
-
-      const mapped: WeatherState = {
-        id: null,
-        dateLabel: formatWeatherDateForCard(new Date()),
-        temperature,
-        humidity,
-        heatIndex: analyzed.heatIndex,
-        owmMain: weatherMain,
-        owmDescription: weatherDescription,
-        intensityDescription: analyzed.intensityDescription,
-        colorCodedWarning: selectedWarning,
-        signalNo: selectedSignal,
-        manualDescription: carriedDescription,
-        broadcastDate: null,
-        broadcastTime: null,
-        recordedAt: null,
-        iconPath: analyzed.iconPath,
-      };
-
-      // Keep admin-authored manual description when refreshing auto weather metrics.
-      setWeatherDraft((current) => ({
-        ...mapped,
-        manualDescription: current.manualDescription.trim() ? current.manualDescription : carriedDescription,
-      }));
-      if (applyToPublishedCard) {
-        const saved = await persistWeatherRecord(mapped);
-        setWeatherState(saved);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load weather data.";
-      setWeatherError(message);
-      if (notifyError) {
-        showStatus("error", message);
-      }
-    } finally {
-      setIsFetchingWeather(false);
-    }
-  };
-
-  const openWeatherUpdateModal = async () => {
-    setWeatherError(null);
-    setIsWeatherModalOpen(true);
-    await fetchLatestWeather(false, true);
-  };
-
-  const handlePublishWeather = async () => {
-    const normalized: WeatherState = {
-      ...weatherDraft,
-      iconPath: weatherDraft.iconPath || WEATHER_ICON_MAP[weatherDraft.intensityDescription] || DRY_NORMAL_ICON_PATH,
-      dateLabel: formatWeatherDateForCard(new Date()),
-    };
-
-    setIsSavingWeather(true);
-    setWeatherError(null);
-
-    try {
-      const saved = await persistWeatherRecord(normalized);
-      setWeatherState(saved);
-      setWeatherDraft(saved);
-      setIsWeatherModalOpen(false);
-      showStatus("success", "Weather update published.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to save weather.";
-      setWeatherError(message);
-      showStatus("error", message);
-    } finally {
-      setIsSavingWeather(false);
-    }
-  };
 
   useEffect(() => {
     const supabase = createClient();
@@ -956,50 +779,24 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     let isMounted = true;
-    let alignedTimer: ReturnType<typeof setTimeout> | null = null;
-    let recurringTimer: ReturnType<typeof setInterval> | null = null;
-
-    const doFetch = () => {
-      if (isMounted) void fetchLatestWeather(true);
-    };
-
-    const scheduleHourlyFetch = () => {
-      const now = new Date();
-      const nextHour = new Date(now);
-      nextHour.setMinutes(0, 0, 0);
-      nextHour.setHours(nextHour.getHours() + 1);
-      const delayMs = Math.max(1000, nextHour.getTime() - now.getTime());
-
-      alignedTimer = setTimeout(() => {
-        doFetch();
-        if (isMounted) {
-          recurringTimer = setInterval(doFetch, OPENWEATHER_REFRESH_MS);
-        }
-      }, delayMs);
-    };
+    let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
     const initialize = async () => {
-      // Show last saved state immediately; fall back to live API fetch if nothing stored
-      const hasData = await loadWeatherFromSupabase();
-      if (!hasData && isMounted) {
-        doFetch();
-      }
+      await loadWeatherFromSupabase();
+      if (!isMounted) return;
 
-      // Always refresh once on load so day/night icon and weather state are current.
-      if (isMounted) {
-        doFetch();
-      }
-
-      // Align recurring refresh to exact top-of-hour timestamps.
-      if (isMounted) scheduleHourlyFetch();
+      refreshTimer = setInterval(() => {
+        if (isMounted) {
+          void loadWeatherFromSupabase();
+        }
+      }, 60_000);
     };
 
     void initialize();
 
     return () => {
       isMounted = false;
-      if (alignedTimer !== null) clearTimeout(alignedTimer);
-      if (recurringTimer !== null) clearInterval(recurringTimer);
+      if (refreshTimer !== null) clearInterval(refreshTimer);
     };
   }, []);
 
@@ -1040,9 +837,11 @@ export default function AdminDashboardPage() {
   return (
     <>
       <section className="px-5 py-6 md:px-8">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
           <CurrentSensorStatus
             alertConfig={alertConfig}
             rangeLabel={rangeLabel}
+            waterLevel={snapshot.waterLevel}
             lastUpdateLabel={lastUpdateLabel}
             isLoadingData={isLoadingData}
             sourceTable={snapshot.sourceTable}
@@ -1051,22 +850,7 @@ export default function AdminDashboardPage() {
 
           <WeatherUpdateSection
             weatherState={weatherState}
-            weatherDraft={weatherDraft}
             weatherCardClass={weatherCardClass}
-            isWeatherModalOpen={isWeatherModalOpen}
-            isFetchingWeather={isFetchingWeather}
-            isSavingWeather={isSavingWeather}
-            warningOptions={WARNING_OPTIONS}
-            signalOptions={SIGNAL_OPTIONS}
-            onOpenWeatherUpdateModal={() => void openWeatherUpdateModal()}
-            onCloseWeatherModal={() => setIsWeatherModalOpen(false)}
-            onRefreshWeather={() => void fetchLatestWeather(false, true)}
-            onPublishWeather={() => void handlePublishWeather()}
-            onWarningChange={(value) => setWeatherDraft((current) => ({ ...current, colorCodedWarning: value }))}
-            onSignalChange={(value) => setWeatherDraft((current) => ({ ...current, signalNo: value }))}
-            onManualDescriptionChange={(value) =>
-              setWeatherDraft((current) => ({ ...current, manualDescription: value }))
-            }
           />
 
           <TideMonitorSection
@@ -1080,8 +864,7 @@ export default function AdminDashboardPage() {
             nextExtreme={nextTideExtreme}
             hourly={tideHourly}
           />
-
-          <ActivityLogSection />
+        </div>
       </section>
 
       <StatusFeedbackModal

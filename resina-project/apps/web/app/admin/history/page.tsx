@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
+import { downloadAnalyticsReportXlsx } from "./xlsx-report";
+import { ActivityLogSection } from "../dashboard/components/activity-log-section";
 
 type AlertLevelKey = "normal" | "critical" | "evacuation" | "spilling";
 
@@ -278,7 +280,7 @@ export default function AdminHistoryPage() {
 
       setRecords(normalized);
       if (normalized.length === 0) {
-        setPageError("No sensor history found for the last 30 days.");
+        setPageError("No analytics data found for the selected period.");
       }
 
       setIsLoading(false);
@@ -353,29 +355,31 @@ export default function AdminHistoryPage() {
     return `${formatDateForRangeLabel(start)} - ${formatDateForRangeLabel(today)}`;
   })();
 
-  const currentCsvFileName = (() => {
+  const currentReportBaseName = (() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     if (dateFilter === "date" && selectedDate) {
-      return `history-records-${selectedDate}.csv`;
+      return `analytics-report-${selectedDate}`;
     }
 
     if (dateFilter === "all") {
       if (records.length === 0) {
-        return "history-records-all.csv";
+        return "analytics-report-all";
       }
 
       const earliest = new Date(records[records.length - 1].recordedAt);
       const latest = new Date(records[0].recordedAt);
-      return `history-records-${formatDateForFileName(earliest)}_to_${formatDateForFileName(latest)}.csv`;
+      return `analytics-report-${formatDateForFileName(earliest)}_to_${formatDateForFileName(latest)}`;
     }
 
     const dayWindow = dateFilter === "7d" ? 7 : dateFilter === "30d" ? 30 : 90;
     const start = new Date(today);
     start.setDate(start.getDate() - dayWindow);
-    return `history-records-${formatDateForFileName(start)}_to_${formatDateForFileName(today)}.csv`;
+    return `analytics-report-${formatDateForFileName(start)}_to_${formatDateForFileName(today)}`;
   })();
+
+  const currentXlsxFileName = `${currentReportBaseName}.xlsx`;
 
   const totalPages = Math.max(1, Math.ceil(filteredRecords.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -387,34 +391,35 @@ export default function AdminHistoryPage() {
     setCurrentPage(1);
   }, [searchQuery, statusFilter, dateFilter, selectedDate]);
 
-  const handleDownloadCsv = () => {
-    const lines = [
-      ["Date", "Time", "Status", "Level", "Description"].join(","),
-      ...filteredRecords.map((entry) =>
-        [
-          `"${formatHistoryDate(entry)}"`,
-          `"${formatHistoryTime(entry)}"`,
-          `"${entry.statusLabel}"`,
-          `"${entry.rangeLabel}"`,
-          `"${ALERT_LEVELS[entry.alertLevel].description}"`,
-        ].join(","),
-      ),
-    ];
+  const handleDownloadXlsx = async () => {
+    const generatedAt = new Date().toLocaleString("en-PH", {
+      timeZone: "Asia/Manila",
+      month: "long",
+      day: "2-digit",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
 
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = currentCsvFileName;
-    link.click();
-    URL.revokeObjectURL(url);
+    await downloadAnalyticsReportXlsx(
+      {
+        rows: filteredRecords,
+        dateRangeLabel: currentDateRangeLabel,
+        generatedAt,
+        reportTitle: "Sta. Rita Bridge Water Level Monitoring Report",
+        barangayName: "Barangay Sta. Rita",
+        cityName: "Lungsod ng Olongapo",
+      },
+      currentXlsxFileName,
+    );
   };
 
   if (isChecking) {
     return (
       <section className="p-6 md:p-8">
         <div className="rounded-2xl border border-[#e5e7eb] bg-white p-6 text-sm text-[#6b7280]">
-          Loading history...
+          Loading analytics report...
         </div>
       </section>
     );
@@ -422,8 +427,9 @@ export default function AdminHistoryPage() {
 
   return (
     <section className="p-6 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-5">
-        <section className="rounded-2xl border border-[#e5e7eb] bg-white p-4 shadow-sm md:p-5">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <section className="relative overflow-hidden rounded-[28px] border border-[#d5e2f1] bg-[linear-gradient(135deg,#f9fcff_0%,#f1f7ff_48%,#edf5ff_100%)] p-4 shadow-[0_18px_40px_rgba(15,23,42,0.08)] md:p-5">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18),transparent_70%)]" />
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <label className="relative block min-w-0 flex-1 lg:max-w-sm">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#6b7280]">
@@ -436,13 +442,13 @@ export default function AdminHistoryPage() {
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search status or date..."
-                className="w-full rounded-xl border border-[#e5e7eb] bg-[#f8fafc] py-2.5 pl-9 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#cde8d5] focus:bg-white"
+                placeholder="Search status, water level, or date..."
+                className="w-full rounded-xl border border-[#d0dceb] bg-white py-2.5 pl-9 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#9db0c8] shadow-sm focus:border-[#9bc2e8]"
               />
             </label>
 
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <label className="flex items-center gap-2 rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5 text-[#374151]">
+              <label className="flex items-center gap-2 rounded-xl border border-[#d0dceb] bg-white px-3 py-2.5 text-[#374151] shadow-sm">
                 <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#6b7280]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                   <rect x="3" y="4" width="18" height="18" rx="2" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16 2v4M8 2v4M3 10h18" />
@@ -462,7 +468,7 @@ export default function AdminHistoryPage() {
               </label>
 
               {dateFilter === "date" ? (
-                <label className="flex items-center gap-2 rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5 text-[#374151]">
+                <label className="flex items-center gap-2 rounded-xl border border-[#d0dceb] bg-white px-3 py-2.5 text-[#374151] shadow-sm">
                   <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#6b7280]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                     <rect x="3" y="4" width="18" height="18" rx="2" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16 2v4M8 2v4M3 10h18" />
@@ -477,11 +483,11 @@ export default function AdminHistoryPage() {
                 </label>
               ) : null}
 
-              <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2.5 text-xs text-[#6b7280]">
+              <div className="rounded-xl border border-[#d0dceb] bg-white px-3 py-2.5 text-xs text-[#59779b] shadow-sm">
                 Range: <span className="font-medium text-[#374151]">{currentDateRangeLabel}</span>
               </div>
 
-              <span className="px-1 text-[#6b7280]">Filter Status:</span>
+              <span className="px-1 text-[#5f7ca3]">Status:</span>
 
               {(["all", "normal", "critical", "evacuation", "spilling"] as const).map((filter) => {
                 const isActive = statusFilter === filter;
@@ -497,12 +503,12 @@ export default function AdminHistoryPage() {
                     key={filter}
                     type="button"
                     onClick={() => setStatusFilter(filter)}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition shadow-sm ${
                       isActive
                         ? filter === "all"
                           ? "border-[#bbf7d0] bg-[#ecfdf3] text-[#16a34a]"
                           : ALERT_LEVELS[filter].activeFilterClass
-                        : "border-[#e5e7eb] bg-white text-[#6b7280] hover:border-[#d1d5db]"
+                        : "border-[#d0dceb] bg-white text-[#5d7390] hover:border-[#9bc2e8]"
                     }`}
                   >
                     {label}
@@ -513,29 +519,50 @@ export default function AdminHistoryPage() {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
+        <section className="overflow-hidden rounded-[30px] border border-[#d8e5f3] bg-white shadow-[0_24px_55px_rgba(15,23,42,0.12)]">
+          <div className="relative border-b border-[#d9e5f2] bg-[linear-gradient(180deg,#f8fbff_0%,#eff6ff_100%)] px-5 py-5 md:px-6">
+            <div className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(30,64,175,0.16),transparent_68%)]" />
+            <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#5b7ea9]">Analytics Table</p>
+                <h2 className="mt-1 text-2xl font-semibold text-[#0f2847]">Water Level Records</h2>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadXlsx()}
+                  disabled={filteredRecords.length === 0}
+                  className="rounded-xl bg-[#123b63] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0f2f50] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Download Report
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-left text-sm">
-              <thead className="border-b border-[#e5e7eb] bg-[#fbfbfc] text-[#374151]">
+            <table className="w-full min-w-[980px] text-left text-sm">
+              <thead className="bg-[#123b63] text-white">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Date</th>
-                  <th className="px-4 py-3 font-semibold">Time</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold">Level</th>
-                  <th className="px-4 py-3 font-semibold">Description</th>
+                  <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-[0.16em]">Date</th>
+                  <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-[0.16em]">Time</th>
+                  <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-[0.16em]">Status</th>
+                  <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-[0.16em]">Water Level (m)</th>
+                  <th className="px-4 py-4 text-[11px] font-bold uppercase tracking-[0.16em]">Description</th>
                 </tr>
               </thead>
-              <tbody className="text-[#4b5563]">
+              <tbody className="text-[#334155]">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-[#6b7280]">
-                      Loading history records...
+                    <td colSpan={5} className="px-4 py-8 text-[#6b7280]">
+                      Loading analytics records...
                     </td>
                   </tr>
                 ) : pagedRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-[#6b7280]">
-                      {pageError ?? "No history records matched the current filters."}
+                    <td colSpan={5} className="px-4 py-8 text-[#6b7280]">
+                      {pageError ?? "No analytics records matched the current filters."}
                     </td>
                   </tr>
                 ) : (
@@ -543,16 +570,16 @@ export default function AdminHistoryPage() {
                     const config = ALERT_LEVELS[entry.alertLevel];
 
                     return (
-                      <tr key={entry.id} className="border-b border-[#eef1f4] last:border-b-0">
-                        <td className="px-4 py-4 text-[#6b7280] whitespace-nowrap">{formatHistoryDate(entry)}</td>
-                        <td className="px-4 py-4 text-[#6b7280] whitespace-nowrap">{formatHistoryTime(entry)}</td>
+                      <tr key={entry.id} className="border-b border-[#e9f0f7] transition odd:bg-[#fbfdff] hover:bg-[#edf5ff] last:border-b-0">
+                        <td className="px-4 py-4 whitespace-nowrap text-[#475569]">{formatHistoryDate(entry)}</td>
+                        <td className="px-4 py-4 whitespace-nowrap text-[#475569]">{formatHistoryTime(entry)}</td>
                         <td className="px-4 py-4">
-                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${config.chipClass}`}>
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium shadow-sm ${config.chipClass}`}>
                             {entry.statusLabel}
                           </span>
                         </td>
-                        <td className="px-4 py-4 font-semibold text-[#1f2937]">{entry.rangeLabel}</td>
-                        <td className="px-4 py-4 text-[#6b7280]">{entry.description}</td>
+                        <td className="px-4 py-4 font-semibold text-[#123b63]">{entry.waterLevel.toFixed(2)}</td>
+                        <td className="px-4 py-4 leading-6 text-[#475569]">{entry.description}</td>
                       </tr>
                     );
                   })
@@ -561,16 +588,8 @@ export default function AdminHistoryPage() {
             </table>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-[#e5e7eb] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-t border-[#d9e5f2] bg-[#f8fbff] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={handleDownloadCsv}
-                disabled={filteredRecords.length === 0}
-                className="rounded-lg bg-[#59b854] px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Download CSV
-              </button>
               <p className="text-xs text-[#6b7280]">
                 Showing {showingStart} to {showingEnd} of {filteredRecords.length} entries
               </p>
@@ -581,7 +600,7 @@ export default function AdminHistoryPage() {
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 disabled={safePage === 1}
-                className="rounded-lg border border-[#e5e7eb] px-3 py-1.5 text-sm text-[#6b7280] disabled:opacity-40"
+                className="rounded-lg border border-[#d0dceb] bg-white px-3 py-1.5 text-sm text-[#52667b] transition hover:bg-[#f1f7ff] disabled:opacity-40"
               >
                 Prev
               </button>
@@ -590,10 +609,10 @@ export default function AdminHistoryPage() {
                   key={page}
                   type="button"
                   onClick={() => setCurrentPage(page)}
-                  className={`h-8 w-8 rounded-full border text-sm ${
+                  className={`h-8 w-8 rounded-full border text-sm transition ${
                     page === safePage
-                      ? "border-[#86d57e] bg-[#f0fdf4] text-[#16a34a]"
-                      : "border-[#e5e7eb] text-[#6b7280]"
+                      ? "border-[#86d57e] bg-[#f0fdf4] text-[#16a34a] shadow-sm"
+                      : "border-[#d0dceb] bg-white text-[#52667b] hover:bg-[#f1f7ff]"
                   }`}
                 >
                   {page}
@@ -603,13 +622,16 @@ export default function AdminHistoryPage() {
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                 disabled={safePage === totalPages}
-                className="rounded-lg border border-[#e5e7eb] px-3 py-1.5 text-sm text-[#374151] disabled:opacity-40"
+                className="rounded-lg border border-[#d0dceb] bg-white px-3 py-1.5 text-sm text-[#52667b] transition hover:bg-[#f1f7ff] disabled:opacity-40"
               >
                 Next
               </button>
             </div>
           </div>
         </section>
+
+        <ActivityLogSection />
+
       </div>
     </section>
   );

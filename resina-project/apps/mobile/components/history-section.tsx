@@ -45,7 +45,7 @@ const historyFilterOptions: Array<{ key: "all" | HistoryAlertLevel; label: strin
   { key: "all", label: "All" },
   { key: "normal", label: "Normal" },
   { key: "critical", label: "Critical" },
-  { key: "evacuation", label: "Evacuate" },
+  { key: "evacuation", label: "Evacuation" },
   { key: "spilling", label: "Spilling" },
 ];
 
@@ -164,8 +164,8 @@ export function HistorySection({
                     <Text style={[styles.historyStatusBadgeText, { color: config.badgeText }]}>{entry.statusLabel}</Text>
                   </View>
                 </View>
-                <Text style={styles.historyRangeText}>{entry.rangeLabel}</Text>
-                <Text style={styles.historyDescriptionLabel}>Deskripsyon</Text>
+                <Text style={styles.historyRangeText}>Water level: {entry.waterLevel.toFixed(2)}m</Text>
+                <Text style={styles.historyDescriptionLabel}>Description</Text>
                 <Text style={styles.historyDescriptionText}>{entry.description}</Text>
               </View>
             );

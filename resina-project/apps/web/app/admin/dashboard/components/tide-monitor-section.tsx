@@ -55,6 +55,24 @@ function formatManilaDate(value: string): string {
   });
 }
 
+function formatPredictionDate(value: string | null): string {
+  if (!value) {
+    return "No tide data yet";
+  }
+
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return `Prediction Date: ${value}`;
+  }
+
+  return `Prediction Date: ${parsed.toLocaleDateString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  })}`;
+}
+
 function formatRemainingUntil(value: string): string {
   const target = new Date(value).getTime();
   if (Number.isNaN(target)) {
@@ -110,16 +128,15 @@ export function TideMonitorSection({
   const nextLowRemainingLabel = nextLow ? formatRemainingUntil(nextLow.time) : "No upcoming low tide";
 
   return (
-    <section className="mt-6 overflow-hidden rounded-[28px] border border-sky-100 bg-gradient-to-br from-[#f5fbff] via-white to-[#eef6ff] p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)] md:p-6">
+    <section className="relative overflow-hidden rounded-[30px] border border-[#d7e4f2] bg-[#f8fbff] p-5 shadow-[0_20px_60px_rgba(15,23,42,0.12)] md:p-6">
+      <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(56,189,248,0.2),transparent_65%)]" />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#5f7aa1]">Tide Monitor</p>
-          <h3 className="mt-1 text-2xl font-black tracking-tight text-[#102f57] md:text-[28px]">Sta. Rita Bridge tide outlook</h3>
-          <p className="mt-1 text-sm text-[#607896]">Current tide level and upcoming high/low tide schedule.</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#4f709e]">Tide Monitor</p>
         </div>
 
-        <span className="inline-flex w-fit items-center rounded-full border border-sky-100 bg-white/85 px-3 py-1.5 text-xs font-semibold text-[#27518f] shadow-sm">
-          {predictionDate ? `Prediction Date: ${predictionDate}` : "No tide data yet"}
+        <span className="inline-flex w-fit items-center rounded-full border border-[#b7d8ef] bg-white/90 px-3 py-1.5 text-xs font-semibold text-[#27518f] shadow-sm">
+          {formatPredictionDate(predictionDate)}
         </span>
       </div>
 
@@ -131,28 +148,40 @@ export function TideMonitorSection({
         <div className="mt-5 rounded-2xl border border-sky-100 bg-white/80 p-5 text-sm text-[#5f6f85] shadow-sm">No tide data available yet.</div>
       ) : (
         <div className="mt-5 grid grid-cols-1 gap-4">
-          <div className="rounded-2xl bg-[#eef5ff] p-5 shadow-sm">
+          <div className="rounded-3xl border border-[#d5e4f2] bg-[linear-gradient(135deg,#e9f3ff_0%,#dceeff_100%)] p-5 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5d7292]">Current Tide</p>
-            <p className="mt-2 text-4xl font-black leading-none text-[#12335e]">{currentTideLabel}</p>
-            <p className="mt-1 text-sm font-semibold text-[#2d5fa3]">{trendLabel}</p>
+            <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+              <p className="text-4xl font-black leading-none text-[#12335e] md:text-[48px]">{currentTideLabel}</p>
+              <span className="rounded-full border border-[#c1d6ee] bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#34639c]">
+                {trendLabel}
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="flex items-center gap-4 rounded-2xl border border-[#dbe5f3] bg-white/90 p-5 shadow-sm">
-              <Image src="/Tides/high-tide.png" alt="High tide" width={74} height={74} className="h-[74px] w-[74px] object-contain" />
-              <div className="text-right">
-                <p className="text-[30px] leading-none text-[#1f3657]">Next high tide is at</p>
-                <p className="mt-2 text-[44px] font-black leading-none text-[#1e63a8]">{nextHighLabel}</p>
+            <div className="rounded-3xl border border-[#d9e5f2] bg-white/95 p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-[#edf6ff] p-2.5">
+                  <Image src="/Tides/high-tide.png" alt="High tide" width={64} height={64} className="h-[64px] w-[64px] object-contain" />
+                </div>
+                <p className="text-[22px] font-semibold leading-tight text-[#1f3657] md:text-[24px]">Next high tide</p>
+              </div>
+              <div className="mt-3 text-right">
+                <p className="text-[44px] font-black leading-none text-[#1e63a8] md:text-[50px]">{nextHighLabel}</p>
                 <p className="mt-2 text-sm font-semibold text-[#1f3657]">{nextHighDateLabel}</p>
                 <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[#5f7898]">{nextHighRemainingLabel}</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-4 rounded-2xl border border-[#dbe5f3] bg-white/90 p-5 shadow-sm">
-              <Image src="/Tides/low-tide.png" alt="Low tide" width={74} height={74} className="h-[74px] w-[74px] object-contain" />
-              <div className="text-right">
-                <p className="text-[30px] leading-none text-[#1f3657]">Next low tide is at</p>
-                <p className="mt-2 text-[44px] font-black leading-none text-[#1e63a8]">{nextLowLabel}</p>
+            <div className="rounded-3xl border border-[#d9e5f2] bg-white/95 p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-[#edf6ff] p-2.5">
+                  <Image src="/Tides/low-tide.png" alt="Low tide" width={64} height={64} className="h-[64px] w-[64px] object-contain" />
+                </div>
+                <p className="text-[22px] font-semibold leading-tight text-[#1f3657] md:text-[24px]">Next low tide</p>
+              </div>
+              <div className="mt-3 text-right">
+                <p className="text-[44px] font-black leading-none text-[#1e63a8] md:text-[50px]">{nextLowLabel}</p>
                 <p className="mt-2 text-sm font-semibold text-[#1f3657]">{nextLowDateLabel}</p>
                 <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[#5f7898]">{nextLowRemainingLabel}</p>
               </div>

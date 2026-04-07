@@ -18,8 +18,8 @@ const HEADER_CONTENT: Record<AdminSidebarPage, { eyebrow: string; title: string 
     title: "Announcements",
   },
   history: {
-    eyebrow: "History",
-    title: "History Records",
+    eyebrow: "Analytics",
+    title: "Analytics Report",
   },
   profile: {
     eyebrow: "Profile",

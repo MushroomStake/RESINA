@@ -104,10 +104,7 @@ export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCar
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <View style={styles.heroPanel}>
-          <Text style={styles.kicker}>Tide Monitor</Text>
-          <Text style={styles.heroTitle}>Sta. Rita Bridge tide outlook</Text>
-          <Text style={styles.heroSubtitle}>Loading tide data...</Text>
+        <View style={styles.loadingPanel}>
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color="#ffffff" />
             <Text style={styles.loadingText}>Fetching tide records</Text>
@@ -120,9 +117,7 @@ export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCar
   if (error) {
     return (
       <View style={styles.container}>
-        <View style={styles.heroPanel}>
-          <Text style={styles.kicker}>Tide Monitor</Text>
-          <Text style={styles.heroTitle}>Sta. Rita Bridge tide outlook</Text>
+        <View style={styles.errorPanel}>
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>{error}</Text>
           </View>
@@ -134,10 +129,8 @@ export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCar
   if (!hasAnyData) {
     return (
       <View style={styles.container}>
-        <View style={styles.heroPanel}>
-          <Text style={styles.kicker}>Tide Monitor</Text>
-          <Text style={styles.heroTitle}>Sta. Rita Bridge tide outlook</Text>
-          <Text style={styles.heroSubtitle}>No tide data available yet.</Text>
+        <View style={styles.emptyPanel}>
+          <Text style={styles.emptyText}>No tide data available yet.</Text>
         </View>
       </View>
     );
@@ -145,25 +138,26 @@ export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCar
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.kicker}>Tide Monitor</Text>
-          <Text style={styles.heroTitle}>Sta. Rita Bridge tide outlook</Text>
-          <Text style={styles.heroSubtitle}>Current tide level and upcoming high/low tide schedule.</Text>
-        </View>
-      </View>
-
       <View style={styles.currentCard}>
-        <Text style={styles.currentLabel}>Current Tide</Text>
-        <Text style={styles.currentValue}>{currentTideLabel}</Text>
-        <Text style={styles.currentTrend}>{trendLabel}</Text>
+        <View style={styles.currentGradientBg}>
+          <View style={styles.currentIconBg}>
+            <Text style={styles.currentIcon}>{tideStatus?.state === "rising" ? "↑" : "↓"}</Text>
+          </View>
+          <View style={styles.currentContent}>
+            <Text style={styles.currentLabel}>Current Water Level</Text>
+            <Text style={styles.currentValue}>{currentTideLabel}</Text>
+            <Text style={styles.currentTrend}>{trendLabel}</Text>
+          </View>
+        </View>
       </View>
 
       <View style={styles.nextGrid}>
         <View style={styles.nextCard}>
-          <Image source={require("../assets/Tides/high-tide.png")} style={styles.tideImage} resizeMode="contain" />
-          <View style={styles.nextTextWrap}>
-            <Text style={styles.nextTitle}>Next high tide is at</Text>
+          <View style={styles.nextIconWrapper}>
+            <Image source={require("../assets/Tides/high-tide.png")} style={styles.tideImage} resizeMode="contain" />
+          </View>
+          <View style={styles.nextContent}>
+            <Text style={styles.nextSmallText}>Next High Tide</Text>
             <Text style={styles.nextTime}>{nextHighLabel}</Text>
             <Text style={styles.nextDate}>{nextHighDateLabel}</Text>
             <Text style={styles.nextRemaining}>{nextHighRemainingLabel}</Text>
@@ -171,9 +165,11 @@ export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCar
         </View>
 
         <View style={styles.nextCard}>
-          <Image source={require("../assets/Tides/low-tide.png")} style={styles.tideImage} resizeMode="contain" />
-          <View style={styles.nextTextWrap}>
-            <Text style={styles.nextTitle}>Next low tide is at</Text>
+          <View style={styles.nextIconWrapper}>
+            <Image source={require("../assets/Tides/low-tide.png")} style={styles.tideImage} resizeMode="contain" />
+          </View>
+          <View style={styles.nextContent}>
+            <Text style={styles.nextSmallText}>Next Low Tide</Text>
             <Text style={styles.nextTime}>{nextLowLabel}</Text>
             <Text style={styles.nextDate}>{nextLowDateLabel}</Text>
             <Text style={styles.nextRemaining}>{nextLowRemainingLabel}</Text>
@@ -186,69 +182,67 @@ export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCar
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#f5fbff",
-    borderRadius: 18,
-    padding: 14,
     marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: "#2563eb",
-  },
-  headerRow: {
-    marginBottom: 12,
-  },
-  kicker: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
-    color: "#5f7aa1",
-  },
-  heroTitle: {
-    marginTop: 4,
-    fontSize: 20,
-    fontWeight: "900",
-    lineHeight: 24,
-    color: "#102f57",
-  },
-  heroSubtitle: {
-    marginTop: 4,
-    fontSize: 12,
-    lineHeight: 18,
-    color: "#607896",
-  },
-  heroPanel: {
-    borderRadius: 24,
-    backgroundColor: "#0d2c52",
-    padding: 16,
-    overflow: "hidden",
+    gap: 10,
   },
   currentCard: {
     borderRadius: 20,
-    backgroundColor: "#eef5ff",
-    padding: 16,
+    overflow: "hidden",
+    elevation: 4,
+    shadowColor: "#1e3a5f",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+  },
+  currentGradientBg: {
+    paddingTop: 20,
+    paddingBottom: 20,
+    paddingLeft: 16,
+    paddingRight: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#1e5a96",
+  },
+  currentIconBg: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  currentIcon: {
+    fontSize: 28,
+    color: "#ffffff",
+  },
+  currentContent: {
+    flex: 1,
   },
   currentLabel: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
     textTransform: "uppercase",
-    letterSpacing: 1,
-    color: "#5d7292",
+    letterSpacing: 0.8,
+    color: "rgba(255, 255, 255, 0.7)",
   },
   currentValue: {
-    marginTop: 8,
-    fontSize: 38,
-    lineHeight: 42,
+    marginTop: 6,
+    fontSize: 36,
+    lineHeight: 40,
     fontWeight: "900",
-    color: "#12335e",
+    color: "#ffffff",
   },
   currentTrend: {
     marginTop: 4,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
-    color: "#2d5fa3",
+    color: "rgba(255, 255, 255, 0.85)",
   },
   nextGrid: {
-    marginTop: 12,
+    marginTop: 4,
     gap: 10,
   },
   nextCard: {
@@ -256,67 +250,120 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#dbe5f3",
-    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1.5,
+    borderColor: "#e0e8f5",
+    backgroundColor: "#ffffff",
     padding: 14,
+    elevation: 2,
+    shadowColor: "#1e3a5f",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  nextIconWrapper: {
+    width: 62,
+    height: 62,
+    borderRadius: 14,
+    backgroundColor: "#f0f6ff",
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
   },
   tideImage: {
-    width: 60,
-    height: 60,
+    width: 48,
+    height: 48,
   },
-  nextTextWrap: {
+  nextContent: {
     flex: 1,
-    alignItems: "flex-end",
+    justifyContent: "center",
   },
-  nextTitle: {
-    fontSize: 18,
-    lineHeight: 22,
-    color: "#1f3657",
+  nextSmallText: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    color: "#5d7292",
   },
   nextTime: {
-    marginTop: 6,
-    fontSize: 34,
-    lineHeight: 38,
+    marginTop: 5,
+    fontSize: 24,
+    lineHeight: 28,
     fontWeight: "900",
-    color: "#1e63a8",
+    color: "#1e5a96",
   },
   nextDate: {
-    marginTop: 6,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#1f3657",
-  },
-  nextRemaining: {
     marginTop: 3,
     fontSize: 11,
     fontWeight: "700",
+    color: "#3a5077",
+  },
+  nextRemaining: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "600",
     textTransform: "uppercase",
-    letterSpacing: 0.6,
-    color: "#5f7898",
+    letterSpacing: 0.4,
+    color: "#7a8fa8",
+  },
+  loadingPanel: {
+    borderRadius: 20,
+    backgroundColor: "#1e5a96",
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    elevation: 4,
+    shadowColor: "#1e3a5f",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
   },
   loadingRow: {
-    marginTop: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
   loadingText: {
-    color: "#eaf3ff",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  errorBox: {
-    marginTop: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(255,255,255,0.1)",
-    padding: 12,
-  },
-  errorText: {
     color: "#ffffff",
     fontSize: 13,
     fontWeight: "600",
+  },
+  errorPanel: {
+    borderRadius: 20,
+    backgroundColor: "#fee2e2",
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    elevation: 4,
+    shadowColor: "#7f1d1d",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  errorBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#fca5a5",
+    backgroundColor: "#fef2f2",
+    padding: 12,
+  },
+  errorText: {
+    color: "#991b1b",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  emptyPanel: {
+    borderRadius: 20,
+    backgroundColor: "#f0f6ff",
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    elevation: 2,
+    shadowColor: "#1e3a5f",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+  },
+  emptyText: {
+    color: "#5d7292",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
   },
 });

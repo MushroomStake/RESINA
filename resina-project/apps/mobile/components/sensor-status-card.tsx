@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
 type SensorStatusCardProps = {
   stationLabel: string;
@@ -14,6 +15,18 @@ type SensorStatusCardProps = {
 
 const MAX_METER = 5;
 const VISUAL_MAX_METER = 4.4;
+const NORMAL_MIN = 1.5;
+const CRITICAL_MIN = 2.5;
+const EVACUATION_MIN = 3.0;
+const SPILLING_MIN = 4.0;
+
+const BAND_FLEX = {
+  low: Math.max(1, Math.round(NORMAL_MIN * 100)),
+  normal: Math.max(1, Math.round((CRITICAL_MIN - NORMAL_MIN) * 100)),
+  critical: Math.max(1, Math.round((EVACUATION_MIN - CRITICAL_MIN) * 100)),
+  evacuation: Math.max(1, Math.round((SPILLING_MIN - EVACUATION_MIN) * 100)),
+  spilling: Math.max(1, Math.round((VISUAL_MAX_METER - SPILLING_MIN) * 100)),
+};
 
 type LevelVisual = {
   title: string;
@@ -30,7 +43,7 @@ function resolveLevelVisual(level: number | null): LevelVisual {
     };
   }
 
-  if (level >= 4) {
+  if (level >= SPILLING_MIN) {
     return {
       title: "Spilling Level",
       badge: "Alert Level 4",
@@ -38,7 +51,7 @@ function resolveLevelVisual(level: number | null): LevelVisual {
     };
   }
 
-  if (level >= 3) {
+  if (level >= EVACUATION_MIN) {
     return {
       title: "Evacuate Level",
       badge: "Alert Level 3",
@@ -46,7 +59,7 @@ function resolveLevelVisual(level: number | null): LevelVisual {
     };
   }
 
-  if (level >= 2.5) {
+  if (level >= CRITICAL_MIN) {
     return {
       title: "Critical Level",
       badge: "Alert Level 2",
@@ -69,6 +82,26 @@ function normalizeUpdatedLabel(label: string): string {
   return label.replace(/^UPDATED:\s*/i, "");
 }
 
+function resolveSensorGradientColors(level: number | null, fallbackColor: string): readonly [string, string, string] {
+  if (level === null) {
+    return [fallbackColor, fallbackColor, fallbackColor];
+  }
+
+  if (level >= SPILLING_MIN) {
+    return ["#A82A2A", "#8f2323", "#6f1f1f"];
+  }
+
+  if (level >= EVACUATION_MIN) {
+    return ["#FF7E1C", "#e96d1b", "#c9581b"];
+  }
+
+  if (level >= CRITICAL_MIN) {
+    return ["#F7C520", "#e3b31d", "#c79a12"];
+  }
+
+  return ["#4CAF50", "#3f9d57", "#2f8a5f"];
+}
+
 export function SensorStatusCard({
   stationLabel,
   updatedLabel,
@@ -83,6 +116,7 @@ export function SensorStatusCard({
   const normalizedLevel = safeLevel === null ? 0 : clamp(safeLevel, 0, VISUAL_MAX_METER) / VISUAL_MAX_METER;
   const meterText = safeLevel === null ? "--.--m" : `${safeLevel.toFixed(2)}m`;
   const levelVisual = resolveLevelVisual(safeLevel);
+  const sensorGradientColors = resolveSensorGradientColors(safeLevel, backgroundColor);
   const displayTitle = safeLevel === null ? alertTitle : levelVisual.title;
   const displayBadge = safeLevel === null ? alertBadge : levelVisual.badge;
   const trendRef = useRef<number | null>(safeLevel);
@@ -172,7 +206,7 @@ export function SensorStatusCard({
   });
 
   return (
-    <View style={[styles.sensorCard, { backgroundColor }]}>
+    <LinearGradient colors={sensorGradientColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.sensorCard}>
       <View style={styles.cardBackdropA} />
       <View style={styles.cardBackdropB} />
       <View style={styles.sensorMetaRow}>
@@ -196,11 +230,11 @@ export function SensorStatusCard({
             <Text style={styles.levelPointerText}>{safeLevel === null ? "--" : safeLevel.toFixed(2)}</Text>
           </Animated.View>
           <View style={styles.alertBandWrap}>
-            <View style={[styles.alertBand, styles.alertBandSpilling]} />
-            <View style={[styles.alertBand, styles.alertBandEvacuate]} />
-            <View style={[styles.alertBand, styles.alertBandCritical]} />
-            <View style={[styles.alertBand, styles.alertBandNormal]} />
-            <View style={[styles.alertBand, styles.alertBandLow]} />
+            <View style={[styles.alertBand, styles.alertBandSpilling, { flex: BAND_FLEX.spilling }]} />
+            <View style={[styles.alertBand, styles.alertBandEvacuate, { flex: BAND_FLEX.evacuation }]} />
+            <View style={[styles.alertBand, styles.alertBandCritical, { flex: BAND_FLEX.critical }]} />
+            <View style={[styles.alertBand, styles.alertBandNormal, { flex: BAND_FLEX.normal }]} />
+            <View style={[styles.alertBand, styles.alertBandLow, { flex: BAND_FLEX.low }]} />
           </View>
         </View>
 
@@ -235,7 +269,7 @@ export function SensorStatusCard({
         <Text style={styles.sensorDescriptionLabel}>DESCRIPTION</Text>
         <Text style={styles.sensorDescriptionText}>{alertDescription}</Text>
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -379,23 +413,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   alertBandNormal: {
-    flex: 19,
     backgroundColor: "#2cb47a",
   },
   alertBandCritical: {
-    flex: 8,
     backgroundColor: "#f3bf3a",
   },
   alertBandEvacuate: {
-    flex: 16,
     backgroundColor: "#f08d2a",
   },
   alertBandSpilling: {
-    flex: 11,
     backgroundColor: "#d94545",
   },
   alertBandLow: {
-    flex: 20,
     backgroundColor: "#4b7da6",
   },
   tankWrap: {

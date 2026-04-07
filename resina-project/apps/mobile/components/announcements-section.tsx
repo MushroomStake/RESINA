@@ -32,9 +32,12 @@ type AnnouncementTone = {
 type AnnouncementsSectionProps = {
   announcements: AnnouncementItem[];
   isLoading: boolean;
+  isLoadingMore?: boolean;
+  canLoadMore?: boolean;
   filter: AnnouncementFilterKey;
   onChangeFilter: (nextFilter: AnnouncementFilterKey) => void;
   onOpenComments: (entry: AnnouncementItem) => void;
+  onLoadMore?: () => void;
   title?: string;
   subtitle?: string;
   emptyText?: string;
@@ -56,9 +59,12 @@ const filterOptions: Array<{ key: AnnouncementFilterKey; label: string; icon: ke
 export function AnnouncementsSection({
   announcements,
   isLoading,
+  isLoadingMore = false,
+  canLoadMore = false,
   filter,
   onChangeFilter,
   onOpenComments,
+  onLoadMore,
   title = "ANNOUNCEMENT",
   subtitle = "Official updates and advisories from Barangay Sta. Rita.",
   emptyText = "No announcements found for this filter.",
@@ -110,6 +116,12 @@ export function AnnouncementsSection({
           />
         );
       })}
+
+      {canLoadMore ? (
+        <Pressable style={styles.loadMoreBtn} onPress={onLoadMore} disabled={isLoadingMore}>
+          <Text style={styles.loadMoreText}>{isLoadingMore ? "Loading..." : "Load more announcements"}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -205,5 +217,20 @@ const styles = StyleSheet.create({
   },
   emptyTextLight: {
     color: "#3c516d",
+  },
+  loadMoreBtn: {
+    marginTop: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#d8dde4",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  loadMoreText: {
+    color: "#1f2937",
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

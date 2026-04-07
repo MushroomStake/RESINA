@@ -225,6 +225,15 @@ export default function AdminAnnouncementsPage() {
     return matchesSearch && matchesFilter;
   });
 
+  const warningCount = useMemo(
+    () => announcements.filter((entry) => entry.alert_level === "warning").length,
+    [announcements],
+  );
+  const emergencyCount = useMemo(
+    () => announcements.filter((entry) => entry.alert_level === "emergency").length,
+    [announcements],
+  );
+
   const handleSelectImages = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     if (!files.length) {
@@ -631,48 +640,47 @@ export default function AdminAnnouncementsPage() {
   return (
     <section className="p-6 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <section className="space-y-4 rounded-2xl border border-[#e5e7eb] bg-white p-5 shadow-sm md:p-6">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="rounded-2xl bg-[#f8fafc] px-5 py-4">
-              <div className="flex items-start gap-3">
-                <span className="rounded-full border border-[#dbe3ea] bg-white p-2 text-[#111827]">
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4" />
-                    <circle cx="12" cy="12" r="9" />
-                  </svg>
-                </span>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6b7280]">Published</p>
-                  <p className="mt-1 text-3xl font-bold leading-none text-[#111827]">{announcements.length}</p>
-                </div>
+        <section className="relative overflow-hidden rounded-[30px] border border-[#d7e4f2] bg-[#f8fbff] p-5 shadow-[0_20px_60px_rgba(15,23,42,0.12)] md:p-6">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18),transparent_65%)]" />
+          <div className="pointer-events-none absolute -left-24 -bottom-24 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgba(45,212,191,0.14),transparent_72%)]" />
+
+          <div className="relative z-10">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#4f709e]">Communications Hub</p>
+                <h2 className="mt-1 text-2xl font-black tracking-tight text-[#0f2847] md:text-[28px]">Admin announcements</h2>
+                <p className="mt-1 text-sm text-[#5f7ca3]">Publish advisories, manage comment threads, and keep residents informed.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(true)}
+                className="rounded-xl bg-[#2e9d5a] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#257a48]"
+              >
+                + Create New
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="rounded-2xl border border-[#d8e4f1] bg-white/85 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6b7280]">Published</p>
+                <p className="mt-2 text-3xl font-bold leading-none text-[#10253f]">{announcements.length}</p>
+              </div>
+              <div className="rounded-2xl border border-[#d8e4f1] bg-white/85 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6b7280]">Personnel</p>
+                <p className="mt-2 text-3xl font-bold leading-none text-[#10253f]">{personnelCount}</p>
+              </div>
+              <div className="rounded-2xl border border-[#d8e4f1] bg-white/85 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6b7280]">Warnings</p>
+                <p className="mt-2 text-3xl font-bold leading-none text-[#c2410c]">{warningCount}</p>
+              </div>
+              <div className="rounded-2xl border border-[#d8e4f1] bg-white/85 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6b7280]">Emergency</p>
+                <p className="mt-2 text-3xl font-bold leading-none text-[#be123c]">{emergencyCount}</p>
               </div>
             </div>
 
-            <div className="rounded-2xl bg-[#f8fafc] px-5 py-4">
-              <div className="flex items-start gap-3">
-                <span className="rounded-full border border-[#dbe3ea] bg-white p-2 text-[#111827]">
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                    <circle cx="10" cy="7" r="4" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M20 8v6m3-3h-6" />
-                  </svg>
-                </span>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6b7280]">Personnel</p>
-                  <p className="mt-1 text-3xl font-bold leading-none text-[#111827]">{personnelCount}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-[#111827]">Recent Communications</h2>
-              <p className="text-sm text-[#6b7280]">Manage posts, review comments, and keep accountability visible.</p>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label className="relative block min-w-[260px]">
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <label className="relative block min-w-[260px] flex-1">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#6b7280]">
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                     <circle cx="11" cy="11" r="7" />
@@ -684,11 +692,11 @@ export default function AdminAnnouncementsPage() {
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search announcements..."
-                  className="w-full rounded-xl border border-[#e5e7eb] bg-[#f8fafc] py-2.5 pl-9 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#cde8d5] focus:bg-white"
+                  className="w-full rounded-xl border border-[#d8e4f1] bg-white py-2.5 pl-9 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#9bc2e8]"
                 />
               </label>
 
-              <label className="flex items-center gap-2 rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm text-[#374151]">
+              <label className="flex items-center gap-2 rounded-xl border border-[#d8e4f1] bg-white px-3 py-2.5 text-sm text-[#374151]">
                 <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#6b7280]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16l-6 7v5l-4 2v-7L4 5z" />
                 </svg>
@@ -698,25 +706,17 @@ export default function AdminAnnouncementsPage() {
                   aria-label="Filter announcements by alert level"
                   className="bg-transparent outline-none"
                 >
-                  <option value="all">Filter</option>
+                  <option value="all">All Alerts</option>
                   <option value="normal">Normal</option>
                   <option value="warning">Warning</option>
                   <option value="emergency">Emergency</option>
                 </select>
               </label>
-
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(true)}
-                className="rounded-xl bg-[#2e9d5a] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#257a48]"
-              >
-                + Create New
-              </button>
             </div>
           </div>
         </section>
 
-        <section className="rounded-2xl border border-[#e5e7eb] bg-white p-6">
+        <section className="overflow-hidden rounded-[30px] border border-[#d7e4f2] bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.12)] md:p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-[#111827]">Published Announcements</h2>
             <p className="text-sm text-[#6b7280]">{filteredAnnouncements.length} shown</p>
@@ -727,9 +727,9 @@ export default function AdminAnnouncementsPage() {
           ) : filteredAnnouncements.length === 0 ? (
             <p className="text-sm text-[#6b7280]">No announcements match the current search or filter.</p>
           ) : (
-            <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+            <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
               {filteredAnnouncements.map((entry) => (
-                <article key={entry.id} className="flex h-full flex-col overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
+                <article key={entry.id} className="group flex h-full flex-col overflow-hidden rounded-3xl border border-[#d9e5f2] bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-[0_14px_40px_rgba(15,23,42,0.1)]">
                   {/* Featured image or gallery */}
                   {(entry.announcement_media ?? []).length > 0 ? (
                     <div className="h-52 bg-[#f1f5f9]">
@@ -829,6 +829,13 @@ export default function AdminAnnouncementsPage() {
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${alertPillClass(entry.alert_level)}`}>
+                        {entry.alert_level}
+                      </span>
+                      <span className="text-xs text-[#748299]">By {entry.posted_by_name}</span>
                     </div>
 
                     {/* Description */}

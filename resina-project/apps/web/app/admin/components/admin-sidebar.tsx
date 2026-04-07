@@ -51,10 +51,10 @@ function AdminSidebar({ activePage }: AdminSidebarProps) {
           </Link>
         )}
         {activePage === "history" ? (
-          <span className={activeClass}>History</span>
+          <span className={activeClass}>Analytics Report</span>
         ) : (
           <Link className={navClass} href="/admin/history">
-            History
+            Analytics Report
           </Link>
         )}
 
