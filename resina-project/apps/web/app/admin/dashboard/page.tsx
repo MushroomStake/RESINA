@@ -630,9 +630,9 @@ export default function AdminDashboardPage() {
       }
 
       const prediction = predictionData as TidePredictionRow;
-      const tideData = Array.isArray(prediction.tide_data)
+      const tideData: TideExtreme[] = Array.isArray(prediction.tide_data)
         ? prediction.tide_data
-            .map((entry) => ({
+            .map((entry): TideExtreme => ({
               type: entry?.type === "high" ? "high" : "low",
               time: typeof entry?.time === "string" ? entry.time : "",
               height: Number(entry?.height),
