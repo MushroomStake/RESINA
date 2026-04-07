@@ -12,6 +12,9 @@ type HeatSeverity = "normal" | "caution" | "extreme-caution" | "danger" | "extre
 type ColorWarning = "No Warning" | "Yellow Warning" | "Orange Warning" | "Red Warning";
 
 const DRY_NORMAL_ICON_PATH = "/weather/dry-season/sun Normal.png";
+const DRY_SUNRISE_ICON_PATH = "/weather/dry-season/sunrise.png";
+const DRY_SUNSET_ICON_PATH = "/weather/dry-season/sunset.png";
+const SUNRISE_SUNSET_WINDOW_MS = 30 * 60 * 1000;
 const WEATHER_ICON_MAP: Record<string, string> = {
   Normal: DRY_NORMAL_ICON_PATH,
   Caution: "/weather/dry-season/sun Caution.png",
@@ -147,6 +150,62 @@ function buildAutoDescription(intensity: string, description: string): string {
   };
 
   return advisories[intensity] ?? `${base}. Stay updated with official barangay advisories.`;
+}
+
+function resolveDrySeasonNightIcon(main: string, description: string): string {
+  const lowerMain = main.toLowerCase();
+  const lowerDescription = description.toLowerCase();
+
+  if (lowerMain.includes("clear")) {
+    return "/weather/dry-season/clear sky moon.png";
+  }
+
+  if (lowerMain.includes("cloud") || lowerDescription.includes("cloud")) {
+    return "/weather/dry-season/few clouds moon.png";
+  }
+
+  if (
+    lowerMain.includes("mist") ||
+    lowerMain.includes("fog") ||
+    lowerMain.includes("haze") ||
+    lowerDescription.includes("mist") ||
+    lowerDescription.includes("fog") ||
+    lowerDescription.includes("haze")
+  ) {
+    return "/weather/dry-season/mist moon.png";
+  }
+
+  return "/weather/dry-season/few clouds moon.png";
+}
+
+function resolveDrySeasonPhaseIcon(
+  main: string,
+  description: string,
+  iconCode: string,
+  sunriseUnixSeconds?: number,
+  sunsetUnixSeconds?: number,
+): string {
+  if (typeof sunriseUnixSeconds !== "number" || typeof sunsetUnixSeconds !== "number") {
+    return iconCode.endsWith("n") ? resolveDrySeasonNightIcon(main, description) : DRY_NORMAL_ICON_PATH;
+  }
+
+  const now = Date.now();
+  const sunriseMs = sunriseUnixSeconds * 1000;
+  const sunsetMs = sunsetUnixSeconds * 1000;
+
+  if (Math.abs(now - sunriseMs) <= SUNRISE_SUNSET_WINDOW_MS) {
+    return DRY_SUNRISE_ICON_PATH;
+  }
+
+  if (Math.abs(now - sunsetMs) <= SUNRISE_SUNSET_WINDOW_MS) {
+    return DRY_SUNSET_ICON_PATH;
+  }
+
+  if (now < sunriseMs || now > sunsetMs) {
+    return resolveDrySeasonNightIcon(main, description);
+  }
+
+  return DRY_NORMAL_ICON_PATH;
 }
 
 function normalizeText(value: string): string {
@@ -292,20 +351,31 @@ async function main() {
 
   const owmData = (await response.json()) as {
     main?: { temp?: number; humidity?: number };
-    weather?: Array<{ main?: string; description?: string }>;
+    weather?: Array<{ main?: string; description?: string; icon?: string }>;
+    sys?: { sunrise?: number; sunset?: number };
   };
 
   const temperature = Math.round(owmData.main?.temp ?? 25);
   const humidity = Math.round(owmData.main?.humidity ?? 60);
   const weatherMain = owmData.weather?.[0]?.main ?? "Clear";
   const weatherDescription = owmData.weather?.[0]?.description ?? "";
+  const weatherIconCode = owmData.weather?.[0]?.icon ?? "01d";
 
   const wetSeverity = inferWetSeverity(weatherMain, weatherDescription);
   const heatIndex = computeHeatIndexC(temperature, humidity);
   const heatSeverity = resolveHeatSeverity(heatIndex);
   const intensity = resolveIntensityLabel(wetSeverity, heatSeverity);
   const colorCodedWarning = resolveColorCodedWarning(wetSeverity, heatSeverity);
-  const iconPath = WEATHER_ICON_MAP[intensity] ?? DRY_NORMAL_ICON_PATH;
+  const iconPath =
+    wetSeverity === "none"
+      ? resolveDrySeasonPhaseIcon(
+          weatherMain,
+          weatherDescription,
+          weatherIconCode,
+          owmData.sys?.sunrise,
+          owmData.sys?.sunset,
+        )
+      : WEATHER_ICON_MAP[intensity] ?? DRY_NORMAL_ICON_PATH;
   const manualDescription = buildAutoDescription(intensity, weatherDescription);
   const signalNo = await resolveSignalNoFromPagasa();
 
