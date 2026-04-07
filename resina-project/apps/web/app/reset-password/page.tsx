@@ -54,19 +54,17 @@ export default function ResetPasswordPage() {
     let isMounted = true;
 
     const primeRecoverySession = async () => {
-      if (!hasRecoveryIntent()) {
-        if (isMounted) {
-          setErrorMessage("Open this page using your password reset email link.");
-        }
-        return;
-      }
-
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
-      if (isMounted && session) {
-        setIsReady(true);
+      if (isMounted) {
+        if (session) {
+          setIsReady(true);
+          setErrorMessage(null);
+        } else if (!hasRecoveryIntent()) {
+          setErrorMessage("Open this page using your password reset email link.");
+        }
       }
     };
 
@@ -79,7 +77,7 @@ export default function ResetPasswordPage() {
         return;
       }
 
-      if (event === "PASSWORD_RECOVERY" || (hasRecoveryIntent() && Boolean(session))) {
+      if (event === "PASSWORD_RECOVERY" || Boolean(session)) {
         setIsReady(true);
         setErrorMessage(null);
       }
