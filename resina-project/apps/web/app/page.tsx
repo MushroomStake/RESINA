@@ -20,7 +20,6 @@ export default function HomePage() {
             </a>
             <a href="#download">Download</a>
             <a href="#features">Features</a>
-            <a href="#benefits">Benefits</a>
           </nav>
 
           <a
@@ -111,36 +110,7 @@ export default function HomePage() {
               </ul>
             </div>
 
-            <div>
-              <h2 className="mb-3 text-xl font-semibold text-[#111827]">Company</h2>
-              <ul className="space-y-2 text-base text-[#4b5563]">
-                <li>
-                  <a href="#about" className="hover:text-[#0d3d73]">
-                    About
-                  </a>
-                </li>
-                <li>
-                  <a href="#join" className="hover:text-[#0d3d73]">
-                    Join us
-                  </a>
-                </li>
-              </ul>
 
-              <div className="mt-4 flex items-center gap-3 text-xs font-bold uppercase tracking-wide text-[#6b7280]">
-                <a className="rounded-full bg-white px-2.5 py-1.5 shadow-sm hover:text-[#0d3d73]" href="#">
-                  Tw
-                </a>
-                <a className="rounded-full bg-white px-2.5 py-1.5 shadow-sm hover:text-[#0d3d73]" href="#">
-                  Fb
-                </a>
-                <a className="rounded-full bg-white px-2.5 py-1.5 shadow-sm hover:text-[#0d3d73]" href="#">
-                  In
-                </a>
-                <a className="rounded-full bg-white px-2.5 py-1.5 shadow-sm hover:text-[#0d3d73]" href="#">
-                  Yt
-                </a>
-              </div>
-            </div>
           </div>
         </footer>
       </div>

@@ -42,6 +42,7 @@ type ProfileSectionProps = {
     confirmPassword: string;
   }) => void;
   onSavePassword: () => void;
+  isRecoveryPasswordFlow?: boolean;
   showNewPassword: boolean;
   onToggleShowNewPassword: () => void;
   showConfirmPassword: boolean;
@@ -70,6 +71,7 @@ export function ProfileSection({
   passwordForm,
   onPasswordFormChange,
   onSavePassword,
+  isRecoveryPasswordFlow = false,
   showNewPassword,
   onToggleShowNewPassword,
   showConfirmPassword,
@@ -171,16 +173,22 @@ export function ProfileSection({
 
       {isPasswordEditorOpen ? (
         <View style={styles.profilePasswordCard}>
-          <Text style={styles.profileInfoLabel}>Current Password</Text>
-          <TextInput
-            value={passwordForm.currentPassword}
-            onChangeText={(value) => onPasswordFormChange({ ...passwordForm, currentPassword: value })}
-            style={styles.profilePasswordInput}
-            secureTextEntry
-            autoCapitalize="none"
-            placeholder="Enter current password"
-            placeholderTextColor="#9ca3af"
-          />
+          {isRecoveryPasswordFlow ? (
+            <Text style={styles.recoveryHint}>Recovery mode active. Set a new password for your account.</Text>
+          ) : (
+            <>
+              <Text style={styles.profileInfoLabel}>Current Password</Text>
+              <TextInput
+                value={passwordForm.currentPassword}
+                onChangeText={(value) => onPasswordFormChange({ ...passwordForm, currentPassword: value })}
+                style={styles.profilePasswordInput}
+                secureTextEntry
+                autoCapitalize="none"
+                placeholder="Enter current password"
+                placeholderTextColor="#9ca3af"
+              />
+            </>
+          )}
 
           <Text style={[styles.profileInfoLabel, styles.profilePasswordLabelSpacing]}>New Password</Text>
           <TextInput
@@ -443,6 +451,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9fbfd",
     padding: 14,
     marginBottom: 12,
+  },
+  recoveryHint: {
+    color: "#1f2937",
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 8,
   },
   profilePasswordInput: {
     borderWidth: 1,

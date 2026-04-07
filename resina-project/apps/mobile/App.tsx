@@ -37,7 +37,7 @@ import { AnnouncementsSection } from "./components/announcements-section";
 import { HistorySection } from "./components/history-section";
 import { ProfileSection } from "./components/profile-section";
 
-type AuthMode = "login" | "register";
+type AuthMode = "login" | "register" | "forgot-password";
 type AlertLevelKey = "normal" | "critical" | "evacuation" | "spilling";
 type ResidentStatus = "resident" | "non_resident";
 
@@ -138,7 +138,7 @@ const DASHBOARD_TAB_ATMOSPHERE: Record<Exclude<DashboardTab, "home">, HomeAtmosp
   },
 };
 
-const IS_BACKGROUND_SHOWCASE_ENABLED = true;
+const IS_BACKGROUND_SHOWCASE_ENABLED = false;
 
 type HistoryAlertLevel = "normal" | "critical" | "evacuation" | "spilling";
 
@@ -274,6 +274,20 @@ const PROFILE_AVATAR_OPTIONS: Array<{ key: ProfileAvatarKey; label: string; sour
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const mobileEmailRedirectUrl =
   process.env.EXPO_PUBLIC_MOBILE_EMAIL_REDIRECT_URL ?? "https://resina-two.vercel.app/";
+const resolveMobilePasswordResetRedirectUrl = (): string => {
+  const configured = process.env.EXPO_PUBLIC_MOBILE_PASSWORD_RESET_REDIRECT_URL?.trim();
+  const webBase = mobileEmailRedirectUrl.trim().replace(/\/+$/, "");
+  const fallback = `${webBase}/auth/mobile-reset?view=change-password`;
+  const target = configured || fallback;
+
+  if (target.includes("view=change-password")) {
+    return target;
+  }
+
+  return `${target}${target.includes("?") ? "&" : "?"}view=change-password`;
+};
+
+const mobilePasswordResetRedirectUrl = resolveMobilePasswordResetRedirectUrl();
 const DASHBOARD_TOP_PADDING = Platform.OS === "android" ? 14 : 16;
 const DEFAULT_WEATHER_ADVISORY =
   "No urgent advisory right now. Keep alerts enabled and monitor weather updates from Barangay Sta. Rita.";
@@ -986,6 +1000,8 @@ export default function App() {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [showRegisterConfirmPassword, setShowRegisterConfirmPassword] = useState(false);
+  const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
+  const [isRecoveryPasswordFlow, setIsRecoveryPasswordFlow] = useState(false);
 
   const [sensorSnapshot, setSensorSnapshot] = useState<SensorSnapshot>({
     waterLevel: null,
@@ -1064,6 +1080,7 @@ export default function App() {
     email: "",
     password: "",
   });
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
 
   const [registerForm, setRegisterForm] = useState<RegisterForm>({
     firstName: "",
@@ -1226,6 +1243,9 @@ export default function App() {
       const accessToken = hashParams.get("access_token") ?? queryParams.get("access_token");
       const refreshToken = hashParams.get("refresh_token") ?? queryParams.get("refresh_token");
       const authCode = queryParams.get("code");
+      const authType = (hashParams.get("type") ?? queryParams.get("type") ?? "").toLowerCase();
+      const requestedView = (queryParams.get("view") ?? "").toLowerCase();
+      const isPasswordRecovery = authType === "recovery" || requestedView === "change-password";
 
       if (accessToken && refreshToken) {
         const { error } = await supabase.auth.setSession({
@@ -1239,7 +1259,19 @@ export default function App() {
         }
 
         clearAlerts();
-        setSuccessMessage("Email confirmed. You are now logged in.");
+        if (isPasswordRecovery) {
+          setActiveTab("profile");
+          setIsPasswordEditorOpen(true);
+          setIsRecoveryPasswordFlow(true);
+          setPasswordForm({
+            currentPassword: "",
+            newPassword: "",
+            confirmPassword: "",
+          });
+          setSuccessMessage("Recovery verified. Set your new password now.");
+        } else {
+          setSuccessMessage("Email confirmed. You are now logged in.");
+        }
         return;
       }
 
@@ -1251,7 +1283,19 @@ export default function App() {
         }
 
         clearAlerts();
-        setSuccessMessage("Email confirmed. You are now logged in.");
+        if (isPasswordRecovery) {
+          setActiveTab("profile");
+          setIsPasswordEditorOpen(true);
+          setIsRecoveryPasswordFlow(true);
+          setPasswordForm({
+            currentPassword: "",
+            newPassword: "",
+            confirmPassword: "",
+          });
+          setSuccessMessage("Recovery verified. Set your new password now.");
+        } else {
+          setSuccessMessage("Email confirmed. You are now logged in.");
+        }
       }
     } catch {
       // Ignore unrelated deep links.
@@ -2136,7 +2180,12 @@ export default function App() {
     const confirmPassword = passwordForm.confirmPassword;
     const email = profileState.email.trim().toLowerCase();
 
-    if (!currentPassword || !newPassword || !confirmPassword) {
+    if (!newPassword || !confirmPassword) {
+      setErrorMessage("Please complete all password fields.");
+      return;
+    }
+
+    if (!isRecoveryPasswordFlow && !currentPassword) {
       setErrorMessage("Please complete all password fields.");
       return;
     }
@@ -2151,22 +2200,24 @@ export default function App() {
       return;
     }
 
-    if (!EMAIL_REGEX.test(email)) {
+    if (!isRecoveryPasswordFlow && !EMAIL_REGEX.test(email)) {
       setErrorMessage("Cannot verify account email for password update.");
       return;
     }
 
     setIsChangingPassword(true);
 
-    const { error: verifyError } = await supabase.auth.signInWithPassword({
-      email,
-      password: currentPassword,
-    });
+    if (!isRecoveryPasswordFlow) {
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+      });
 
-    if (verifyError) {
-      setIsChangingPassword(false);
-      setErrorMessage("Current password is incorrect.");
-      return;
+      if (verifyError) {
+        setIsChangingPassword(false);
+        setErrorMessage("Current password is incorrect.");
+        return;
+      }
     }
 
     const { error: updateError } = await supabase.auth.updateUser({
@@ -2185,8 +2236,41 @@ export default function App() {
       newPassword: "",
       confirmPassword: "",
     });
+    setIsRecoveryPasswordFlow(false);
     setIsPasswordEditorOpen(false);
     setSuccessMessage("Password updated successfully.");
+  };
+
+  const handleForgotPassword = async () => {
+    clearAlerts();
+
+    const email = forgotPasswordEmail.trim().toLowerCase();
+    if (!email) {
+      setErrorMessage("Please enter your email address.");
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      setErrorMessage("Please enter a valid email address.");
+      return;
+    }
+
+    setIsSendingPasswordReset(true);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: mobilePasswordResetRedirectUrl,
+    });
+
+    setIsSendingPasswordReset(false);
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
+    setSuccessMessage("Password reset link sent. Check your email inbox.");
+    setLoginForm((prev) => ({ ...prev, email }));
+    setMode("login");
   };
 
   const handleLogout = async () => {
@@ -2197,6 +2281,9 @@ export default function App() {
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
+    if (nextMode === "forgot-password") {
+      setForgotPasswordEmail(loginForm.email.trim().toLowerCase());
+    }
     clearAlerts();
   };
 
@@ -2342,6 +2429,7 @@ export default function App() {
         passwordForm={passwordForm}
         onPasswordFormChange={(nextForm) => setPasswordForm(nextForm)}
         onSavePassword={() => void handleChangePassword()}
+        isRecoveryPasswordFlow={isRecoveryPasswordFlow}
         showNewPassword={showNewPassword}
         onToggleShowNewPassword={() => setShowNewPassword((prev) => !prev)}
         showConfirmPassword={showConfirmPassword}
@@ -2970,7 +3058,7 @@ export default function App() {
 
                 <View style={styles.passwordHeaderRow}>
                   <Text style={styles.inputLabel}>PASSWORD</Text>
-                  <Pressable>
+                  <Pressable onPress={() => switchMode("forgot-password")}>
                     <Text style={styles.forgotPassword}>Forgot Password?</Text>
                   </Pressable>
                 </View>
@@ -3008,6 +3096,40 @@ export default function App() {
                   <Text style={styles.secondaryButtonText}>Register Now</Text>
                   <Text style={styles.secondaryButtonArrow}>›</Text>
                 </Pressable>
+              </View>
+            ) : mode === "forgot-password" ? (
+              <View>
+                <Text style={styles.headerTitle}>Reset Password</Text>
+                <Text style={styles.headerSubtitle}>Enter your email to receive a secure reset link.</Text>
+
+                <Text style={styles.inputLabel}>EMAIL</Text>
+                <TextInput
+                  value={forgotPasswordEmail}
+                  onChangeText={setForgotPasswordEmail}
+                  style={styles.input}
+                  placeholder="juandelacruz@gmail.com"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                <Pressable
+                  style={[styles.primaryButton, isSendingPasswordReset && styles.buttonDisabled]}
+                  onPress={handleForgotPassword}
+                  disabled={isSendingPasswordReset}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    {isSendingPasswordReset ? "Sending link..." : "Send Reset Link"}
+                  </Text>
+                </Pressable>
+
+                <View style={styles.modeRow}>
+                  <Text style={styles.modeText}>Remember your password?</Text>
+                  <Pressable onPress={() => switchMode("login")}>
+                    <Text style={styles.modeAction}> Sign In</Text>
+                  </Pressable>
+                </View>
               </View>
             ) : (
               <View>
