@@ -45,4 +45,21 @@ jobs:
             exit 1
           fi
 
-          npm run weather:fetch
+          attempt=1
+          until [ $attempt -gt 3 ]
+          do
+            echo "Running weather fetch attempt $attempt..."
+            if npm run weather:fetch; then
+              echo "Weather fetch succeeded on attempt $attempt"
+              exit 0
+            fi
+
+            if [ $attempt -eq 3 ]; then
+              echo "Weather fetch failed after 3 attempts"
+              exit 1
+            fi
+
+            echo "Attempt $attempt failed. Retrying in 20 seconds..."
+            sleep 20
+            attempt=$((attempt + 1))
+          done
