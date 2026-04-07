@@ -1,1 +1,1 @@
-export { TideCard } from "./tide-card-impl";
+export { TideCard } from "./tide-card";
