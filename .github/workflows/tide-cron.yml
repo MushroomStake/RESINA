@@ -7,33 +7,35 @@ on:
   workflow_dispatch:
 
 jobs:
-  refresh-tide:
+  refresh-tide-window:
     runs-on: ubuntu-latest
     environment: Production
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
-      - name: Trigger tide cron endpoint
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: "resina-project/apps/api/package-lock.json"
+
+      - name: Install dependencies
+        working-directory: resina-project/apps/api
+        run: npm ci
+
+      - name: Refresh tide window (yesterday + today)
+        working-directory: resina-project/apps/api
         env:
-          TIDE_CRON_URL: ${{ secrets.TIDE_CRON_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          STORMGLASS_API_KEY: ${{ secrets.STORMGLASS_API_KEY }}
         run: |
-          if [ -z "$TIDE_CRON_URL" ]; then
-            echo "Missing required secret: TIDE_CRON_URL"
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_KEY" ] || [ -z "$STORMGLASS_API_KEY" ]; then
+            echo "Missing required secrets: SUPABASE_URL, SUPABASE_SERVICE_KEY, STORMGLASS_API_KEY"
             exit 1
           fi
 
-          if [ -z "$CRON_SECRET" ]; then
-            echo "Missing required secret: CRON_SECRET"
-            exit 1
-          fi
-
-          echo "Calling $TIDE_CRON_URL"
-          response=$(curl --fail --show-error --silent \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "$TIDE_CRON_URL")
-
-          echo "Response: $response"
-          echo "$response" | grep -q '"ok":true' || {
-            echo "Tide cron call did not return ok=true"
-            exit 1
-          }
+          npm run tide:refresh-window
