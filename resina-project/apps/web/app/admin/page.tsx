@@ -64,24 +64,16 @@ export default function AdminLoginPage() {
   };
 
   useEffect(() => {
-    const supabase = createClient();
     if (isRecoveryRequest()) {
-      setIsRecoveryMode(true);
+      window.location.replace(`/reset-password${window.location.search}${window.location.hash}`);
+      return () => {
+        if (redirectTimerRef.current) {
+          clearTimeout(redirectTimerRef.current);
+        }
+      };
     }
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") {
-        setIsRecoveryMode(true);
-        setIsForgotOpen(false);
-        setErrorMessage(null);
-        setSuccessMessage("Recovery verified. Please set a new password.");
-      }
-    });
-
     return () => {
-      subscription.unsubscribe();
       if (redirectTimerRef.current) {
         clearTimeout(redirectTimerRef.current);
       }
@@ -134,7 +126,7 @@ export default function AdminLoginPage() {
 
     try {
       const supabase = createClient();
-      const redirectTo = `${window.location.origin}/admin?view=change-password`;
+      const redirectTo = `${window.location.origin}/reset-password`;
       const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo,
       });

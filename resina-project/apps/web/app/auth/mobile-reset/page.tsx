@@ -6,7 +6,7 @@ function getRecoveryData() {
   if (typeof window === "undefined") {
     return {
       deepLink: "resina://auth/reset-password?view=change-password",
-      webFallbackLink: "/admin?view=change-password",
+      webFallbackLink: "/reset-password",
     };
   }
 
@@ -36,13 +36,9 @@ function getRecoveryData() {
 
   const deepLink = `resina://auth/reset-password?${queryParams.toString()}`;
 
-  const webFallbackParams = new URLSearchParams();
+  const webFallbackParams = new URLSearchParams(url.searchParams);
   webFallbackParams.set("view", "change-password");
-  const authCode = url.searchParams.get("code");
-  if (authCode) {
-    webFallbackParams.set("code", authCode);
-  }
-  const webFallbackLink = `/admin?${webFallbackParams.toString()}${url.hash || ""}`;
+  const webFallbackLink = `/reset-password?${webFallbackParams.toString()}${url.hash || ""}`;
 
   return { deepLink, webFallbackLink };
 }
