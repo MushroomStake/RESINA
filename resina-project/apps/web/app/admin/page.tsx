@@ -60,11 +60,6 @@ export default function AdminLoginPage() {
   useEffect(() => {
     if (isRecoveryRequest()) {
       window.location.replace(`/reset-password${window.location.search}${window.location.hash}`);
-      return () => {
-        if (redirectTimerRef.current) {
-          clearTimeout(redirectTimerRef.current);
-        }
-      };
     }
 
     return () => {
@@ -257,13 +252,8 @@ export default function AdminLoginPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        setIsForgotOpen((open) => {
-                          const next = !open;
-                          if (next) {
-                            setForgotEmail(email.trim().toLowerCase());
-                          }
-                          return next;
-                        });
+                        setIsForgotOpen(true);
+                        setForgotEmail(email.trim().toLowerCase());
                       }}
                       className="text-xs font-medium text-[#2e9d5a] hover:underline"
                     >

@@ -32,7 +32,6 @@ import { AnnouncementCommentsModal } from "./components/announcement-comments-mo
 import { HomeHeroSection } from "./components/home-hero-section";
 import { WeatherSection } from "./components/weather-section";
 import { TideSection } from "./components/tide-section";
-import { QuickActionsGrid } from "./components/quick-actions-grid";
 import { AnnouncementsSection } from "./components/announcements-section";
 import { HistorySection } from "./components/history-section";
 import { ProfileSection } from "./components/profile-section";
@@ -2294,43 +2293,6 @@ export default function App() {
       weatherSnapshot.heatIndex,
     );
 
-    const quickActions = [
-      {
-        id: "history",
-        title: "Water Level History",
-        subtitle: "View historical water level trends and logs",
-        icon: "time-outline" as const,
-        tone: "primary" as const,
-        onPress: () => setActiveTab("history"),
-      },
-      {
-        id: "announcements",
-        title: "Announcements",
-        subtitle: "Official updates from Barangay Sta. Rita",
-        icon: "megaphone-outline" as const,
-        tone: "secondary" as const,
-        onPress: () => setActiveTab("news"),
-      },
-      {
-        id: "profile",
-        title: "Profile",
-        subtitle: "Edit your account and alert settings",
-        icon: "person-outline" as const,
-        tone: "muted" as const,
-        onPress: () => setActiveTab("profile"),
-      },
-      {
-        id: "map",
-        title: "Map Location",
-        subtitle: "Open Sta. Rita Bridge on the map",
-        icon: "location-outline" as const,
-        tone: "primary" as const,
-        onPress: () => {
-          void Linking.openURL("https://maps.google.com/?q=Sta.+Rita+Bridge+Olongapo");
-        },
-      },
-    ];
-
     return (
       <>
         <HomeHeroSection
@@ -2368,8 +2330,6 @@ export default function App() {
           isLoading={isTideLoading}
           error={tideError}
         />
-
-        <QuickActionsGrid actions={quickActions} textVariant={homeTextVariant} />
       </>
     );
   };
@@ -2706,10 +2666,6 @@ export default function App() {
           <Animated.View style={[styles.skeletonCardHero, skeletonPulseStyle]} />
           <Animated.View style={[styles.skeletonCardWeather, skeletonPulseStyle]} />
           <Animated.View style={[styles.skeletonCardTide, skeletonPulseStyle]} />
-          <View style={styles.skeletonGridRow}>
-            <Animated.View style={[styles.skeletonQuickAction, skeletonPulseStyle]} />
-            <Animated.View style={[styles.skeletonQuickAction, skeletonPulseStyle]} />
-          </View>
         </View>
       );
     }
@@ -3510,18 +3466,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.14)",
   },
-  skeletonGridRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  skeletonQuickAction: {
-    flex: 1,
-    height: 92,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
   skeletonSectionHeader: {
     height: 42,
     borderRadius: 14,
@@ -3575,46 +3519,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     lineHeight: 23,
-  },
-  quickActionsTitle: {
-    color: "#20232c",
-    fontWeight: "700",
-    fontSize: 20,
-  },
-  actionCardPrimary: {
-    borderRadius: 14,
-    backgroundColor: "#c8dcf0",
-    borderWidth: 1,
-    borderColor: "#bdd1e4",
-    padding: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  actionCardSecondary: {
-    borderRadius: 14,
-    backgroundColor: "#dbe9de",
-    borderWidth: 1,
-    borderColor: "#bfd8c4",
-    padding: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  actionTitle: {
-    fontSize: 18,
-    color: "#1f2937",
-    fontWeight: "700",
-  },
-  actionSubtitle: {
-    fontSize: 13,
-    color: "#4b5563",
-    marginTop: 2,
-  },
-  actionArrow: {
-    color: "#6b7280",
-    fontSize: 24,
-    fontWeight: "500",
   },
   profileCard: {
     borderWidth: 1,
