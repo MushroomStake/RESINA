@@ -41,6 +41,40 @@ function formatManilaTime(value: string): string {
   });
 }
 
+function formatManilaDate(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "N/A";
+  }
+
+  return parsed.toLocaleDateString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
+function formatRemainingUntil(value: string): string {
+  const target = new Date(value).getTime();
+  if (Number.isNaN(target)) {
+    return "Remaining time unavailable";
+  }
+
+  const deltaMinutes = Math.round((target - Date.now()) / 60000);
+  if (deltaMinutes <= 0) {
+    return "Event already passed";
+  }
+
+  const hours = Math.floor(deltaMinutes / 60);
+  const minutes = deltaMinutes % 60;
+  if (hours === 0) {
+    return `${minutes}m remaining`;
+  }
+
+  return `${hours}h ${minutes}m remaining`;
+}
+
 export function TideMonitorSection({
   isLoading,
   error,
@@ -70,6 +104,10 @@ export function TideMonitorSection({
   const currentTideLabel = currentHeight === null ? "-" : `${currentHeight.toFixed(2)}m`;
   const nextHighLabel = nextHigh ? formatManilaTime(nextHigh.time) : "N/A";
   const nextLowLabel = nextLow ? formatManilaTime(nextLow.time) : "N/A";
+  const nextHighDateLabel = nextHigh ? formatManilaDate(nextHigh.time) : "N/A";
+  const nextLowDateLabel = nextLow ? formatManilaDate(nextLow.time) : "N/A";
+  const nextHighRemainingLabel = nextHigh ? formatRemainingUntil(nextHigh.time) : "No upcoming high tide";
+  const nextLowRemainingLabel = nextLow ? formatRemainingUntil(nextLow.time) : "No upcoming low tide";
 
   return (
     <section className="mt-6 overflow-hidden rounded-[28px] border border-sky-100 bg-gradient-to-br from-[#f5fbff] via-white to-[#eef6ff] p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)] md:p-6">
@@ -105,6 +143,8 @@ export function TideMonitorSection({
               <div className="text-right">
                 <p className="text-[30px] leading-none text-[#1f3657]">Next high tide is at</p>
                 <p className="mt-2 text-[44px] font-black leading-none text-[#1e63a8]">{nextHighLabel}</p>
+                <p className="mt-2 text-sm font-semibold text-[#1f3657]">{nextHighDateLabel}</p>
+                <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[#5f7898]">{nextHighRemainingLabel}</p>
               </div>
             </div>
 
@@ -113,6 +153,8 @@ export function TideMonitorSection({
               <div className="text-right">
                 <p className="text-[30px] leading-none text-[#1f3657]">Next low tide is at</p>
                 <p className="mt-2 text-[44px] font-black leading-none text-[#1e63a8]">{nextLowLabel}</p>
+                <p className="mt-2 text-sm font-semibold text-[#1f3657]">{nextLowDateLabel}</p>
+                <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[#5f7898]">{nextLowRemainingLabel}</p>
               </div>
             </div>
           </div>

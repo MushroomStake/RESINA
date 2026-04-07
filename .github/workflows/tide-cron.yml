@@ -1,0 +1,31 @@
+name: Tide Daily Refresh
+
+on:
+  schedule:
+    # 00:10 Asia/Manila (UTC+8) = 16:10 UTC (previous day)
+    - cron: "10 16 * * *"
+  workflow_dispatch:
+
+jobs:
+  refresh-tide:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger tide cron endpoint
+        env:
+          TIDE_CRON_URL: ${{ secrets.TIDE_CRON_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$TIDE_CRON_URL" ]; then
+            echo "Missing required secret: TIDE_CRON_URL"
+            exit 1
+          fi
+
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Missing required secret: CRON_SECRET"
+            exit 1
+          fi
+
+          echo "Calling $TIDE_CRON_URL"
+          curl --fail --show-error --silent \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$TIDE_CRON_URL"

@@ -38,6 +38,40 @@ function formatManilaTime(value: string): string {
   });
 }
 
+function formatManilaDate(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "N/A";
+  }
+
+  return parsed.toLocaleDateString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
+function formatRemainingUntil(value: string): string {
+  const target = new Date(value).getTime();
+  if (Number.isNaN(target)) {
+    return "Remaining time unavailable";
+  }
+
+  const deltaMinutes = Math.round((target - Date.now()) / 60000);
+  if (deltaMinutes <= 0) {
+    return "Event already passed";
+  }
+
+  const hours = Math.floor(deltaMinutes / 60);
+  const minutes = deltaMinutes % 60;
+  if (hours === 0) {
+    return `${minutes}m remaining`;
+  }
+
+  return `${hours}h ${minutes}m remaining`;
+}
+
 export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCardProps) {
   const nextHigh = useMemo(() => {
     const now = Date.now();
@@ -61,6 +95,10 @@ export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCar
   const trendLabel = tideStatus?.state === "rising" ? "Rising" : tideStatus?.state === "falling" ? "Falling" : "Stable";
   const nextHighLabel = nextHigh ? formatManilaTime(nextHigh.time) : "N/A";
   const nextLowLabel = nextLow ? formatManilaTime(nextLow.time) : "N/A";
+  const nextHighDateLabel = nextHigh ? formatManilaDate(nextHigh.time) : "N/A";
+  const nextLowDateLabel = nextLow ? formatManilaDate(nextLow.time) : "N/A";
+  const nextHighRemainingLabel = nextHigh ? formatRemainingUntil(nextHigh.time) : "No upcoming high tide";
+  const nextLowRemainingLabel = nextLow ? formatRemainingUntil(nextLow.time) : "No upcoming low tide";
   const hasAnyData = tideStatus?.currentHeight !== null || nextHigh !== null || nextLow !== null;
 
   if (isLoading) {
@@ -127,6 +165,8 @@ export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCar
           <View style={styles.nextTextWrap}>
             <Text style={styles.nextTitle}>Next high tide is at</Text>
             <Text style={styles.nextTime}>{nextHighLabel}</Text>
+            <Text style={styles.nextDate}>{nextHighDateLabel}</Text>
+            <Text style={styles.nextRemaining}>{nextHighRemainingLabel}</Text>
           </View>
         </View>
 
@@ -135,6 +175,8 @@ export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCar
           <View style={styles.nextTextWrap}>
             <Text style={styles.nextTitle}>Next low tide is at</Text>
             <Text style={styles.nextTime}>{nextLowLabel}</Text>
+            <Text style={styles.nextDate}>{nextLowDateLabel}</Text>
+            <Text style={styles.nextRemaining}>{nextLowRemainingLabel}</Text>
           </View>
         </View>
       </View>
@@ -238,6 +280,20 @@ const styles = StyleSheet.create({
     lineHeight: 38,
     fontWeight: "900",
     color: "#1e63a8",
+  },
+  nextDate: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1f3657",
+  },
+  nextRemaining: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    color: "#5f7898",
   },
   loadingRow: {
     marginTop: 16,
