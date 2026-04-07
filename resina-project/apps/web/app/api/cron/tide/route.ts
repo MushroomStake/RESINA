@@ -107,12 +107,12 @@ export async function GET(request: NextRequest) {
     const stormData = (await stormResponse.json()) as { data?: Array<Partial<TideExtreme>> };
     const tideData: TideExtreme[] = Array.isArray(stormData.data)
       ? stormData.data
-          .map((event) => ({
+          .map((event): TideExtreme => ({
             type: event.type === "high" ? "high" : "low",
             height: Number(event.height),
             time: typeof event.time === "string" ? event.time : "",
           }))
-          .filter((event) => event.time && Number.isFinite(event.height))
+          .filter((event): event is TideExtreme => Boolean(event.time) && Number.isFinite(event.height))
       : [];
 
     if (!tideData.length) {
