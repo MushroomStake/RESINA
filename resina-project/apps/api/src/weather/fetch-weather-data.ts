@@ -134,8 +134,32 @@ function resolveColorCodedWarning(wet: WetSeverity, heat: HeatSeverity): ColorWa
   return warningRank(thermal) > warningRank(rain) ? thermal : rain;
 }
 
-function buildAutoDescription(intensity: string, description: string): string {
+function resolveIsNight(iconCode: string, sunriseUnixSeconds?: number, sunsetUnixSeconds?: number): boolean {
+  if (typeof sunriseUnixSeconds === "number" && typeof sunsetUnixSeconds === "number") {
+    const now = Date.now();
+    return now < sunriseUnixSeconds * 1000 || now > sunsetUnixSeconds * 1000;
+  }
+
+  return iconCode.endsWith("n");
+}
+
+function buildAutoDescription(intensity: string, description: string, isNight: boolean, wet: WetSeverity): string {
   const base = description ? description.charAt(0).toUpperCase() + description.slice(1) : intensity;
+
+  if (isNight) {
+    if (wet === "none") {
+      return `${base}. Nighttime conditions are generally calm. Stay aware of any late-night weather updates.`;
+    }
+
+    const wetNightAdvisories: Record<Exclude<WetSeverity, "none">, string> = {
+      light: "Light rain tonight. Roads may be slippery and visibility may be reduced.",
+      moderate: "Moderate rain tonight. Be extra careful in low-lying and flood-prone areas.",
+      heavy: "Heavy rain tonight. Avoid unnecessary travel and monitor local flood advisories.",
+      torrential: "Torrential rain tonight. Stay indoors and keep emergency channels open for updates.",
+    };
+
+    return wetNightAdvisories[wet as Exclude<WetSeverity, "none">] ?? `${base}. Stay updated with official barangay advisories.`;
+  }
 
   const advisories: Record<string, string> = {
     "Torrential Rain": "Torrential rain is occurring. Stay indoors, avoid flooded areas, and monitor barangay advisories.",
@@ -362,8 +386,9 @@ async function main() {
   const weatherIconCode = owmData.weather?.[0]?.icon ?? "01d";
 
   const wetSeverity = inferWetSeverity(weatherMain, weatherDescription);
+  const isNight = resolveIsNight(weatherIconCode, owmData.sys?.sunrise, owmData.sys?.sunset);
   const heatIndex = computeHeatIndexC(temperature, humidity);
-  const heatSeverity = resolveHeatSeverity(heatIndex);
+  const heatSeverity = isNight ? "normal" : resolveHeatSeverity(heatIndex);
   const intensity = resolveIntensityLabel(wetSeverity, heatSeverity);
   const colorCodedWarning = resolveColorCodedWarning(wetSeverity, heatSeverity);
   const iconPath =
@@ -376,7 +401,7 @@ async function main() {
           owmData.sys?.sunset,
         )
       : WEATHER_ICON_MAP[intensity] ?? DRY_NORMAL_ICON_PATH;
-  const manualDescription = buildAutoDescription(intensity, weatherDescription);
+  const manualDescription = buildAutoDescription(intensity, weatherDescription, isNight, wetSeverity);
   const signalNo = await resolveSignalNoFromPagasa();
 
   const { error } = await supabase.from("weather_logs").insert({
