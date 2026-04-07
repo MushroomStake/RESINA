@@ -2945,7 +2945,7 @@ export default function App() {
             </ScrollView>
             <BottomNav
               activeTab={activeTab}
-              themeVariant="dark"
+              themeVariant={dashboardAtmosphere.blurTint}
               onChange={setActiveTab}
               onReselect={(tab) => {
                 if (tab === "home") {
