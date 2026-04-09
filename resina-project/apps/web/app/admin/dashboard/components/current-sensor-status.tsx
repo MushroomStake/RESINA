@@ -186,18 +186,17 @@ export function CurrentSensorStatus({
           <div className="relative overflow-hidden rounded-2xl border border-white/30 bg-[#12345a33] backdrop-blur-sm">
             <div className="relative h-full min-h-[176px] overflow-hidden rounded-2xl">
               <div className={`absolute inset-x-0 bottom-0 bg-[#2f8cffc8] transition-[height] duration-700 ${fillHeightClass}`}>
-                <div className="wave-a absolute left-[-60px] right-[-60px] top-[-18px] h-[30px] rounded-full bg-[#8edbffe0]" />
-                <div className="wave-b absolute left-[-90px] right-[-90px] top-[-10px] h-[26px] rounded-full bg-[#e5f8ffa8]" />
+                <div className="wave-a absolute left-[8%] right-[8%] top-[-14px] h-[24px] rounded-full bg-[#8edbffc4]" />
+                <div className="wave-b absolute left-[16%] right-[16%] top-[-8px] h-[20px] rounded-full bg-[#e5f8ff8f]" />
               </div>
 
-              <div className="absolute inset-3 rounded-2xl border border-white/55 bg-[rgba(10,25,47,0.56)] px-4 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
+              <div className="absolute left-1/2 top-4 w-[68%] -translate-x-1/2 rounded-2xl border border-white/35 bg-[linear-gradient(180deg,rgba(255,255,255,0.16),rgba(255,255,255,0.06))] px-5 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] backdrop-blur-[6px] md:w-[58%] xl:w-[52%]">
                 <p className="text-4xl font-black leading-none text-white md:text-5xl">{meterText}</p>
                 <p className="mt-2 text-3xl font-extrabold leading-none text-white md:text-4xl">{alertConfig.title}</p>
                 <span className={`mt-3 inline-block rounded-full bg-white px-3 py-1 text-base font-bold shadow-sm ${levelTextClass}`}>
                   {alertConfig.badge}
                 </span>
                 <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-white/90">{rangeLabel}</p>
-                <p className="mt-2 text-[11px] font-medium text-white/70">Updated {shortUpdateLabel}</p>
               </div>
             </div>
           </div>
@@ -225,10 +224,10 @@ export function CurrentSensorStatus({
             transform: translateX(0) translateY(0);
           }
           50% {
-            transform: translateX(-90px) translateY(-5px);
+            transform: translateX(-26px) translateY(-4px);
           }
           100% {
-            transform: translateX(-180px) translateY(0);
+            transform: translateX(-52px) translateY(0);
           }
         }
         @keyframes waveB {
@@ -236,10 +235,10 @@ export function CurrentSensorStatus({
             transform: translateX(0) translateY(0);
           }
           50% {
-            transform: translateX(-110px) translateY(-5px);
+            transform: translateX(-30px) translateY(-4px);
           }
           100% {
-            transform: translateX(-220px) translateY(0);
+            transform: translateX(-60px) translateY(0);
           }
         }
         @keyframes meterPulse {

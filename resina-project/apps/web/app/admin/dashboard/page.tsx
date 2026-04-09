@@ -26,7 +26,6 @@ type WeatherState = {
   owmMain: string;
   owmDescription: string;
   intensityDescription: string;
-  colorCodedWarning: string;
   signalNo: string;
   manualDescription: string;
   broadcastDate: string | null;
@@ -427,20 +426,7 @@ function isRainyIntensity(intensity: string): boolean {
   );
 }
 
-function resolveWeatherCardClass(intensity: string, warning: string, heatIndex: number | null): string {
-  const normalizedWarning = warning.toLowerCase();
-
-  // Warning color takes precedence over temperature/intensity colors.
-  if (normalizedWarning.includes("red")) {
-    return "bg-[#E74C4C]";
-  }
-  if (normalizedWarning.includes("orange")) {
-    return "bg-[#FF7E1C]";
-  }
-  if (normalizedWarning.includes("yellow")) {
-    return "bg-[#F7D400]";
-  }
-
+function resolveWeatherCardClass(intensity: string, heatIndex: number | null): string {
   if (isRainyIntensity(intensity)) {
     return "bg-[#B3B7C0]";
   }
@@ -490,7 +476,6 @@ export default function AdminDashboardPage() {
     owmMain: "Clear",
     owmDescription: "clear sky",
     intensityDescription: "Normal",
-    colorCodedWarning: "No Warning",
     signalNo: "No Signal",
     manualDescription: "",
     broadcastDate: null,
@@ -511,7 +496,6 @@ export default function AdminDashboardPage() {
   const lastUpdateLabel = formatLastUpdate(snapshot.updatedAt);
   const weatherCardClass = resolveWeatherCardClass(
     weatherState.intensityDescription,
-    weatherState.colorCodedWarning,
     weatherState.heatIndex,
   );
 
@@ -526,7 +510,7 @@ export default function AdminDashboardPage() {
     const { data } = await supabase
       .from("weather_logs")
       .select(
-        "id, recorded_at, temperature, humidity, heat_index, weather_main, weather_description, intensity, color_coded_warning, signal_no, manual_description, icon_path, broadcast_date, broadcast_time",
+        "id, recorded_at, temperature, humidity, heat_index, weather_main, weather_description, intensity, signal_no, manual_description, icon_path, broadcast_date, broadcast_time",
       )
       .order("recorded_at", { ascending: false })
       .limit(1)
@@ -543,13 +527,14 @@ export default function AdminDashboardPage() {
       weather_main: string | null;
       weather_description: string | null;
       intensity: string;
-      color_coded_warning: string;
-      signal_no: string;
+      signal_no: string | null;
       manual_description: string | null;
       broadcast_date: string | null;
       broadcast_time: string | null;
       icon_path: string | null;
     };
+
+    const resolvedIconPath = WEATHER_ICON_MAP[row.intensity] ?? row.icon_path ?? DRY_NORMAL_ICON_PATH;
 
     const loadedState: WeatherState = {
       id: row.id,
@@ -560,13 +545,12 @@ export default function AdminDashboardPage() {
       owmMain: row.weather_main ?? "-",
       owmDescription: row.weather_description ?? "-",
       intensityDescription: row.intensity,
-      colorCodedWarning: row.color_coded_warning,
-      signalNo: row.signal_no,
+      signalNo: row.signal_no ?? "No Signal",
       manualDescription: row.manual_description ?? "",
       broadcastDate: row.broadcast_date,
       broadcastTime: row.broadcast_time,
       recordedAt: row.recorded_at,
-      iconPath: row.icon_path ?? WEATHER_ICON_MAP[row.intensity] ?? DRY_NORMAL_ICON_PATH,
+      iconPath: resolvedIconPath,
     };
 
     setWeatherState(loadedState);

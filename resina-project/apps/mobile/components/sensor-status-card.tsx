@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { BlurView } from "expo-blur";
 
 type SensorStatusCardProps = {
   stationLabel: string;
@@ -15,6 +16,7 @@ type SensorStatusCardProps = {
 
 const MAX_METER = 5;
 const VISUAL_MAX_METER = 4.4;
+const LABEL_MAX_METER = 4;
 const NORMAL_MIN = 1.5;
 const CRITICAL_MIN = 2.5;
 const EVACUATION_MIN = 3.0;
@@ -185,24 +187,25 @@ export function SensorStatusCard({
 
   const waveTranslateA = waveAnimA.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -180],
+    outputRange: [0, -56],
   });
 
   const waveTranslateB = waveAnimB.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -220],
+    outputRange: [0, -64],
   });
 
   const wavePulse = waveAnimA.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: [0, -5, 0],
+    outputRange: [0, -4, 0],
   });
 
   const meterMarks = useMemo(() => [4, 3, 2, 1, 0], []);
 
+  const labelScaleRatio = LABEL_MAX_METER / VISUAL_MAX_METER;
   const levelPointerBottom = fillAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0%", "100%"],
+    inputRange: [0, labelScaleRatio, 1],
+    outputRange: ["10%", "90%", "90%"],
   });
 
   return (
@@ -225,10 +228,12 @@ export function SensorStatusCard({
               </View>
             ))}
           </View>
-          <Animated.View style={[styles.levelPointer, { bottom: levelPointerBottom }]}> 
+          <Animated.View style={[styles.levelPointerDotWrap, { bottom: levelPointerBottom }]}>
             <View style={[styles.levelPointerDot, { backgroundColor: levelVisual.color }]} />
-            <Text style={styles.levelPointerText}>{safeLevel === null ? "--" : safeLevel.toFixed(2)}</Text>
           </Animated.View>
+          <Animated.Text style={[styles.levelPointerValue, { bottom: levelPointerBottom }]}>
+            {safeLevel === null ? "--" : safeLevel.toFixed(2)}
+          </Animated.Text>
           <View style={styles.alertBandWrap}>
             <View style={[styles.alertBand, styles.alertBandSpilling, { flex: BAND_FLEX.spilling }]} />
             <View style={[styles.alertBand, styles.alertBandEvacuate, { flex: BAND_FLEX.evacuation }]} />
@@ -246,16 +251,13 @@ export function SensorStatusCard({
             </Animated.View>
 
             <View style={styles.blurOverlay}>
+              <BlurView intensity={36} tint="light" style={styles.glassBlurLayer} />
               <View style={styles.glassBase} />
               <View style={styles.glassGlowTop} />
               <View style={styles.glassGlowBottom} />
               <View style={styles.glassBloomCenter} />
-              <View style={styles.glassSheen} />
-              <View style={styles.glassNoiseRowA} />
-              <View style={styles.glassNoiseRowB} />
-              <View style={styles.glassNoiseRowC} />
-              <View style={styles.glassNoiseRowD} />
               <View style={styles.glassVignette} />
+              <View style={styles.glassEdgeMask} />
               <Text style={styles.bigMeterText}>{meterText}</Text>
               <Text style={styles.levelTitle}>{displayTitle}</Text>
               <Text style={[styles.alertBadge, { color: levelVisual.color }]}>{displayBadge}</Text>
@@ -378,24 +380,24 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 10,
   },
-  levelPointer: {
+  levelPointerDotWrap: {
     position: "absolute",
     left: 18,
-    flexDirection: "row",
-    alignItems: "center",
     zIndex: 3,
-    marginBottom: -2,
   },
   levelPointerDot: {
     width: 8,
     height: 8,
     borderRadius: 99,
-    marginRight: 5,
   },
-  levelPointerText: {
+  levelPointerValue: {
+    position: "absolute",
+    left: 30,
+    marginBottom: -2,
     color: "#f6fbff",
     fontSize: 10,
     fontWeight: "800",
+    zIndex: 3,
   },
   alertBandWrap: {
     position: "absolute",
@@ -451,112 +453,82 @@ const styles = StyleSheet.create({
   },
   waveLayerPrimary: {
     position: "absolute",
-    left: -60,
-    right: -60,
-    top: -18,
-    height: 30,
+    left: "10%",
+    right: "10%",
+    top: -14,
+    height: 22,
     borderRadius: 99,
-    backgroundColor: "#8edbffe0",
+    backgroundColor: "#8edbffc9",
   },
   waveLayerSecondary: {
     position: "absolute",
-    left: -90,
-    right: -90,
-    top: -10,
-    height: 26,
+    left: "17%",
+    right: "17%",
+    top: -8,
+    height: 18,
     borderRadius: 99,
-    backgroundColor: "#e5f8ffa8",
+    backgroundColor: "#e5f8ff94",
   },
   blurOverlay: {
-    marginHorizontal: 12,
+    position: "absolute",
+    top: 14,
+    alignSelf: "center",
+    width: "84%",
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#ffffff78",
-    backgroundColor: "rgba(16,34,62,0.54)",
+    borderColor: "rgba(255,255,255,0.40)",
+    backgroundColor: "rgba(255,255,255,0.14)",
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
     alignItems: "center",
-    minWidth: 182,
     overflow: "hidden",
+  },
+  glassBlurLayer: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
   },
   glassBase: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
   glassGlowTop: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: 64,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    height: 56,
+    backgroundColor: "rgba(255,255,255,0.11)",
   },
   glassGlowBottom: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    height: 66,
-    backgroundColor: "rgba(46,124,255,0.08)",
+    height: 58,
+    backgroundColor: "rgba(46,124,255,0.07)",
   },
   glassBloomCenter: {
     position: "absolute",
     left: 14,
     right: 14,
-    top: 40,
-    height: 88,
+    top: 34,
+    height: 74,
     borderRadius: 24,
     backgroundColor: "rgba(255,255,255,0.05)",
   },
-  glassSheen: {
-    position: "absolute",
-    top: -18,
-    right: -20,
-    width: 86,
-    height: 150,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    transform: [{ rotate: "18deg" }],
-  },
-  glassNoiseRowA: {
-    position: "absolute",
-    top: 18,
-    left: 12,
-    right: 18,
-    height: 2,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    opacity: 0.32,
-  },
-  glassNoiseRowB: {
-    position: "absolute",
-    top: 40,
-    left: 18,
-    right: 28,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    opacity: 0.20,
-  },
-  glassNoiseRowC: {
-    position: "absolute",
-    top: 68,
-    left: 26,
-    right: 14,
-    height: 2,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    opacity: 0.24,
-  },
-  glassNoiseRowD: {
-    position: "absolute",
-    top: 104,
-    left: 16,
-    right: 22,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    opacity: 0.16,
-  },
   glassVignette: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 18,
-    backgroundColor: "rgba(6,18,36,0.18)",
+    borderRadius: 20,
+    backgroundColor: "rgba(6,18,36,0.10)",
+  },
+  glassEdgeMask: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 8,
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   bigMeterText: {
     color: "#ffffff",

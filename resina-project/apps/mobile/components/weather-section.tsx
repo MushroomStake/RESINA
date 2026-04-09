@@ -9,10 +9,9 @@ export type WeatherSectionProps = {
   temperature: number;
   humidity: number;
   heatIndex: number;
+  signalNo: string;
   advisoryText: string;
   backgroundColor: string;
-  colorCodedWarning: string;
-  signalNo: string;
 };
 
 export function WeatherSection(props: WeatherSectionProps) {

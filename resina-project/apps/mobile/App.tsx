@@ -72,9 +72,8 @@ type WeatherSnapshot = {
   conditionDescription: string;
   humidity: number;
   heatIndex: number;
-  manualDescription: string;
-  colorCodedWarning: string;
   signalNo: string;
+  manualDescription: string;
 };
 
 type WeatherRow = {
@@ -85,7 +84,6 @@ type WeatherRow = {
   heat_index?: number | string | null;
   weather_description?: string | null;
   intensity?: string | null;
-  color_coded_warning?: string | null;
   signal_no?: string | null;
   manual_description?: string | null;
 };
@@ -100,41 +98,19 @@ type HomeAtmosphereTheme = {
   blurIntensity: number;
 };
 
-type WeatherVisualMode = "sunny" | "cloudy" | "night" | "rainy-day" | "rainy-night";
+type WeatherVisualMode =
+  | "sunny"
+  | "partly-cloudy"
+  | "cloudy"
+  | "hazy"
+  | "thunderstorm"
+  | "night"
+  | "rainy-day"
+  | "rainy-night";
 
 type WeatherShowcaseScene = {
   mode: WeatherVisualMode;
   theme: HomeAtmosphereTheme;
-};
-
-const DASHBOARD_TAB_ATMOSPHERE: Record<Exclude<DashboardTab, "home">, HomeAtmosphereTheme> = {
-  news: {
-    base: "#0c1e39",
-    auraTop: "rgba(55, 121, 206, 0.24)",
-    auraBottom: "rgba(28, 79, 150, 0.18)",
-    veil: "rgba(8, 18, 35, 0.22)",
-    blurTint: "dark",
-    textVariant: "light",
-    blurIntensity: 12,
-  },
-  history: {
-    base: "#0d213b",
-    auraTop: "rgba(64, 146, 141, 0.22)",
-    auraBottom: "rgba(30, 106, 116, 0.16)",
-    veil: "rgba(8, 18, 35, 0.22)",
-    blurTint: "dark",
-    textVariant: "light",
-    blurIntensity: 12,
-  },
-  profile: {
-    base: "#10233f",
-    auraTop: "rgba(100, 120, 193, 0.2)",
-    auraBottom: "rgba(65, 88, 156, 0.15)",
-    veil: "rgba(8, 18, 35, 0.22)",
-    blurTint: "dark",
-    textVariant: "light",
-    blurIntensity: 12,
-  },
 };
 
 const IS_BACKGROUND_SHOWCASE_ENABLED = false;
@@ -256,6 +232,20 @@ const CACHE_TTL_MS = {
   tideHourly: 60 * 60 * 1000,
   tideExtremes: 60 * 60 * 1000,
   profile: 24 * 60 * 60 * 1000,
+};
+
+const MOBILE_DRY_NORMAL_ICON_PATH = "/weather/dry-season/sun Normal.png";
+
+const MOBILE_WEATHER_ICON_MAP: Record<string, string> = {
+  Normal: MOBILE_DRY_NORMAL_ICON_PATH,
+  Caution: "/weather/dry-season/sun Caution.png",
+  "Extreme Caution": "/weather/dry-season/sun Extreme Caution.png",
+  Danger: "/weather/dry-season/sun Danger.png",
+  "Extreme Danger": "/weather/dry-season/sun Danger.png",
+  "Light Rain": "/weather/wet-season/Light Rain.png",
+  "Moderate Rain": "/weather/wet-season/Moderate Rain.png",
+  "Heavy Rain": "/weather/wet-season/Heavy Rain.png",
+  "Torrential Rain": "/weather/wet-season/Torrential Rain.png",
 };
 
 const HISTORY_CACHE_MAX_DAYS = 30;
@@ -438,12 +428,7 @@ function formatWeatherDate(dateISO: string | null): string {
     .toUpperCase();
 }
 
-function getWeatherBackground(intensity: string, colorCodedWarning: string, heatIndex: number): string {
-  const warning = colorCodedWarning.toLowerCase();
-  if (warning.includes("red")) return "#E74C4C";
-  if (warning.includes("orange")) return "#FF7E1C";
-  if (warning.includes("yellow")) return "#F7D400";
-
+function getWeatherBackground(intensity: string, heatIndex: number): string {
   const rainyLabels = ["light rain", "moderate rain", "heavy rain", "torrential rain"];
   if (rainyLabels.includes(intensity.toLowerCase())) return "#B3B7C0";
 
@@ -497,22 +482,41 @@ function getWeatherVisualMode(snapshot: WeatherSnapshot): WeatherVisualMode {
   const context = [
     snapshot.intensityDescription,
     snapshot.conditionDescription,
-    snapshot.colorCodedWarning,
     snapshot.manualDescription,
   ]
     .join(" ")
     .toLowerCase();
 
-  const isNight = getManilaHourNow() < 6 || getManilaHourNow() >= 18;
-  const isRainy = /(rain|storm|thunder|shower|drizzle|downpour|bagyo|typhoon|cyclone)/.test(context);
-  const isCloudy = /(cloud|overcast|fog|mist|haze)/.test(context);
+  const iconPath = snapshot.iconPath.toLowerCase();
+  const isNightByIcon = /(moon|night)/.test(iconPath);
+  const isNightByContext = /(night|evening|overnight)/.test(context);
+  const isNightByClock = getManilaHourNow() < 6 || getManilaHourNow() >= 18;
+  const shouldUseClockFallback = !snapshot.iconPath.trim();
+  const isNight = isNightByIcon || isNightByContext || (shouldUseClockFallback && isNightByClock);
+  const isThunderstorm = /(thunder|lightning|storm|squall|bagyo|typhoon|cyclone)/.test(context);
+  const isRainy = /(rain|shower|drizzle|downpour|precip)/.test(context);
+  const isHazy = /(haze|smoke|smog|dust|ash|vog)/.test(context);
+  const isPartlyCloudy = /(few clouds|scattered clouds|partly cloudy|broken clouds)/.test(context);
+  const isCloudy = /(cloud|overcast|fog|mist)/.test(context);
+
+  if (isThunderstorm) {
+    return "thunderstorm";
+  }
 
   if (isRainy) {
     return isNight ? "rainy-night" : "rainy-day";
   }
 
+  if (isHazy) {
+    return "hazy";
+  }
+
   if (isNight) {
     return "night";
+  }
+
+  if (isPartlyCloudy) {
+    return "partly-cloudy";
   }
 
   if (isCloudy) {
@@ -556,19 +560,16 @@ function buildShowcaseThemeFromWeatherColor(baseColor: string): HomeAtmosphereTh
 
 function getWeatherShowcaseThemes(): HomeAtmosphereTheme[] {
   const showcaseInputs = [
-    { intensity: "Light Rain", warning: "No Warning", heat: 25 },
-    { intensity: "Normal", warning: "No Warning", heat: 24 },
-    { intensity: "Normal", warning: "No Warning", heat: 30 },
-    { intensity: "Normal", warning: "No Warning", heat: 38 },
-    { intensity: "Normal", warning: "No Warning", heat: 46 },
-    { intensity: "Normal", warning: "No Warning", heat: 55 },
-    { intensity: "Normal", warning: "Yellow Warning", heat: 27 },
-    { intensity: "Normal", warning: "Orange Warning", heat: 27 },
-    { intensity: "Normal", warning: "Red Warning", heat: 27 },
+    { intensity: "Light Rain", heat: 25 },
+    { intensity: "Normal", heat: 24 },
+    { intensity: "Normal", heat: 30 },
+    { intensity: "Normal", heat: 38 },
+    { intensity: "Normal", heat: 46 },
+    { intensity: "Normal", heat: 55 },
   ];
 
   const uniqueColors = Array.from(
-    new Set(showcaseInputs.map((entry) => getWeatherBackground(entry.intensity, entry.warning, entry.heat).toUpperCase())),
+    new Set(showcaseInputs.map((entry) => getWeatherBackground(entry.intensity, entry.heat).toUpperCase())),
   );
 
   return uniqueColors.map((color) => buildShowcaseThemeFromWeatherColor(color));
@@ -579,7 +580,6 @@ function getWeatherShowcaseScenes(): WeatherShowcaseScene[] {
     intensityDescription: string,
     conditionDescription: string,
     heatIndex: number,
-    colorCodedWarning = "No Warning",
   ): WeatherSnapshot => ({
     recordedAt: null,
     dateLabel: "TODAY",
@@ -589,9 +589,8 @@ function getWeatherShowcaseScenes(): WeatherShowcaseScene[] {
     conditionDescription,
     humidity: 0,
     heatIndex,
-    manualDescription: "",
-    colorCodedWarning,
     signalNo: "No Signal",
+    manualDescription: "",
   });
 
   const snapshots = [
@@ -601,9 +600,6 @@ function getWeatherShowcaseScenes(): WeatherShowcaseScene[] {
     buildSnapshot("Normal", "Clear sky", 26),
     buildSnapshot("Light Rain", "Light rain", 26),
     buildSnapshot("Heavy Rain", "Thunderstorm rain", 26),
-    buildSnapshot("Normal", "Sunny", 27, "Yellow Warning"),
-    buildSnapshot("Normal", "Sunny", 27, "Orange Warning"),
-    buildSnapshot("Normal", "Sunny", 27, "Red Warning"),
   ];
 
   return snapshots.map((snapshot) => ({
@@ -616,7 +612,6 @@ function getHomeAtmosphereTheme(snapshot: WeatherSnapshot): HomeAtmosphereTheme 
   const mode = getWeatherVisualMode(snapshot);
   const weatherCardBase = getWeatherBackground(
     snapshot.intensityDescription,
-    snapshot.colorCodedWarning,
     snapshot.heatIndex,
   );
 
@@ -644,6 +639,31 @@ function getHomeAtmosphereTheme(snapshot: WeatherSnapshot): HomeAtmosphereTheme 
     };
   }
 
+  if (mode === "thunderstorm") {
+    return {
+      base: "#314469",
+      auraTop: "rgba(109, 132, 173, 0.34)",
+      auraBottom: "rgba(47, 67, 107, 0.28)",
+      veil: "rgba(9, 17, 34, 0.26)",
+      blurTint: "dark",
+      textVariant: "light",
+      blurIntensity: 16,
+    };
+  }
+
+  if (mode === "hazy") {
+    const base = "#E7B071";
+    return {
+      base,
+      auraTop: "rgba(240, 196, 145, 0.34)",
+      auraBottom: "rgba(208, 149, 92, 0.24)",
+      veil: "rgba(255, 244, 226, 0.18)",
+      blurTint: "light",
+      textVariant: getAdaptiveTextVariant(base),
+      blurIntensity: 12,
+    };
+  }
+
   if (mode === "cloudy") {
     const base = "#B3B7C0";
     return {
@@ -654,6 +674,19 @@ function getHomeAtmosphereTheme(snapshot: WeatherSnapshot): HomeAtmosphereTheme 
       blurTint: "light",
       textVariant: getAdaptiveTextVariant(base),
       blurIntensity: 14,
+    };
+  }
+
+  if (mode === "partly-cloudy") {
+    const base = "#6EA9E3";
+    return {
+      base,
+      auraTop: "rgba(154, 197, 241, 0.34)",
+      auraBottom: "rgba(89, 143, 206, 0.24)",
+      veil: "rgba(255, 255, 255, 0.2)",
+      blurTint: "light",
+      textVariant: getAdaptiveTextVariant(base),
+      blurIntensity: 13,
     };
   }
 
@@ -793,19 +826,23 @@ function getHistorySourceTimestamp(record: HistoryRecord): number {
 
 function mapWeatherRowToSnapshot(row: WeatherRow): WeatherSnapshot {
   const temp = Math.round(Number(row.temperature ?? 24));
+  const intensityDescription = String(row.intensity ?? "Normal");
+  const storedIconPath = String(row.icon_path ?? "").trim();
+  const mappedIconPath = MOBILE_WEATHER_ICON_MAP[intensityDescription] ?? MOBILE_DRY_NORMAL_ICON_PATH;
+  const isDaytime = getManilaHourNow() >= 6 && getManilaHourNow() < 18;
+  const iconPath = isDaytime ? mappedIconPath : storedIconPath || mappedIconPath;
 
   return {
     recordedAt: row.recorded_at ?? null,
     dateLabel: formatWeatherDate(row.recorded_at ?? null),
     temperature: Number.isNaN(temp) ? 24 : temp,
-    iconPath: String(row.icon_path ?? ""),
-    intensityDescription: String(row.intensity ?? "Normal"),
+    iconPath,
+    intensityDescription,
     conditionDescription: String(row.weather_description ?? "").trim(),
     humidity: Math.round(Number(row.humidity ?? 0)),
     heatIndex: Math.round(Number(row.heat_index ?? (Number.isNaN(temp) ? 24 : temp))),
-    manualDescription: String(row.manual_description ?? "").trim() || DEFAULT_WEATHER_ADVISORY,
-    colorCodedWarning: String(row.color_coded_warning ?? "No Warning"),
     signalNo: String(row.signal_no ?? "No Signal"),
+    manualDescription: String(row.manual_description ?? "").trim() || DEFAULT_WEATHER_ADVISORY,
   };
 }
 
@@ -1019,9 +1056,8 @@ export default function App() {
     conditionDescription: "",
     humidity: 0,
     heatIndex: 24,
-    manualDescription: DEFAULT_WEATHER_ADVISORY,
-    colorCodedWarning: "No Warning",
     signalNo: "No Signal",
+    manualDescription: DEFAULT_WEATHER_ADVISORY,
   });
 
   const [tideStatus, setTideStatus] = useState<TideStatus | null>(null);
@@ -1451,7 +1487,7 @@ export default function App() {
       const { data } = await supabase
         .from("weather_logs")
         .select(
-          "recorded_at, temperature, icon_path, humidity, heat_index, weather_description, intensity, color_coded_warning, signal_no, manual_description",
+          "recorded_at, temperature, icon_path, humidity, heat_index, weather_description, intensity, signal_no, manual_description",
         )
         .order("recorded_at", { ascending: false })
         .limit(1)
@@ -2362,7 +2398,6 @@ export default function App() {
   const renderHomeTab = () => {
     const weatherCardBackground = getWeatherBackground(
       weatherSnapshot.intensityDescription,
-      weatherSnapshot.colorCodedWarning,
       weatherSnapshot.heatIndex,
     );
 
@@ -2390,10 +2425,9 @@ export default function App() {
           temperature={weatherSnapshot.temperature}
           humidity={weatherSnapshot.humidity}
           heatIndex={weatherSnapshot.heatIndex}
+          signalNo={weatherSnapshot.signalNo}
           advisoryText={weatherSnapshot.manualDescription}
           backgroundColor={weatherCardBackground}
-          colorCodedWarning={weatherSnapshot.colorCodedWarning}
-          signalNo={weatherSnapshot.signalNo}
         />
 
         <TideSection
@@ -2489,16 +2523,15 @@ export default function App() {
   const isHomeTabActive = activeTab === "home";
   const realHomeVisualMode = useMemo(() => getWeatherVisualMode(weatherSnapshot), [weatherSnapshot]);
   const homeVisualMode: WeatherVisualMode = IS_BACKGROUND_SHOWCASE_ENABLED ? activeShowcaseScene.mode : realHomeVisualMode;
-  const defaultDashboardAtmosphere: HomeAtmosphereTheme =
-    activeTab === "home"
-      ? homeAtmosphere
-      : DASHBOARD_TAB_ATMOSPHERE[activeTab];
+  // Keep all tabs in sync with the live weather atmosphere.
+  const defaultDashboardAtmosphere: HomeAtmosphereTheme = homeAtmosphere;
   const dashboardAtmosphere = IS_BACKGROUND_SHOWCASE_ENABLED
     ? activeShowcaseScene.theme
     : defaultDashboardAtmosphere;
   const homeTextVariant = IS_BACKGROUND_SHOWCASE_ENABLED ? dashboardAtmosphere.textVariant : homeAtmosphere.textVariant;
+  const shouldShowWeatherScene = true;
 
-  const shouldAnimateAtmosphere = isHomeTabActive || IS_BACKGROUND_SHOWCASE_ENABLED;
+  const shouldAnimateAtmosphere = true;
 
   useEffect(() => {
     if (!shouldAnimateAtmosphere) {
@@ -2816,7 +2849,7 @@ export default function App() {
           <View style={styles.dashboardWrapper}>
             <Animated.View style={[styles.homeAtmosphereLayer, { opacity: atmosphereFade }]}> 
                 <View style={[styles.homeAtmosphereBase, { backgroundColor: dashboardAtmosphere.base }]} />
-                {activeTab === "home" && (homeVisualMode === "sunny" ? (
+                {shouldShowWeatherScene && (homeVisualMode === "sunny" || homeVisualMode === "partly-cloudy") ? (
                   <Animated.View
                     style={[
                       styles.weatherSunCore,
@@ -2826,9 +2859,9 @@ export default function App() {
                       },
                     ]}
                   />
-                ) : null)}
+                ) : null}
 
-                {activeTab === "home" && homeVisualMode === "sunny" ? (
+                {shouldShowWeatherScene && (homeVisualMode === "sunny" || homeVisualMode === "partly-cloudy") ? (
                   <Animated.View
                     style={[
                       styles.weatherSunRays,
@@ -2840,7 +2873,7 @@ export default function App() {
                   />
                 ) : null}
 
-                {activeTab === "home" && homeVisualMode === "cloudy" ? (
+                {shouldShowWeatherScene && (homeVisualMode === "cloudy" || homeVisualMode === "partly-cloudy") ? (
                   <Animated.View
                     style={[
                       styles.weatherCloudGroup,
@@ -2855,7 +2888,15 @@ export default function App() {
                   </Animated.View>
                 ) : null}
 
-                {activeTab === "home" && (homeVisualMode === "night" || homeVisualMode === "rainy-night") ? (
+                {shouldShowWeatherScene && homeVisualMode === "hazy" ? (
+                  <View style={styles.weatherHazeLayer}>
+                    <View style={styles.weatherHazeBandTop} />
+                    <View style={styles.weatherHazeBandMid} />
+                    <View style={styles.weatherHazeBandBottom} />
+                  </View>
+                ) : null}
+
+                {shouldShowWeatherScene && (homeVisualMode === "night" || homeVisualMode === "rainy-night" || homeVisualMode === "thunderstorm") ? (
                   <>
                     {[
                       { left: 56, top: 84, size: 2 },
@@ -2881,11 +2922,14 @@ export default function App() {
                   </>
                 ) : null}
 
-                {activeTab === "home" && (homeVisualMode === "rainy-day" || homeVisualMode === "rainy-night") ? (
+                {shouldShowWeatherScene && (homeVisualMode === "rainy-day" || homeVisualMode === "rainy-night" || homeVisualMode === "thunderstorm") ? (
                   <>
-                    {Array.from({ length: homeVisualMode === "rainy-day" ? 22 : 28 }, (_, index) => {
+                    {Array.from({ length: homeVisualMode === "rainy-day" ? 22 : 30 }, (_, index) => {
                       const laneProgress = Animated.modulo(Animated.add(rainFall, index * 0.095), 1);
-                      const baseOpacity = homeVisualMode === "rainy-night" ? 0.5 - (index % 5) * 0.05 : 0.38 - (index % 5) * 0.04;
+                      const baseOpacity =
+                        homeVisualMode === "rainy-night" || homeVisualMode === "thunderstorm"
+                          ? 0.52 - (index % 5) * 0.05
+                          : 0.38 - (index % 5) * 0.04;
 
                       return (
                         <Animated.View
@@ -2919,9 +2963,12 @@ export default function App() {
                       );
                     })}
 
-                    {Array.from({ length: homeVisualMode === "rainy-day" ? 18 : 24 }, (_, index) => {
+                    {Array.from({ length: homeVisualMode === "rainy-day" ? 18 : 26 }, (_, index) => {
                       const mistProgress = Animated.modulo(Animated.add(rainFallSoft, index * 0.12), 1);
-                      const mistOpacity = homeVisualMode === "rainy-night" ? 0.26 - (index % 4) * 0.03 : 0.2 - (index % 4) * 0.025;
+                      const mistOpacity =
+                        homeVisualMode === "rainy-night" || homeVisualMode === "thunderstorm"
+                          ? 0.28 - (index % 4) * 0.03
+                          : 0.2 - (index % 4) * 0.025;
 
                       return (
                         <Animated.View
@@ -2955,6 +3002,17 @@ export default function App() {
                       );
                     })}
                   </>
+                ) : null}
+
+                {shouldShowWeatherScene && homeVisualMode === "thunderstorm" ? (
+                  <Animated.View
+                    style={[
+                      styles.weatherLightningFlash,
+                      {
+                        opacity: starTwinkle.interpolate({ inputRange: [0, 0.35, 0.55, 1], outputRange: [0, 0.2, 0.55, 0] }),
+                      },
+                    ]}
+                  />
                 ) : null}
 
                 <Animated.View
@@ -3462,11 +3520,51 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(242, 247, 255, 0.42)",
   },
+  weatherHazeLayer: {
+    position: "absolute",
+    top: 42,
+    right: 8,
+    left: 8,
+    height: 156,
+    zIndex: 5,
+  },
+  weatherHazeBandTop: {
+    position: "absolute",
+    top: 0,
+    left: 26,
+    right: 18,
+    height: 42,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 236, 205, 0.36)",
+  },
+  weatherHazeBandMid: {
+    position: "absolute",
+    top: 44,
+    left: 8,
+    right: 34,
+    height: 52,
+    borderRadius: 999,
+    backgroundColor: "rgba(245, 219, 180, 0.32)",
+  },
+  weatherHazeBandBottom: {
+    position: "absolute",
+    top: 96,
+    left: 22,
+    right: 2,
+    height: 46,
+    borderRadius: 999,
+    backgroundColor: "rgba(239, 201, 151, 0.28)",
+  },
   weatherStar: {
     position: "absolute",
     borderRadius: 999,
     backgroundColor: "#e5eeff",
     zIndex: 6,
+  },
+  weatherLightningFlash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(219, 234, 255, 0.42)",
+    zIndex: 7,
   },
   weatherRainDrop: {
     position: "absolute",

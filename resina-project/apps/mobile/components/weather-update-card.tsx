@@ -42,10 +42,9 @@ type WeatherUpdateCardProps = {
   temperature: number;
   humidity: number;
   heatIndex: number;
+  signalNo: string;
   advisoryText: string;
   backgroundColor: string;
-  colorCodedWarning: string;
-  signalNo: string;
 };
 
 export function WeatherUpdateCard({
@@ -56,17 +55,13 @@ export function WeatherUpdateCard({
   temperature,
   humidity,
   heatIndex,
+  signalNo,
   advisoryText,
   backgroundColor,
-  colorCodedWarning,
-  signalNo,
 }: WeatherUpdateCardProps) {
   const iconSource = WEATHER_ICONS[iconPath] ?? WEATHER_ICONS[intensityLabel] ?? WEATHER_ICONS["Normal"];
   const isNightCard = iconPath.toLowerCase().includes("moon");
   const isRainyCard = intensityLabel.toLowerCase().includes("rain");
-  const hasSignal = signalNo !== "No Signal";
-  const hasWarning = colorCodedWarning !== "No Warning";
-  const showAlertBanner = hasSignal || hasWarning;
 
   const iconFloat = useRef(new Animated.Value(0)).current;
   const ambientPulse = useRef(new Animated.Value(0)).current;
@@ -210,27 +205,25 @@ export function WeatherUpdateCard({
         <View style={styles.detailsRow}>
           {conditionDescription ? (
             <View style={styles.detailItem}>
-              <Text style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>CONDITION</Text>
+              <Text numberOfLines={1} style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>CONDITION</Text>
               <Text style={[styles.detailValue, isNightCard && styles.detailValueNight]}>{conditionDescription}</Text>
             </View>
           ) : null}
           <View style={styles.detailItem}>
-            <Text style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>HUMIDITY</Text>
+            <Text numberOfLines={1} style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>HUMIDITY</Text>
             <Text style={[styles.detailValue, isNightCard && styles.detailValueNight]}>{humidity}%</Text>
           </View>
           <View style={styles.detailItem}>
-            <Text style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>HEAT INDEX</Text>
+            <Text numberOfLines={1} style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>HEAT INDEX</Text>
             <Text style={[styles.detailValue, isNightCard && styles.detailValueNight]}>{heatIndex}°C</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text numberOfLines={1} style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>SIGNAL</Text>
+            <Text style={[styles.detailValue, isNightCard && styles.detailValueNight]}>{signalNo}</Text>
           </View>
         </View>
       </View>
 
-      {showAlertBanner && (
-        <View style={styles.alertBanner}>
-          {hasSignal && <Text style={styles.alertItem}>⚠ {signalNo}</Text>}
-          {hasWarning && <Text style={styles.alertItem}>{colorCodedWarning}</Text>}
-        </View>
-      )}
 
       <View style={styles.noticeCard}>
         <Text style={styles.noticeText}>{advisoryText}</Text>
@@ -340,12 +333,14 @@ const styles = StyleSheet.create({
   detailsRow: {
     marginTop: 12,
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 8,
+    rowGap: 8,
+    columnGap: 8,
   },
   detailItem: {
-    flex: 1,
-    marginRight: 0,
+    width: "48.5%",
+    minHeight: 72,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.45)",
@@ -354,40 +349,24 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   detailLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
     color: "#4a5568",
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
   detailLabelNight: {
     color: "#9eb5d6",
   },
   detailValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
     color: "#1e2635",
     marginTop: 3,
-    lineHeight: 17,
+    lineHeight: 16,
     textTransform: "capitalize",
   },
   detailValueNight: {
     color: "#edf4ff",
-  },
-  alertBanner: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#f0b83a",
-    padding: 12,
-    backgroundColor: "#fdf4e3",
-    marginTop: 10,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  alertItem: {
-    color: "#7a5a1a",
-    fontSize: 15,
-    fontWeight: "700",
   },
   noticeCard: {
     borderRadius: 14,

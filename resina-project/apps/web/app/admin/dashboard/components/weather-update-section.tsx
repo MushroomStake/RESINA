@@ -10,7 +10,6 @@ type WeatherView = {
   owmMain: string;
   owmDescription: string;
   intensityDescription: string;
-  colorCodedWarning: string;
   signalNo: string;
   manualDescription: string;
   iconPath: string;
@@ -30,15 +29,15 @@ export function WeatherUpdateSection({
 
   return (
     <>
-      <section className="relative overflow-hidden rounded-[30px] border border-[#d7e4f2] bg-[#f8fbff] p-5 shadow-[0_20px_60px_rgba(15,23,42,0.12)] md:p-6">
+      <section className="relative overflow-hidden rounded-[30px] border border-[#d7e4f2] bg-[#f8fbff] p-4 shadow-[0_20px_60px_rgba(15,23,42,0.12)] md:p-5">
         <div className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.2),transparent_65%)]" />
-        <div className="mb-4">
+        <div className="mb-3">
           <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#4f709e]">Weather Monitor</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[260px_1fr]">
           <div
-            className={`weather-card-animated relative min-h-[228px] overflow-hidden rounded-3xl border border-white/30 px-7 py-7 text-[#2f3850] shadow-[0_18px_45px_rgba(15,23,42,0.24)] ${weatherCardClass} ${isNightCard ? "weather-card-night text-[#e6f0ff]" : ""}`}
+            className={`weather-card-animated relative min-h-[196px] overflow-hidden rounded-3xl border border-white/30 px-5 py-5 text-[#2f3850] shadow-[0_18px_45px_rgba(15,23,42,0.24)] ${weatherCardClass} ${isNightCard ? "weather-card-night text-[#e6f0ff]" : ""}`}
           >
             {isNightCard ? (
               <div className="weather-stars pointer-events-none absolute inset-0">
@@ -59,52 +58,51 @@ export function WeatherUpdateSection({
             ) : null}
 
             <div
-              className={`relative z-20 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-extrabold uppercase tracking-wide ${isNightCard ? "bg-[#142541]/70 text-[#d7e6ff]" : "bg-white/60 text-[#273247]"}`}
+              className={`relative z-20 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[12px] font-extrabold uppercase tracking-wide ${isNightCard ? "bg-[#142541]/70 text-[#d7e6ff]" : "bg-white/60 text-[#273247]"}`}
             >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z" />
               </svg>
               <span>{weatherState.dateLabel}</span>
             </div>
 
-            <p className={`weather-temp-readability absolute left-7 top-1/2 z-20 -translate-y-1/2 text-7xl font-extrabold leading-none md:text-8xl ${isNightCard ? "text-[#f3f8ff]" : "text-[#f7fbff]"}`}>
+            <p className={`weather-temp-readability absolute left-5 top-1/2 z-20 -translate-y-1/2 text-6xl font-extrabold leading-none md:text-7xl ${isNightCard ? "text-[#f3f8ff]" : "text-[#f7fbff]"}`}>
               {weatherState.temperature}°C
             </p>
 
             <Image
               src={weatherState.iconPath}
               alt={weatherState.intensityDescription}
-              width={170}
-              height={170}
-              className={`weather-icon-float absolute right-0 top-1/2 h-[146px] w-[146px] -translate-y-1/2 object-contain ${isNightCard ? "opacity-95" : "opacity-88"}`}
+              width={140}
+              height={140}
+              className={`weather-icon-float absolute right-1 top-1/2 h-[124px] w-[124px] -translate-y-1/2 object-contain ${isNightCard ? "opacity-95" : "opacity-88"}`}
             />
           </div>
 
-          <div className="grid gap-3 rounded-3xl border border-[#d8e4f1] bg-white/80 p-4 backdrop-blur-sm md:grid-cols-2 md:p-5">
-            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-4 py-3">
+          <div className="grid gap-2.5 rounded-3xl border border-[#d8e4f1] bg-white/80 p-3.5 backdrop-blur-sm md:grid-cols-2 md:p-4">
+            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-3.5 py-2.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Condition</p>
-              <p className="mt-1 text-lg font-bold text-[#16375f]">{weatherState.owmMain || "-"}</p>
+              <p className="mt-1 text-base font-bold text-[#16375f]">{weatherState.owmMain || "-"}</p>
               <p className="mt-1 text-sm text-[#5f7797]">{weatherState.owmDescription || "-"}</p>
             </div>
-            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-4 py-3">
+            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-3.5 py-2.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Intensity</p>
-              <p className="mt-1 text-lg font-bold text-[#16375f]">{weatherState.intensityDescription}</p>
+              <p className="mt-1 text-base font-bold text-[#16375f]">{weatherState.intensityDescription}</p>
               <p className="mt-1 text-sm text-[#5f7797]">Signal: {weatherState.signalNo}</p>
             </div>
-            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-4 py-3">
+            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-3.5 py-2.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Humidity</p>
-              <p className="mt-1 text-lg font-bold text-[#16375f]">{weatherState.humidity === null ? "-" : `${weatherState.humidity}%`}</p>
+              <p className="mt-1 text-base font-bold text-[#16375f]">{weatherState.humidity === null ? "-" : `${weatherState.humidity}%`}</p>
             </div>
-            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-4 py-3">
+            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-3.5 py-2.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Heat Index</p>
-              <p className="mt-1 text-lg font-bold text-[#16375f]">{weatherState.heatIndex === null ? "-" : `${weatherState.heatIndex.toFixed(1)}°C`}</p>
+              <p className="mt-1 text-base font-bold text-[#16375f]">{weatherState.heatIndex === null ? "-" : `${weatherState.heatIndex.toFixed(1)}°C`}</p>
             </div>
-            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-4 py-3 md:col-span-2">
+            <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-3.5 py-2.5 md:col-span-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Advisory</p>
               <p className="mt-1 text-sm leading-6 text-[#425a79]" title={weatherState.manualDescription || "-"}>
                 {weatherState.manualDescription || "-"}
               </p>
-              <p className="mt-2 text-xs font-medium text-[#5f7797]">Color coded warning: {weatherState.colorCodedWarning}</p>
             </div>
           </div>
         </div>
