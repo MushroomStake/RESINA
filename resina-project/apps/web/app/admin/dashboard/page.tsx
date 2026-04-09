@@ -7,6 +7,7 @@ import { CurrentSensorStatus } from "./components/current-sensor-status";
 import { WeatherUpdateSection } from "./components/weather-update-section";
 import { TideMonitorSection } from "./components/tide-monitor-section";
 import StatusFeedbackModal from "../components/status-feedback-modal";
+import { AdminPageSkeleton } from "../components/admin-skeleton";
 
 type AlertLevelKey = "normal" | "critical" | "evacuation" | "spilling";
 
@@ -811,11 +812,7 @@ export default function AdminDashboardPage() {
   }, []);
 
   if (isChecking) {
-    return (
-      <main className="flex min-h-dvh items-center justify-center bg-[#f3f5f5]">
-        <p className="text-[#4b5563]">Loading admin session...</p>
-      </main>
-    );
+    return <AdminPageSkeleton title="Loading admin session..." blockCount={3} />;
   }
 
   return (

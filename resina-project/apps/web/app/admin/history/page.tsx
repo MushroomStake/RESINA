@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import { downloadAnalyticsReportXlsx } from "./xlsx-report";
 import { ActivityLogSection } from "../dashboard/components/activity-log-section";
+import { AdminPageSkeleton } from "../components/admin-skeleton";
 
 type AlertLevelKey = "normal" | "critical" | "evacuation" | "spilling";
 
@@ -416,13 +417,7 @@ export default function AdminHistoryPage() {
   };
 
   if (isChecking) {
-    return (
-      <section className="p-6 md:p-8">
-        <div className="rounded-2xl border border-[#e5e7eb] bg-white p-6 text-sm text-[#6b7280]">
-          Loading analytics report...
-        </div>
-      </section>
-    );
+    return <AdminPageSkeleton title="Loading analytics report..." blockCount={2} />;
   }
 
   return (
@@ -554,11 +549,25 @@ export default function AdminHistoryPage() {
               </thead>
               <tbody className="text-[#334155]">
                 {isLoading ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-[#6b7280]">
-                      Loading analytics records...
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }).map((_, index) => (
+                    <tr key={`skeleton-${index}`} className="border-b border-[#e9f0f7] odd:bg-[#fbfdff]">
+                      <td className="px-4 py-4">
+                        <div className="h-4 w-28 animate-pulse rounded bg-[#e3edf8]" />
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="h-4 w-20 animate-pulse rounded bg-[#e3edf8]" />
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="h-6 w-24 animate-pulse rounded-full bg-[#e3edf8]" />
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="h-4 w-16 animate-pulse rounded bg-[#e3edf8]" />
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="h-4 w-full animate-pulse rounded bg-[#e3edf8]" />
+                      </td>
+                    </tr>
+                  ))
                 ) : pagedRecords.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-[#6b7280]">

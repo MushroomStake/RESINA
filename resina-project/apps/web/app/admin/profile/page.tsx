@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import StatusFeedbackModal from "../components/status-feedback-modal";
+import { AdminPageSkeleton } from "../components/admin-skeleton";
 
 type Role = "admin" | "member";
 
@@ -472,11 +473,7 @@ export default function AdminProfilePage() {
   };
 
   if (isChecking) {
-    return (
-      <main className="flex min-h-dvh items-center justify-center bg-[#f3f5f5]">
-        <p className="text-[#4b5563]">Loading profile...</p>
-      </main>
-    );
+    return <AdminPageSkeleton title="Loading profile..." blockCount={2} />;
   }
 
   return (

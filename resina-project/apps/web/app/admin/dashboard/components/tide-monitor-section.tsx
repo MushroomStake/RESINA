@@ -141,7 +141,14 @@ export function TideMonitorSection({
       </div>
 
       {isLoading ? (
-        <div className="mt-4 rounded-2xl border border-sky-100 bg-white/80 p-4 text-sm text-[#5f6f85] shadow-sm">Loading tide data...</div>
+        <div className="mt-4 animate-pulse space-y-3 rounded-2xl border border-sky-100 bg-white/80 p-4 shadow-sm">
+          <div className="h-4 w-36 rounded bg-[#dce8f7]" />
+          <div className="h-20 rounded-2xl bg-[#e9f2ff]" />
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="h-28 rounded-2xl bg-[#edf5ff]" />
+            <div className="h-28 rounded-2xl bg-[#edf5ff]" />
+          </div>
+        </div>
       ) : error ? (
         <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-[#8c1d32] shadow-sm">{error}</div>
       ) : !hasAnyData ? (

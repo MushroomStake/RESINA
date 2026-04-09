@@ -9,6 +9,7 @@ import { CreateAnnouncementModal } from "./components/create-announcement-modal"
 import { DeleteConfirmationModal } from "./components/delete-confirmation-modal";
 import { ImageViewerModal } from "@/app/admin/announcements/components/image-viewer-modal";
 import StatusFeedbackModal from "../components/status-feedback-modal";
+import { AdminPageSkeleton } from "../components/admin-skeleton";
 
 type AlertLevel = "normal" | "warning" | "emergency";
 
@@ -628,13 +629,7 @@ export default function AdminAnnouncementsPage() {
   };
 
   if (isChecking) {
-    return (
-      <section className="p-6 md:p-8">
-        <div className="rounded-2xl border border-[#e5e7eb] bg-white p-6 text-sm text-[#6b7280]">
-          Loading announcements...
-        </div>
-      </section>
-    );
+    return <AdminPageSkeleton title="Loading announcements..." blockCount={2} />;
   }
 
   return (
@@ -723,7 +718,19 @@ export default function AdminAnnouncementsPage() {
           </div>
 
           {isLoadingAnnouncements ? (
-            <p className="text-sm text-[#6b7280]">Loading posts...</p>
+            <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <article key={`announcement-skeleton-${index}`} className="animate-pulse overflow-hidden rounded-3xl border border-[#d9e5f2] bg-white shadow-sm">
+                  <div className="h-52 bg-[#eef3f8]" />
+                  <div className="space-y-3 p-4">
+                    <div className="h-5 w-3/4 rounded bg-[#e2ebf5]" />
+                    <div className="h-4 w-1/2 rounded bg-[#e2ebf5]" />
+                    <div className="h-4 w-full rounded bg-[#e2ebf5]" />
+                    <div className="h-4 w-5/6 rounded bg-[#e2ebf5]" />
+                  </div>
+                </article>
+              ))}
+            </div>
           ) : filteredAnnouncements.length === 0 ? (
             <p className="text-sm text-[#6b7280]">No announcements match the current search or filter.</p>
           ) : (

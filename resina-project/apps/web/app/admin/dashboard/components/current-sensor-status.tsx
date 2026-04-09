@@ -204,7 +204,11 @@ export function CurrentSensorStatus({
 
         <div className={`mt-3 rounded-xl border px-4 py-3 text-sm leading-7 shadow-sm ${alertConfig.noticeClass}`}>{alertConfig.description}</div>
 
-        {isLoadingData ? <p className="mt-3 text-xs text-[#6b7280]">Loading latest sensor row...</p> : null}
+        {isLoadingData ? (
+          <div className="mt-3 animate-pulse rounded-lg border border-white/30 bg-white/25 p-2.5">
+            <div className="h-3 w-40 rounded bg-white/55" />
+          </div>
+        ) : null}
         {sourceTable ? <p className="mt-2 text-xs text-white/75">Data source: {sourceTable}</p> : null}
         {fetchError ? <p className="mt-2 text-xs text-[#b91c1c]">{fetchError}</p> : null}
       </div>
