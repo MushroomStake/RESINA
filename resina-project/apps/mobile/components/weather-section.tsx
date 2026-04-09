@@ -1,5 +1,6 @@
 import { StyleSheet, View } from "react-native";
 import { WeatherUpdateCard } from "./weather-update-card";
+import { SectionSyncBadge, type SectionSyncBadgeVariant } from "./mobile-section-header";
 
 export type WeatherSectionProps = {
   intensityLabel: string;
@@ -12,12 +13,17 @@ export type WeatherSectionProps = {
   signalNo: string;
   advisoryText: string;
   backgroundColor: string;
+  statusLabel?: string | null;
+  statusVariant?: SectionSyncBadgeVariant;
 };
 
 export function WeatherSection(props: WeatherSectionProps) {
+  const { statusLabel, statusVariant = "neutral", ...cardProps } = props;
+
   return (
     <View style={styles.section}>
-      <WeatherUpdateCard {...props} />
+      {statusLabel ? <SectionSyncBadge label={statusLabel} variant={statusVariant} /> : null}
+      <WeatherUpdateCard {...cardProps} />
     </View>
   );
 }

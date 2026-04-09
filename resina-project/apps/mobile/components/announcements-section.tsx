@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AnnouncementCard } from "./announcement-card";
-import { MobileSectionHeader } from "./mobile-section-header";
+import { MobileSectionHeader, SectionSyncBadge, type SectionSyncBadgeVariant } from "./mobile-section-header";
 
 type AnnouncementAlertLevel = "normal" | "warning" | "emergency";
 export type AnnouncementFilterKey = "all" | AnnouncementAlertLevel;
@@ -42,6 +42,8 @@ type AnnouncementsSectionProps = {
   subtitle?: string;
   emptyText?: string;
   textVariant?: "light" | "dark";
+  statusLabel?: string | null;
+  statusVariant?: SectionSyncBadgeVariant;
 };
 
 const badgeStyleByAlert: Record<AnnouncementAlertLevel, AnnouncementTone> = {
@@ -69,6 +71,8 @@ export function AnnouncementsSection({
   subtitle = "Official updates and advisories from Barangay Sta. Rita.",
   emptyText = "No announcements found for this filter.",
   textVariant = "dark",
+  statusLabel,
+  statusVariant = "neutral",
 }: AnnouncementsSectionProps) {
   const isLightText = textVariant === "light";
 
@@ -76,6 +80,7 @@ export function AnnouncementsSection({
     <View>
       <MobileSectionHeader title={title} textVariant={textVariant} />
       <Text style={[styles.subtitle, isLightText ? styles.subtitleLight : null]}>{subtitle}</Text>
+      {statusLabel ? <SectionSyncBadge label={statusLabel} variant={statusVariant} /> : null}
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll} contentContainerStyle={styles.filtersRow}>
         {filterOptions.map((option) => {

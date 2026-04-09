@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { supabase } from "../lib/supabase";
+import { queueAnnouncementComment } from "../lib/offline-write-queue";
 
 type AnnouncementCommentItem = {
   id: string;
@@ -39,8 +40,10 @@ type AnnouncementCommentsModalProps = {
   currentCommenterName: string;
   currentUserAvatarSource: ImageSourcePropType;
   sessionUserId: string | null;
+  isOnline: boolean;
   onRequestClose: () => void;
   onError?: (message: string) => void;
+  onQueued?: (message: string) => void;
 };
 
 const REPLY_TOKEN_REGEX = /^\[\[reply:([^\]]+)\]\]\s*/i;
@@ -126,8 +129,10 @@ export function AnnouncementCommentsModal({
   currentCommenterName,
   currentUserAvatarSource,
   sessionUserId,
+  isOnline,
   onRequestClose,
   onError,
+  onQueued,
 }: AnnouncementCommentsModalProps) {
   const { height: windowHeight } = useWindowDimensions();
   const [announcementComments, setAnnouncementComments] = useState<AnnouncementCommentItem[]>([]);
@@ -360,6 +365,28 @@ export function AnnouncementCommentsModal({
     setIsPostingComment(true);
     setModalError("");
 
+    const queueComment = async () => {
+      await queueAnnouncementComment({
+        announcementId: announcement.id,
+        commenterAuthUserId: sessionUserId,
+        commenterName: currentCommenterName,
+        parentCommentId: replyingToCommentId,
+        body,
+        supportsThreadParentColumn,
+      });
+
+      setCommentInput("");
+      setReplyingToCommentId(null);
+      setReplyingToCommentName(null);
+      setIsPostingComment(false);
+      onQueued?.("Comment saved offline. It will sync when you're back online.");
+    };
+
+    if (!isOnline) {
+      await queueComment();
+      return;
+    }
+
     const payload: Record<string, string | null> = {
       announcement_id: announcement.id,
       commenter_auth_user_id: sessionUserId,
@@ -388,6 +415,17 @@ export function AnnouncementCommentsModal({
     setIsPostingComment(false);
 
     if (insertResult.error) {
+      const normalizedMessage = insertResult.error.message.toLowerCase();
+      if (
+        normalizedMessage.includes("network request failed") ||
+        normalizedMessage.includes("failed to fetch") ||
+        normalizedMessage.includes("network error") ||
+        normalizedMessage.includes("offline")
+      ) {
+        await queueComment();
+        return;
+      }
+
       setModalError(insertResult.error.message);
       onError?.(insertResult.error.message);
       return;

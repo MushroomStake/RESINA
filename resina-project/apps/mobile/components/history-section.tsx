@@ -1,7 +1,7 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import type { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { Pressable, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { MobileSectionHeader } from "./mobile-section-header";
+import { MobileSectionHeader, SectionSyncBadge, type SectionSyncBadgeVariant } from "./mobile-section-header";
 
 export type HistoryAlertLevel = "normal" | "critical" | "evacuation" | "spilling";
 
@@ -39,6 +39,8 @@ type HistorySectionProps = {
   title?: string;
   subtitle?: string;
   textVariant?: "light" | "dark";
+  statusLabel?: string | null;
+  statusVariant?: SectionSyncBadgeVariant;
 };
 
 const historyFilterOptions: Array<{ key: "all" | HistoryAlertLevel; label: string }> = [
@@ -95,6 +97,8 @@ export function HistorySection({
   title = "HISTORY",
   subtitle = "Sorted by newest records with date filtering and water level status.",
   textVariant = "dark",
+  statusLabel,
+  statusVariant = "neutral",
 }: HistorySectionProps) {
   const isLightText = textVariant === "light";
 
@@ -102,6 +106,7 @@ export function HistorySection({
     <View>
       <MobileSectionHeader title={title} textVariant={textVariant} />
       <Text style={[styles.subtitle, isLightText ? styles.subtitleLight : null]}>{subtitle}</Text>
+      {statusLabel ? <SectionSyncBadge label={statusLabel} variant={statusVariant} /> : null}
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll} contentContainerStyle={styles.filtersRow}>
         {historyFilterOptions.map((option) => {

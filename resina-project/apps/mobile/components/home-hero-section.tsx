@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import { SensorStatusCard } from "./sensor-status-card";
+import { SectionSyncBadge, type SectionSyncBadgeVariant } from "./mobile-section-header";
 
 export type HomeHeroSectionProps = {
   title: string;
@@ -13,6 +14,8 @@ export type HomeHeroSectionProps = {
   backgroundColor: string;
   waterLevel: number | null;
   textVariant?: "light" | "dark";
+  statusLabel?: string | null;
+  statusVariant?: SectionSyncBadgeVariant;
 };
 
 export function HomeHeroSection({
@@ -27,6 +30,8 @@ export function HomeHeroSection({
   backgroundColor,
   waterLevel,
   textVariant = "dark",
+  statusLabel,
+  statusVariant = "neutral",
 }: HomeHeroSectionProps) {
   const isLightText = textVariant === "light";
 
@@ -35,6 +40,7 @@ export function HomeHeroSection({
       <View style={styles.headerRow}>
         <Text style={[styles.title, isLightText ? styles.titleLight : null]}>{title}</Text>
         {subtitle ? <Text style={[styles.subtitle, isLightText ? styles.subtitleLight : null]}>{subtitle}</Text> : null}
+        {statusLabel ? <SectionSyncBadge label={statusLabel} variant={statusVariant} /> : null}
       </View>
 
       <SensorStatusCard

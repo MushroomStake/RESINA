@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import type { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import NetInfo, { type NetInfoState } from "@react-native-community/netinfo";
 import { BlurView } from "expo-blur";
 import {
   Animated,
@@ -23,7 +24,8 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { Session } from "@supabase/supabase-js";
-import { clearExpiredCaches, readCache, writeCache } from "./lib/cache";
+import { readCache, writeCache } from "./lib/cache";
+import { flushOfflineWriteQueue, queueProfileWrite } from "./lib/offline-write-queue";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import { BottomNav, type DashboardTab } from "./components/bottom-nav";
 import { LoadingToast } from "./components/loading-toast";
@@ -862,6 +864,44 @@ function formatCachedTimestamp(updatedAt: number | null): string {
   });
 }
 
+function getSectionSyncLabel(result: CacheAwareLoadResult, online: boolean): string | null {
+  if (result.source === "live") {
+    return null;
+  }
+
+  if (result.source === "cache") {
+    return result.cachedAt ? `Cached copy • ${formatCachedTimestamp(result.cachedAt)}` : "Cached copy";
+  }
+
+  return online ? "Waiting for live sync" : "Offline • no cached copy";
+}
+
+function getSectionSyncVariant(
+  result: CacheAwareLoadResult,
+  online: boolean,
+): "live" | "cache" | "offline" | "neutral" {
+  if (result.source === "cache") {
+    return "cache";
+  }
+
+  if (result.source === "none" && !online) {
+    return "offline";
+  }
+
+  return "neutral";
+}
+
+function isOfflineLikeError(message: string | null | undefined): boolean {
+  const normalized = (message ?? "").toLowerCase();
+  return (
+    normalized.includes("network request failed") ||
+    normalized.includes("failed to fetch") ||
+    normalized.includes("network error") ||
+    normalized.includes("internet connection") ||
+    normalized.includes("offline")
+  );
+}
+
 function trimHistoryForCache(records: HistoryRecord[]): HistoryRecord[] {
   const cutoff = Date.now() - HISTORY_CACHE_MAX_DAYS * 24 * 60 * 60 * 1000;
   return records
@@ -1032,6 +1072,7 @@ export default function App() {
   const [refreshToastMessage, setRefreshToastMessage] = useState("Refreshing live data...");
   const [cachedDataBanner, setCachedDataBanner] = useState("");
   const [isUsingCachedData, setIsUsingCachedData] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -1137,6 +1178,16 @@ export default function App() {
   });
   const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState<string | null>(null);
 
+  const [sensorSyncState, setSensorSyncState] = useState<CacheAwareLoadResult>({ source: "none", cachedAt: null });
+  const [weatherSyncState, setWeatherSyncState] = useState<CacheAwareLoadResult>({ source: "none", cachedAt: null });
+  const [tideSyncState, setTideSyncState] = useState<CacheAwareLoadResult>({ source: "none", cachedAt: null });
+  const [announcementsSyncState, setAnnouncementsSyncState] = useState<CacheAwareLoadResult>({
+    source: "none",
+    cachedAt: null,
+  });
+  const [historySyncState, setHistorySyncState] = useState<CacheAwareLoadResult>({ source: "none", cachedAt: null });
+  const [profileSyncState, setProfileSyncState] = useState<CacheAwareLoadResult>({ source: "none", cachedAt: null });
+
   const alertLevel = useMemo(() => inferAlertLevel(sensorSnapshot), [sensorSnapshot]);
   const alertConfig = ALERT_LEVELS[alertLevel];
   const waterRange = useMemo(
@@ -1241,17 +1292,17 @@ export default function App() {
       refreshToastTimerRef.current = null;
     }
 
-    setRefreshToastMessage(message);
+    setRefreshToastMessage(isOnline ? message : "Offline mode: showing cached data.");
     setIsRefreshToastVisible(true);
     setIsRefreshingDashboard(true);
     const refreshStart = Date.now();
 
     try {
       const results = await Promise.all([
-        loadSensorSnapshot(),
-        loadWeatherSnapshot(),
-        loadAnnouncements(),
-        loadHistoryRecords(),
+        loadSensorSnapshot(isOnline),
+        loadWeatherSnapshot(isOnline),
+        loadAnnouncements(0, "replace", isOnline),
+        loadHistoryRecords(0, "replace", isOnline),
       ]);
       const banner = resolveLoadBanner(results);
       setIsUsingCachedData(banner.showCached);
@@ -1341,86 +1392,110 @@ export default function App() {
     }
   };
 
-  const loadProfileData = async (authUserId: string, fallbackUser?: Session["user"]) => {
+  const loadProfileData = async (authUserId: string, fallbackUser?: Session["user"], allowLiveFetch = true) => {
     const profileCacheKey = CACHE_KEYS.profile(authUserId);
     const cachedProfile = await readCache<ProfileCachePayload>(profileCacheKey, CACHE_TTL_MS.profile);
 
-    if (cachedProfile && !cachedProfile.isExpired) {
+    if (cachedProfile) {
       setRole(cachedProfile.value.role);
       setProfileState(cachedProfile.value.profileState);
+      setProfileSyncState({ source: "cache", cachedAt: cachedProfile.updatedAt });
     }
 
-    const { data } = await supabase.from("profiles").select("*").eq("auth_user_id", authUserId).maybeSingle();
+    if (!allowLiveFetch) {
+      if (!cachedProfile) {
+        setProfileSyncState({ source: "none", cachedAt: null });
+      }
 
-    const row = (data ?? {}) as Record<string, unknown>;
-    const metadata = ((fallbackUser?.user_metadata as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
+      return;
+    }
 
-    const firstName = String(row.first_name ?? metadata.first_name ?? "").trim();
-    const middleName = String(row.middle_name ?? metadata.middle_name ?? "").trim();
-    const lastName = String(row.last_name ?? metadata.last_name ?? "").trim();
-    const fallbackName = [firstName, middleName, lastName].filter(Boolean).join(" ").trim();
+    try {
+      const { data } = await supabase.from("profiles").select("*").eq("auth_user_id", authUserId).maybeSingle();
 
-    const roleValue = String(row.role ?? metadata.role ?? "user");
-    const avatarRaw = String(metadata.profile_avatar ?? "user") as ProfileAvatarKey;
-    const avatarKey = PROFILE_AVATAR_OPTIONS.some((item) => item.key === avatarRaw) ? avatarRaw : "user";
+      const row = (data ?? {}) as Record<string, unknown>;
+      const metadata = ((fallbackUser?.user_metadata as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
 
-    const fullName = String((row.full_name ?? metadata.full_name ?? fallbackName) || "Resident").trim();
-    const email = String(row.email ?? fallbackUser?.email ?? "-").trim();
-    const phoneNumber = String(row.phone_number ?? metadata.phone_number ?? "-").trim();
-    const residentStatus = normalizeResidentStatus(row.resident_status ?? metadata.resident_status);
-    const rowAddress = String(row.address_purok ?? "").trim();
-    const metadataAddress = String(metadata.address_purok ?? "").trim();
-    const rowResidentStatus = normalizeResidentStatus(row.resident_status);
-    const addressPurok = residentStatus === "resident" ? rowAddress || metadataAddress : "";
-    const normalizedRole = roleValue === "admin" || roleValue === "member" || roleValue === "user" ? roleValue : "user";
-    const resolvedAddress = residentStatus === "resident" ? metadataAddress || rowAddress : "";
-    const shouldSyncProfile =
-      rowResidentStatus !== residentStatus || (residentStatus === "resident" ? rowAddress !== resolvedAddress : rowAddress !== "");
+      const firstName = String(row.first_name ?? metadata.first_name ?? "").trim();
+      const middleName = String(row.middle_name ?? metadata.middle_name ?? "").trim();
+      const lastName = String(row.last_name ?? metadata.last_name ?? "").trim();
+      const fallbackName = [firstName, middleName, lastName].filter(Boolean).join(" ").trim();
 
-    // Keep profile table in sync with auth metadata after registration confirmation.
-    if (shouldSyncProfile) {
-      const profileEmail = String(row.email ?? fallbackUser?.email ?? "").trim();
+      const roleValue = String(row.role ?? metadata.role ?? "user");
+      const avatarRaw = String(metadata.profile_avatar ?? "user") as ProfileAvatarKey;
+      const avatarKey = PROFILE_AVATAR_OPTIONS.some((item) => item.key === avatarRaw) ? avatarRaw : "user";
 
-      if (profileEmail) {
-        await supabase.from("profiles").upsert(
-          {
-            auth_user_id: authUserId,
-            full_name: fullName || "Resident",
-            email: profileEmail,
-            role: normalizedRole,
-            resident_status: residentStatus,
-            address_purok: resolvedAddress,
-          },
-          {
-            onConflict: "auth_user_id",
-          },
-        );
+      const fullName = String((row.full_name ?? metadata.full_name ?? fallbackName) || "Resident").trim();
+      const email = String(row.email ?? fallbackUser?.email ?? "-").trim();
+      const phoneNumber = String(row.phone_number ?? metadata.phone_number ?? "-").trim();
+      const residentStatus = normalizeResidentStatus(row.resident_status ?? metadata.resident_status);
+      const rowAddress = String(row.address_purok ?? "").trim();
+      const metadataAddress = String(metadata.address_purok ?? "").trim();
+      const rowResidentStatus = normalizeResidentStatus(row.resident_status);
+      const addressPurok = residentStatus === "resident" ? rowAddress || metadataAddress : "";
+      const normalizedRole = roleValue === "admin" || roleValue === "member" || roleValue === "user" ? roleValue : "user";
+      const resolvedAddress = residentStatus === "resident" ? metadataAddress || rowAddress : "";
+      const shouldSyncProfile =
+        rowResidentStatus !== residentStatus || (residentStatus === "resident" ? rowAddress !== resolvedAddress : rowAddress !== "");
+
+      // Keep profile table in sync with auth metadata after registration confirmation.
+      if (shouldSyncProfile) {
+        const profileEmail = String(row.email ?? fallbackUser?.email ?? "").trim();
+
+        if (profileEmail) {
+          await supabase.from("profiles").upsert(
+            {
+              auth_user_id: authUserId,
+              full_name: fullName || "Resident",
+              email: profileEmail,
+              role: normalizedRole,
+              resident_status: residentStatus,
+              address_purok: resolvedAddress,
+            },
+            {
+              onConflict: "auth_user_id",
+            },
+          );
+        }
+      }
+
+      const nextProfileState: ProfileState = {
+        fullName,
+        email: email || "-",
+        phoneNumber: phoneNumber || "-",
+        residentStatus,
+        addressPurok,
+        role: normalizedRole,
+        avatarKey,
+      };
+
+      setRole(normalizedRole);
+      setProfileState(nextProfileState);
+      setProfileSyncState({ source: "live", cachedAt: null });
+
+      await writeCache(profileCacheKey, {
+        role: normalizedRole,
+        profileState: nextProfileState,
+      });
+    } catch {
+      // Keep the currently rendered cached profile state when offline.
+      if (!cachedProfile) {
+        setProfileSyncState({ source: "none", cachedAt: null });
       }
     }
-
-    const nextProfileState: ProfileState = {
-      fullName,
-      email: email || "-",
-      phoneNumber: phoneNumber || "-",
-      residentStatus,
-      addressPurok,
-      role: normalizedRole,
-      avatarKey,
-    };
-
-    setRole(normalizedRole);
-    setProfileState(nextProfileState);
-
-    await writeCache(profileCacheKey, {
-      role: normalizedRole,
-      profileState: nextProfileState,
-    });
   };
 
-  const loadSensorSnapshot = async (): Promise<CacheAwareLoadResult> => {
+  const loadSensorSnapshot = async (allowLiveFetch = true): Promise<CacheAwareLoadResult> => {
     const cached = await readCache<SensorSnapshot>(CACHE_KEYS.sensor, CACHE_TTL_MS.sensor);
-    if (cached && !cached.isExpired) {
+    if (cached) {
       setSensorSnapshot(cached.value);
+      setSensorSyncState({ source: "cache", cachedAt: cached.updatedAt });
+    }
+
+    if (!allowLiveFetch) {
+      const result = cached ? { source: "cache" as const, cachedAt: cached.updatedAt } : { source: "none" as const, cachedAt: null };
+      setSensorSyncState(result);
+      return result;
     }
 
     const sources = [
@@ -1455,6 +1530,7 @@ export default function App() {
 
         setSensorSnapshot(nextSnapshot);
         await writeCache(CACHE_KEYS.sensor, nextSnapshot);
+        setSensorSyncState({ source: "live", cachedAt: null });
         return {
           source: "live",
           cachedAt: null,
@@ -1464,12 +1540,15 @@ export default function App() {
       // Fall back to cached data.
     }
 
-    if (cached && !cached.isExpired) {
+    if (cached) {
+      setSensorSyncState({ source: "cache", cachedAt: cached.updatedAt });
       return {
         source: "cache",
         cachedAt: cached.updatedAt,
       };
     }
+
+    setSensorSyncState({ source: "none", cachedAt: null });
 
     return {
       source: "none",
@@ -1477,10 +1556,17 @@ export default function App() {
     };
   };
 
-  const loadWeatherSnapshot = async (): Promise<CacheAwareLoadResult> => {
+  const loadWeatherSnapshot = async (allowLiveFetch = true): Promise<CacheAwareLoadResult> => {
     const cached = await readCache<WeatherSnapshot>(CACHE_KEYS.weather, CACHE_TTL_MS.weather);
-    if (cached && !cached.isExpired) {
+    if (cached) {
       setWeatherSnapshot(cached.value);
+      setWeatherSyncState({ source: "cache", cachedAt: cached.updatedAt });
+    }
+
+    if (!allowLiveFetch) {
+      const result = cached ? { source: "cache" as const, cachedAt: cached.updatedAt } : { source: "none" as const, cachedAt: null };
+      setWeatherSyncState(result);
+      return result;
     }
 
     try {
@@ -1497,6 +1583,7 @@ export default function App() {
         const nextSnapshot = mapWeatherRowToSnapshot(data as WeatherRow);
         setWeatherSnapshot(nextSnapshot);
         await writeCache(CACHE_KEYS.weather, nextSnapshot);
+        setWeatherSyncState({ source: "live", cachedAt: null });
         return {
           source: "live",
           cachedAt: null,
@@ -1506,12 +1593,15 @@ export default function App() {
       // Fall back to cached data.
     }
 
-    if (cached && !cached.isExpired) {
+    if (cached) {
+      setWeatherSyncState({ source: "cache", cachedAt: cached.updatedAt });
       return {
         source: "cache",
         cachedAt: cached.updatedAt,
       };
     }
+
+    setWeatherSyncState({ source: "none", cachedAt: null });
 
     return {
       source: "none",
@@ -1519,16 +1609,24 @@ export default function App() {
     };
   };
 
-  const loadTideStatus = async (): Promise<CacheAwareLoadResult> => {
+  const loadTideStatus = async (allowLiveFetch = true): Promise<CacheAwareLoadResult> => {
     setIsTideLoading(true);
     const cached = await readCache<TideStatus>(CACHE_KEYS.tide, CACHE_TTL_MS.tide);
     const cachedExtremes = await readCache<TideExtreme[]>(CACHE_KEYS.tideExtremes, CACHE_TTL_MS.tideExtremes);
-    if (cached && !cached.isExpired) {
+    if (cached) {
       setTideStatus(cached.value);
       setTideError(null);
+      setTideSyncState({ source: "cache", cachedAt: cached.updatedAt });
     }
-    if (cachedExtremes && !cachedExtremes.isExpired) {
+    if (cachedExtremes) {
       setTideExtremes(cachedExtremes.value);
+    }
+
+    if (!allowLiveFetch) {
+      setIsTideLoading(false);
+      const result = cached ? { source: "cache" as const, cachedAt: cached.updatedAt } : { source: "none" as const, cachedAt: null };
+      setTideSyncState(result);
+      return result;
     }
 
     try {
@@ -1583,6 +1681,7 @@ export default function App() {
       await writeCache(CACHE_KEYS.tide, tideStatus);
       await writeCache(CACHE_KEYS.tideHourly, hourlyTides);
       await writeCache(CACHE_KEYS.tideExtremes, tideData);
+      setTideSyncState({ source: "live", cachedAt: null });
       setIsTideLoading(false);
       return {
         source: "live",
@@ -1593,12 +1692,15 @@ export default function App() {
       setTideError(message);
       setIsTideLoading(false);
 
-      if (cached && !cached.isExpired) {
+      if (cached) {
+        setTideSyncState({ source: "cache", cachedAt: cached.updatedAt });
         return {
           source: "cache",
           cachedAt: cached.updatedAt,
         };
       }
+
+      setTideSyncState({ source: "none", cachedAt: null });
 
       return {
         source: "none",
@@ -1607,12 +1709,16 @@ export default function App() {
     }
   };
 
-  const loadTideHourly = async (): Promise<void> => {
+  const loadTideHourly = async (allowLiveFetch = true): Promise<void> => {
     try {
       const today = getManilaDate();
       const cached = await readCache<TideHourly[]>(CACHE_KEYS.tideHourly, CACHE_TTL_MS.tideHourly);
-      if (cached && !cached.isExpired) {
+      if (cached) {
         setTideHourly(cached.value);
+      }
+
+      if (!allowLiveFetch) {
+        return;
       }
 
       const { data: predictionRow, error: predictionError } = await supabase
@@ -1653,6 +1759,7 @@ export default function App() {
   const loadAnnouncements = async (
     nextPage = 0,
     mode: "replace" | "append" = "replace",
+    allowLiveFetch = true,
   ): Promise<CacheAwareLoadResult> => {
     if (mode === "replace") {
       setIsAnnouncementsLoading(true);
@@ -1663,8 +1770,21 @@ export default function App() {
     const cached = mode === "replace"
       ? await readCache<AnnouncementItem[]>(CACHE_KEYS.announcements, CACHE_TTL_MS.announcements)
       : null;
-    if (cached && !cached.isExpired) {
+    if (cached) {
       setAnnouncements(cached.value);
+      setAnnouncementsSyncState({ source: "cache", cachedAt: cached.updatedAt });
+    }
+
+    if (!allowLiveFetch) {
+      if (mode === "replace") {
+        setIsAnnouncementsLoading(false);
+      } else {
+        setIsLoadingMoreAnnouncements(false);
+      }
+
+      const result = cached ? { source: "cache" as const, cachedAt: cached.updatedAt } : { source: "none" as const, cachedAt: null };
+      setAnnouncementsSyncState(result);
+      return result;
     }
 
     const start = nextPage * ANNOUNCEMENTS_PAGE_SIZE;
@@ -1700,6 +1820,8 @@ export default function App() {
         await writeCache(CACHE_KEYS.announcements, pageRows.slice(0, ANNOUNCEMENTS_CACHE_MAX_ITEMS));
       }
 
+      setAnnouncementsSyncState({ source: "live", cachedAt: null });
+
       return {
         source: "live",
         cachedAt: null,
@@ -1714,12 +1836,15 @@ export default function App() {
       }
     }
 
-    if (cached && !cached.isExpired) {
+    if (cached) {
+      setAnnouncementsSyncState({ source: "cache", cachedAt: cached.updatedAt });
       return {
         source: "cache",
         cachedAt: cached.updatedAt,
       };
     }
+
+    setAnnouncementsSyncState({ source: "none", cachedAt: null });
 
     return {
       source: "none",
@@ -1730,6 +1855,7 @@ export default function App() {
   const loadHistoryRecords = async (
     nextPage = 0,
     mode: "replace" | "append" = "replace",
+    allowLiveFetch = true,
   ): Promise<CacheAwareLoadResult> => {
     if (mode === "replace") {
       setIsHistoryLoading(true);
@@ -1738,8 +1864,21 @@ export default function App() {
     }
 
     const cached = mode === "replace" ? await readCache<HistoryRecord[]>(CACHE_KEYS.history, CACHE_TTL_MS.history) : null;
-    if (cached && !cached.isExpired) {
+    if (cached) {
       setHistoryRecords(cached.value);
+      setHistorySyncState({ source: "cache", cachedAt: cached.updatedAt });
+    }
+
+    if (!allowLiveFetch) {
+      if (mode === "replace") {
+        setIsHistoryLoading(false);
+      } else {
+        setIsLoadingMoreHistory(false);
+      }
+
+      const result = cached ? { source: "cache" as const, cachedAt: cached.updatedAt } : { source: "none" as const, cachedAt: null };
+      setHistorySyncState(result);
+      return result;
     }
 
     const start = nextPage * HISTORY_PAGE_SIZE;
@@ -1774,6 +1913,8 @@ export default function App() {
           await writeCache(CACHE_KEYS.history, trimHistoryForCache(pageRows));
         }
 
+        setHistorySyncState({ source: "live", cachedAt: null });
+
         return {
           source: "live",
           cachedAt: null,
@@ -1789,12 +1930,15 @@ export default function App() {
       }
     }
 
-    if (cached && !cached.isExpired) {
+    if (cached) {
+      setHistorySyncState({ source: "cache", cachedAt: cached.updatedAt });
       return {
         source: "cache",
         cachedAt: cached.updatedAt,
       };
     }
+
+    setHistorySyncState({ source: "none", cachedAt: null });
 
     return {
       source: "none",
@@ -1814,7 +1958,13 @@ export default function App() {
 
   const loadDashboard = async () => {
     setIsDashboardLoading(true);
-    const results = await Promise.all([loadSensorSnapshot(), loadWeatherSnapshot(), loadTideStatus(), loadAnnouncements(), loadHistoryRecords()]);
+    const results = await Promise.all([
+      loadSensorSnapshot(isOnline),
+      loadWeatherSnapshot(isOnline),
+      loadTideStatus(isOnline),
+      loadAnnouncements(0, "replace", isOnline),
+      loadHistoryRecords(0, "replace", isOnline),
+    ]);
     const banner = resolveLoadBanner(results);
     setIsUsingCachedData(banner.showCached);
     setCachedDataBanner(banner.message);
@@ -1824,14 +1974,33 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
 
-    const boot = async () => {
-      await clearExpiredCaches([
-        { key: CACHE_KEYS.sensor, maxAgeMs: CACHE_TTL_MS.sensor },
-        { key: CACHE_KEYS.weather, maxAgeMs: CACHE_TTL_MS.weather },
-        { key: CACHE_KEYS.announcements, maxAgeMs: CACHE_TTL_MS.announcements },
-        { key: CACHE_KEYS.history, maxAgeMs: CACHE_TTL_MS.history },
-      ]);
+    const applyNetworkState = (state: NetInfoState) => {
+      if (!isMounted) {
+        return;
+      }
 
+      const connected = Boolean(state.isConnected);
+      setIsOnline(connected && state.isInternetReachable !== false);
+    };
+
+    const unsubscribe = NetInfo.addEventListener(applyNetworkState);
+
+    void NetInfo.fetch().then(applyNetworkState).catch(() => {
+      if (isMounted) {
+        setIsOnline(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const boot = async () => {
       const {
         data: { session: initialSession },
       } = await supabase.auth.getSession();
@@ -1840,7 +2009,7 @@ export default function App() {
 
       setSession(initialSession);
       if (initialSession?.user?.id) {
-        await loadProfileData(initialSession.user.id, initialSession.user);
+        await loadProfileData(initialSession.user.id, initialSession.user, isOnline);
       }
 
       setIsBootstrapping(false);
@@ -1853,7 +2022,7 @@ export default function App() {
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       if (nextSession?.user?.id) {
-        void loadProfileData(nextSession.user.id, nextSession.user);
+        void loadProfileData(nextSession.user.id, nextSession.user, isOnline);
       }
     });
 
@@ -1862,6 +2031,31 @@ export default function App() {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!session) return;
+
+    void loadDashboard();
+  }, [session, isOnline]);
+
+  useEffect(() => {
+    if (!session || !isOnline) return;
+
+    let isMounted = true;
+
+    void (async () => {
+      const result = await flushOfflineWriteQueue();
+      if (!isMounted || result.syncedCount === 0) {
+        return;
+      }
+
+      await loadProfileData(session.user.id, session.user, true);
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session, isOnline]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1885,8 +2079,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
-    void loadDashboard();
+    if (!session || !isOnline) return;
     let liveChannel: ReturnType<typeof supabase.channel> | null = null;
 
     liveChannel = supabase
@@ -1895,24 +2088,24 @@ export default function App() {
         "postgres_changes",
         { event: "*", schema: "public", table: "sensor_readings" },
         () => {
-          void loadSensorSnapshot();
-          void loadHistoryRecords();
+          void loadSensorSnapshot(true);
+          void loadHistoryRecords(0, "replace", true);
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sensor_status" },
-        () => void loadSensorSnapshot(),
+        () => void loadSensorSnapshot(true),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "water_levels" },
-        () => void loadSensorSnapshot(),
+        () => void loadSensorSnapshot(true),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sensor_logs" },
-        () => void loadSensorSnapshot(),
+        () => void loadSensorSnapshot(true),
       )
       .on(
         "postgres_changes",
@@ -1927,18 +2120,18 @@ export default function App() {
             return;
           }
 
-          void loadWeatherSnapshot();
+          void loadWeatherSnapshot(true);
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "announcements" },
-        () => void loadAnnouncements(),
+        () => void loadAnnouncements(0, "replace", true),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "announcement_media" },
-        () => void loadAnnouncements(),
+        () => void loadAnnouncements(0, "replace", true),
       )
       .subscribe();
 
@@ -1947,7 +2140,7 @@ export default function App() {
         void supabase.removeChannel(liveChannel);
       }
     };
-  }, [session]);
+  }, [session, isOnline]);
 
   const selectedHistoryDateValue = useMemo(() => {
     if (!selectedHistoryDateKey) {
@@ -1996,7 +2189,7 @@ export default function App() {
       return;
     }
 
-    void loadAnnouncements(announcementPage + 1, "append");
+    void loadAnnouncements(announcementPage + 1, "append", isOnline);
   };
 
   const handleLoadMoreHistory = () => {
@@ -2004,11 +2197,11 @@ export default function App() {
       return;
     }
 
-    void loadHistoryRecords(historyPage + 1, "append");
+    void loadHistoryRecords(historyPage + 1, "append", isOnline);
   };
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || !isOnline) return;
 
     const interval = setInterval(() => {
       void (async () => {
@@ -2023,7 +2216,7 @@ export default function App() {
         if (!latestRecordedAt) return;
 
         if (latestWeatherRecordedAtRef.current !== latestRecordedAt) {
-          await loadWeatherSnapshot();
+          await loadWeatherSnapshot(true);
         }
       })();
     }, 12000);
@@ -2031,15 +2224,19 @@ export default function App() {
     return () => {
       clearInterval(interval);
     };
-  }, [session]);
+  }, [session, isOnline]);
 
   useEffect(() => {
     if (!session) return;
 
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
+      if (state === "active" && isOnline) {
         void (async () => {
-          const results = await Promise.all([loadWeatherSnapshot(), loadAnnouncements(), loadHistoryRecords()]);
+          const results = await Promise.all([
+            loadWeatherSnapshot(true),
+            loadAnnouncements(0, "replace", true),
+            loadHistoryRecords(0, "replace", true),
+          ]);
           const banner = resolveLoadBanner(results);
           setIsUsingCachedData(banner.showCached);
           setCachedDataBanner(banner.message);
@@ -2050,7 +2247,7 @@ export default function App() {
     return () => {
       sub.remove();
     };
-  }, [session]);
+  }, [session, isOnline]);
 
   const handleLogin = async () => {
     clearAlerts();
@@ -2185,45 +2382,97 @@ export default function App() {
       return;
     }
 
+    const nextProfileState: ProfileState = {
+      ...profileState,
+      avatarKey,
+    };
+
+    const queueProfileAvatar = async () => {
+      await queueProfileWrite({
+        userId: session.user.id,
+        fullName: nextProfileState.fullName,
+        email: nextProfileState.email,
+        role: nextProfileState.role,
+        residentStatus: nextProfileState.residentStatus,
+        addressPurok: nextProfileState.addressPurok,
+        profileAvatarKey: avatarKey,
+        userMetadata: {
+          ...(session.user.user_metadata ?? {}),
+          profile_avatar: avatarKey,
+        },
+      });
+
+      await writeCache(CACHE_KEYS.profile(session.user.id), {
+        role: nextProfileState.role,
+        profileState: nextProfileState,
+      });
+
+      setProfileState(nextProfileState);
+      setRole(nextProfileState.role);
+      setProfileSyncState({ source: "cache", cachedAt: Date.now() });
+      clearAlerts();
+      setSuccessMessage("Profile avatar saved locally. It will sync when you're back online.");
+      setIsAvatarPickerOpen(false);
+      setIsSavingAvatar(false);
+    };
+
+    if (!isOnline) {
+      await queueProfileAvatar();
+      return;
+    }
+
     setIsSavingAvatar(true);
 
-    const { data, error } = await supabase.auth.updateUser({
-      data: {
-        ...(session.user.user_metadata ?? {}),
-        profile_avatar: avatarKey,
-      },
-    });
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        data: {
+          ...(session.user.user_metadata ?? {}),
+          profile_avatar: avatarKey,
+        },
+      });
 
-    const { error: profileAvatarError } = await supabase.from("profiles").upsert(
-      {
-        auth_user_id: session.user.id,
-        full_name: profileState.fullName,
-        email: profileState.email,
-        role,
-        resident_status: profileState.residentStatus,
-        profile_avatar: avatarKey,
-      },
-      {
-        onConflict: "auth_user_id",
-      },
-    );
+      const { error: profileAvatarError } = await supabase.from("profiles").upsert(
+        {
+          auth_user_id: session.user.id,
+          full_name: nextProfileState.fullName,
+          email: nextProfileState.email,
+          role: nextProfileState.role,
+          resident_status: nextProfileState.residentStatus,
+          profile_avatar: avatarKey,
+        },
+        {
+          onConflict: "auth_user_id",
+        },
+      );
 
-    setIsSavingAvatar(false);
+      if (error || profileAvatarError) {
+        const message = error?.message ?? profileAvatarError?.message ?? null;
+        if (isOfflineLikeError(message)) {
+          await queueProfileAvatar();
+          return;
+        }
 
-    if (error) {
-      setErrorMessage(error.message);
-      return;
+        setIsSavingAvatar(false);
+        setErrorMessage(message ?? "Unable to save profile avatar.");
+        return;
+      }
+
+      setIsSavingAvatar(false);
+
+      clearAlerts();
+      setSuccessMessage("Profile avatar updated.");
+      setIsAvatarPickerOpen(false);
+      await loadProfileData(session.user.id, data.user ?? session.user, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to save profile avatar.";
+      if (isOfflineLikeError(message)) {
+        await queueProfileAvatar();
+        return;
+      }
+
+      setIsSavingAvatar(false);
+      setErrorMessage(message);
     }
-
-    if (profileAvatarError) {
-      setErrorMessage(profileAvatarError.message);
-      return;
-    }
-
-    clearAlerts();
-    setSuccessMessage("Profile avatar updated.");
-    setIsAvatarPickerOpen(false);
-    await loadProfileData(session.user.id, data.user ?? session.user);
   };
 
   const handleSaveAddressPurok = async () => {
@@ -2237,43 +2486,104 @@ export default function App() {
 
     const normalizedAddress = profileState.addressPurok.trim();
 
+    const queueProfileAddress = async () => {
+      await queueProfileWrite({
+        userId: session.user.id,
+        fullName: profileState.fullName,
+        email: profileState.email,
+        role: profileState.role,
+        residentStatus: profileState.residentStatus,
+        addressPurok: normalizedAddress,
+        profileAvatarKey: profileState.avatarKey,
+        userMetadata: {
+          ...(session.user.user_metadata ?? {}),
+          resident_status: profileState.residentStatus,
+          address_purok: normalizedAddress,
+        },
+      });
+
+      await writeCache(CACHE_KEYS.profile(session.user.id), {
+        role: profileState.role,
+        profileState: {
+          ...profileState,
+          addressPurok: normalizedAddress,
+        },
+      });
+
+      setProfileState((prev) => ({
+        ...prev,
+        addressPurok: normalizedAddress,
+      }));
+      setProfileSyncState({ source: "cache", cachedAt: Date.now() });
+      clearAlerts();
+      setSuccessMessage("Address saved locally. It will sync when you're back online.");
+      setIsSavingAddress(false);
+    };
+
+    if (!isOnline) {
+      await queueProfileAddress();
+      return;
+    }
+
     setIsSavingAddress(true);
 
-    const { error: profileError } = await supabase.from("profiles").upsert(
-      {
-        auth_user_id: session.user.id,
-        resident_status: profileState.residentStatus,
-        address_purok: normalizedAddress,
-      },
-      {
-        onConflict: "auth_user_id",
-      },
-    );
+    try {
+      const { error: profileError } = await supabase.from("profiles").upsert(
+        {
+          auth_user_id: session.user.id,
+          resident_status: profileState.residentStatus,
+          address_purok: normalizedAddress,
+        },
+        {
+          onConflict: "auth_user_id",
+        },
+      );
 
-    if (profileError) {
+      if (profileError) {
+        if (isOfflineLikeError(profileError.message)) {
+          await queueProfileAddress();
+          return;
+        }
+
+        setIsSavingAddress(false);
+        setErrorMessage(profileError.message);
+        return;
+      }
+
+      const { data, error } = await supabase.auth.updateUser({
+        data: {
+          ...(session.user.user_metadata ?? {}),
+          resident_status: profileState.residentStatus,
+          address_purok: normalizedAddress,
+        },
+      });
+
+      if (error) {
+        if (isOfflineLikeError(error.message)) {
+          await queueProfileAddress();
+          return;
+        }
+
+        setIsSavingAddress(false);
+        setErrorMessage(error.message);
+        return;
+      }
+
       setIsSavingAddress(false);
-      setErrorMessage(profileError.message);
-      return;
+
+      clearAlerts();
+      setSuccessMessage("Address updated.");
+      await loadProfileData(session.user.id, data.user ?? session.user, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to save address.";
+      if (isOfflineLikeError(message)) {
+        await queueProfileAddress();
+        return;
+      }
+
+      setIsSavingAddress(false);
+      setErrorMessage(message);
     }
-
-    const { data, error } = await supabase.auth.updateUser({
-      data: {
-        ...(session.user.user_metadata ?? {}),
-        resident_status: profileState.residentStatus,
-        address_purok: normalizedAddress,
-      },
-    });
-
-    setIsSavingAddress(false);
-
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-
-    clearAlerts();
-    setSuccessMessage("Address updated.");
-    await loadProfileData(session.user.id, data.user ?? session.user);
   };
 
   const handleChangePassword = async () => {
@@ -2415,6 +2725,8 @@ export default function App() {
           backgroundColor={alertConfig.cardColor}
           waterLevel={sensorSnapshot.waterLevel}
           textVariant={homeTextVariant}
+          statusLabel={getSectionSyncLabel(sensorSyncState, isOnline)}
+          statusVariant={getSectionSyncVariant(sensorSyncState, isOnline)}
         />
 
         <WeatherSection
@@ -2428,6 +2740,8 @@ export default function App() {
           signalNo={weatherSnapshot.signalNo}
           advisoryText={weatherSnapshot.manualDescription}
           backgroundColor={weatherCardBackground}
+          statusLabel={getSectionSyncLabel(weatherSyncState, isOnline)}
+          statusVariant={getSectionSyncVariant(weatherSyncState, isOnline)}
         />
 
         <TideSection
@@ -2436,6 +2750,8 @@ export default function App() {
           tideExtremes={tideExtremes}
           isLoading={isTideLoading}
           error={tideError}
+          statusLabel={getSectionSyncLabel(tideSyncState, isOnline)}
+          statusVariant={getSectionSyncVariant(tideSyncState, isOnline)}
         />
       </>
     );
@@ -2458,6 +2774,8 @@ export default function App() {
           onChangeFilter={setAnnouncementFilter}
           onOpenComments={openCommentsForAnnouncement}
           onLoadMore={handleLoadMoreAnnouncements}
+          statusLabel={getSectionSyncLabel(announcementsSyncState, isOnline)}
+          statusVariant={getSectionSyncVariant(announcementsSyncState, isOnline)}
         />
       );
     }
@@ -2478,6 +2796,8 @@ export default function App() {
           onLoadMore={handleLoadMoreHistory}
           statusFilter={historyStatusFilter}
           onChangeStatusFilter={setHistoryStatusFilter}
+          statusLabel={getSectionSyncLabel(historySyncState, isOnline)}
+          statusVariant={getSectionSyncVariant(historySyncState, isOnline)}
         />
       );
     }
@@ -2513,6 +2833,8 @@ export default function App() {
         onSaveAddressPurok={() => void handleSaveAddressPurok()}
         isSavingAddress={isSavingAddress}
         onLogout={handleLogout}
+        statusLabel={getSectionSyncLabel(profileSyncState, isOnline)}
+        statusVariant={getSectionSyncVariant(profileSyncState, isOnline)}
       />
     );
   };
@@ -3104,8 +3426,10 @@ export default function App() {
               currentCommenterName={currentCommenterName}
               currentUserAvatarSource={selectedAvatar.source}
               sessionUserId={session.user.id}
+              isOnline={isOnline}
               onRequestClose={closeCommentsModal}
               onError={setErrorMessage}
+              onQueued={setSuccessMessage}
             />
           </View>
         </SafeAreaView>

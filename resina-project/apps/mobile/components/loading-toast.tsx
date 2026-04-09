@@ -22,7 +22,7 @@ export function LoadingToast({
       toastStyle={styles.toast}
     >
       <View style={styles.content}>
-        <ActivityIndicator size="small" color="#ffffff" />
+        <ActivityIndicator size="small" color="#1877f2" />
         <Text style={styles.message}>{message}</Text>
       </View>
     </ToastShell>
@@ -32,11 +32,17 @@ export function LoadingToast({
 const styles = StyleSheet.create({
   toast: {
     width: undefined,
-    borderWidth: 0,
     borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#dbe3f0",
+    backgroundColor: "#ffffff",
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: "rgba(31, 41, 55, 0.94)",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   content: {
     flexDirection: "row",
@@ -44,7 +50,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   message: {
-    color: "#ffffff",
+    color: "#1f2937",
     fontSize: 13,
     fontWeight: "600",
   },

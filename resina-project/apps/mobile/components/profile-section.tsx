@@ -1,5 +1,5 @@
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { MobileSectionHeader } from "./mobile-section-header";
+import { MobileSectionHeader, SectionSyncBadge, type SectionSyncBadgeVariant } from "./mobile-section-header";
 
 export type ProfileAvatarKey = "boy" | "man" | "user" | "woman" | "woman2";
 
@@ -54,6 +54,8 @@ type ProfileSectionProps = {
   title?: string;
   subtitle?: string;
   textVariant?: "light" | "dark";
+  statusLabel?: string | null;
+  statusVariant?: SectionSyncBadgeVariant;
 };
 
 export function ProfileSection({
@@ -83,6 +85,8 @@ export function ProfileSection({
   title = "PROFILE",
   subtitle = "Profile, alerts, and account settings.",
   textVariant = "dark",
+  statusLabel,
+  statusVariant = "neutral",
 }: ProfileSectionProps) {
   const isLightText = textVariant === "light";
 
@@ -90,6 +94,7 @@ export function ProfileSection({
     <View>
       <MobileSectionHeader title={title} textVariant={textVariant} />
       <Text style={[styles.subtitle, isLightText ? styles.subtitleLight : null]}>{subtitle}</Text>
+      {statusLabel ? <SectionSyncBadge label={statusLabel} variant={statusVariant} /> : null}
 
       <View style={styles.profileCard}>
         <Image source={selectedAvatar.source} style={styles.profileAvatar} resizeMode="cover" />
