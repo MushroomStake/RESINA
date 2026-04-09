@@ -400,7 +400,12 @@ export async function buildAnalyticsReportXlsx(options: BuildAnalyticsWorkbookOp
 
 export async function downloadAnalyticsReportXlsx(options: BuildAnalyticsWorkbookOptions, fileName: string): Promise<void> {
   const archive = await buildAnalyticsReportXlsx(options);
-  const blob = new Blob([archive], {
+  const archiveBuffer = archive.buffer.slice(
+    archive.byteOffset,
+    archive.byteOffset + archive.byteLength,
+  ) as ArrayBuffer;
+
+  const blob = new Blob([archiveBuffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
   const url = URL.createObjectURL(blob);
