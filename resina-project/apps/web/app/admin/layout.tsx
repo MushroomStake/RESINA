@@ -23,8 +23,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <main className="h-dvh overflow-hidden bg-[#f3f5f5] text-[#1f2937]">
-      <div className="grid h-full w-full grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)]">
-        <div className="h-dvh md:sticky md:top-0 md:overflow-hidden">
+      <div className="flex h-full w-full flex-col md:grid md:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="md:h-dvh md:sticky md:top-0 md:overflow-hidden">
           <AdminSidebar activePage={activePage} />
         </div>
         <div className="min-w-0 overflow-y-auto">

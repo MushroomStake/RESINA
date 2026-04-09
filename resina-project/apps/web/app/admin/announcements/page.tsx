@@ -680,7 +680,7 @@ export default function AdminAnnouncementsPage() {
             </div>
 
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label className="relative block min-w-[260px] flex-1">
+              <label className="relative block min-w-0 flex-1">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#6b7280]">
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                     <circle cx="11" cy="11" r="7" />
