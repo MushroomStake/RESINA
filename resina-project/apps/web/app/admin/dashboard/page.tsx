@@ -535,7 +535,7 @@ export default function AdminDashboardPage() {
       icon_path: string | null;
     };
 
-    const resolvedIconPath = WEATHER_ICON_MAP[row.intensity] ?? row.icon_path ?? DRY_NORMAL_ICON_PATH;
+    const resolvedIconPath = row.icon_path ?? WEATHER_ICON_MAP[row.intensity] ?? DRY_NORMAL_ICON_PATH;
 
     const loadedState: WeatherState = {
       id: row.id,
