@@ -12,6 +12,8 @@ export function LoadingToast({
   message = "Refreshing data...",
   topOffset = 54,
 }: LoadingToastProps) {
+  const normalizedMessage = message.replace(/\s+/g, " ").trim();
+
   return (
     <ToastShell
       visible={visible}
@@ -23,7 +25,15 @@ export function LoadingToast({
     >
       <View style={styles.content}>
         <ActivityIndicator size="small" color="#1877f2" />
-        <Text style={styles.message}>{message}</Text>
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          allowFontScaling={false}
+          maxFontSizeMultiplier={1}
+          style={styles.message}
+        >
+          {normalizedMessage}
+        </Text>
       </View>
     </ToastShell>
   );
@@ -31,7 +41,7 @@ export function LoadingToast({
 
 const styles = StyleSheet.create({
   toast: {
-    width: undefined,
+    width: 228,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#dbe3f0",
@@ -47,11 +57,15 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
   },
   message: {
     color: "#1f2937",
     fontSize: 13,
     fontWeight: "600",
+    letterSpacing: 0,
+    includeFontPadding: false,
+    flexShrink: 1,
   },
 });
