@@ -6,6 +6,8 @@ type AdminSidebarPage = "dashboard" | "announcements" | "history" | "profile";
 
 type AdminPageHeaderProps = {
   activePage: AdminSidebarPage;
+  onMenuToggle?: () => void;
+  isMenuOpen?: boolean;
 };
 
 const HEADER_CONTENT: Record<AdminSidebarPage, { eyebrow: string; title: string }> = {
@@ -27,7 +29,7 @@ const HEADER_CONTENT: Record<AdminSidebarPage, { eyebrow: string; title: string 
   },
 };
 
-export function AdminPageHeader({ activePage }: AdminPageHeaderProps) {
+export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }: AdminPageHeaderProps) {
   const [phNow, setPhNow] = useState(() => new Date());
   const [isHydrated, setIsHydrated] = useState(false);
 
@@ -69,9 +71,26 @@ export function AdminPageHeader({ activePage }: AdminPageHeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 flex flex-col items-start gap-3 border-b border-[#d5deea] bg-[rgba(243,245,245,0.94)] px-4 py-4 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-5 md:px-8">
-      <div className="min-w-0">
+      <div className="flex w-full items-start gap-3 sm:w-auto sm:items-center">
+        <button
+          type="button"
+          onClick={onMenuToggle}
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#cbd5e1] bg-white text-[#1f3f61] shadow-sm transition hover:bg-[#f8fafc] md:hidden"
+          aria-label={isMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            {isMenuOpen ? (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+            )}
+          </svg>
+        </button>
+
+        <div className="min-w-0">
         <p className="text-xs uppercase tracking-wide text-[#6b7280]">{content.eyebrow}</p>
         <h1 className="text-lg font-bold leading-tight text-[#111827] sm:text-xl md:text-[2.125rem] md:leading-none">{content.title}</h1>
+        </div>
       </div>
       <div className="flex w-full items-center justify-center gap-3 rounded-2xl border border-[#b7cde6] bg-[linear-gradient(135deg,#f7fbff_0%,#eaf3ff_100%)] px-4 py-2.5 text-[#2f4a67] shadow-[0_8px_20px_rgba(29,78,216,0.10)] sm:w-auto sm:justify-start sm:gap-4 sm:px-5 sm:py-3">
         <svg className="h-5 w-5 text-[#244e7a] sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

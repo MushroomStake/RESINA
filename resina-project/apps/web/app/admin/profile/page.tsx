@@ -543,7 +543,7 @@ export default function AdminProfilePage() {
 
   return (
     <>
-      <section className="px-5 py-6 md:px-8">
+      <section className="w-full px-5 py-6 md:px-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1.15fr]">
           <section className="rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
             <div className="flex items-start gap-3 border-b border-[#e5e7eb] px-5 py-5">

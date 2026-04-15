@@ -17,6 +17,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const isLoginPage = pathname === "/admin";
   const [isCheckingAccess, setIsCheckingAccess] = useState(!isLoginPage);
   const [hasAdminAccess, setHasAdminAccess] = useState(isLoginPage);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (isLoginPage) {
@@ -83,13 +88,35 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       : "dashboard";
 
   return (
-    <main className="h-dvh overflow-hidden bg-[#f3f5f5] text-[#1f2937]">
+    <main className="h-dvh w-full overflow-x-hidden overflow-y-hidden bg-[#f3f5f5] text-[#1f2937]">
       <div className="flex h-full w-full flex-col md:grid md:grid-cols-[260px_minmax(0,1fr)]">
-        <div className="md:h-dvh md:sticky md:top-0 md:overflow-hidden">
+        <div className="hidden md:block md:h-dvh md:sticky md:top-0 md:overflow-hidden">
           <AdminSidebar activePage={activePage} />
         </div>
-        <div className="min-w-0 overflow-y-auto">
-          <AdminPageHeader activePage={activePage} />
+
+        <div
+          className={`fixed inset-0 z-40 bg-[rgba(15,23,42,0.45)] transition-opacity duration-200 md:hidden ${
+            isSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+          }`}
+          onClick={() => setIsSidebarOpen(false)}
+          aria-hidden
+        />
+
+        <aside
+          id="admin-mobile-sidebar"
+          className={`fixed inset-y-0 left-0 z-50 w-[280px] max-w-[85vw] border-r border-[#e5e7eb] bg-[#f7f8f9] shadow-xl transition-transform duration-300 md:hidden ${
+            isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <AdminSidebar activePage={activePage} />
+        </aside>
+
+        <div className="min-w-0 w-full flex-1 overflow-x-hidden overflow-y-auto">
+          <AdminPageHeader
+            activePage={activePage}
+            onMenuToggle={() => setIsSidebarOpen((prev) => !prev)}
+            isMenuOpen={isSidebarOpen}
+          />
           {children}
         </div>
       </div>

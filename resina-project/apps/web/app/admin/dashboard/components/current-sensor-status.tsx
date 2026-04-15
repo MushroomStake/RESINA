@@ -180,7 +180,95 @@ export function CurrentSensorStatus({
   const shortUpdateLabel = lastUpdateLabel.replace("Last update:", "").trim();
 
   return (
-    <section className="relative overflow-hidden rounded-[30px] border border-[#d7e4f2] bg-[#f8fbff] p-5 shadow-[0_20px_60px_rgba(15,23,42,0.12)] md:p-6">
+    <>
+      <section className={`relative overflow-hidden rounded-[24px] border border-white/25 p-4 text-white shadow-[0_14px_34px_rgba(15,23,42,0.18)] md:hidden ${alertConfig.sensorGradientClass}`}>
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.14),transparent_45%)]" />
+        <div className="relative z-10 flex items-center justify-between gap-3">
+          <span className="rounded-full border border-white/35 bg-white/85 px-3 py-1 text-sm font-bold text-[#0d3152]">Sta. Rita Bridge</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-white/95">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#b8ffd2]" />
+            Live Sensor
+          </span>
+        </div>
+
+        <div className="relative z-10 mt-3 grid grid-cols-[96px_minmax(0,1fr)] gap-3">
+          <div className="relative overflow-hidden rounded-2xl border border-white/25 bg-white/10 p-2.5 backdrop-blur-sm">
+            <div className="absolute left-[16px] top-[10px] bottom-[10px] w-[4px] rounded-full bg-white/90" />
+            <div className="relative z-10 flex h-[176px] flex-col justify-between pl-4">
+              {[4, 3, 2, 1, 0].map((meter) => (
+                <div key={meter} className="flex items-center">
+                  <span className="mr-2 h-[2px] w-[12px] rounded bg-white/90" />
+                  <span className="text-[11px] font-bold text-white/95">{meter}m</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="absolute right-1.5 top-[10px] bottom-[10px] w-[8px] overflow-hidden rounded border border-white/40 bg-white/15">
+              <div className="h-[9%] bg-[#d94545]" />
+              <div className="h-[23%] bg-[#f08d2a]" />
+              <div className="h-[11%] bg-[#f3bf3a]" />
+              <div className="h-[23%] bg-[#2cb47a]" />
+              <div className="h-[34%] bg-[#4b7da6]" />
+            </div>
+
+            <div className="pointer-events-none absolute left-[16px] top-[12px] z-20 h-[176px] w-[80px]">
+              <div className={`absolute left-0 flex -translate-y-1/2 items-center gap-1.5 ${markerTopClass}`}>
+                <span className={`meter-dot h-2 w-2 rounded-full ${levelDotClass}`} />
+                <span className="text-[10px] font-extrabold tracking-[0.01em] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.42)]">
+                  {safeLevel === null ? "--" : safeLevel.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden rounded-2xl border border-white/30 bg-[#12345a33] backdrop-blur-sm">
+            <div className="relative h-full min-h-[176px] overflow-hidden rounded-2xl">
+              <div className={`absolute inset-x-0 bottom-0 bg-[#2f8cffc8] transition-[height] duration-700 ${fillHeightClass}`}>
+                <div className="water-surface absolute inset-x-0 top-[-2px] h-[10px]" />
+                <div className="wave-layer-primary absolute -top-[8px] left-[-70%] h-[28px] w-[260%]">
+                  <div className="wave-ribbon-primary" />
+                  <div className="wave-ribbon-highlight-primary" />
+                </div>
+                <div className="wave-layer-secondary absolute -top-[5px] left-[-72%] h-[22px] w-[260%]">
+                  <div className="wave-ribbon-secondary" />
+                  <div className="wave-ribbon-highlight-secondary" />
+                </div>
+                <div className="water-noise absolute inset-0" />
+                <div className="water-noise-2 absolute inset-0" />
+              </div>
+
+              <div className="absolute left-1/2 top-4 w-[74%] -translate-x-1/2 rounded-2xl border border-white/35 bg-[linear-gradient(180deg,rgba(255,255,255,0.16),rgba(255,255,255,0.06))] px-3 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] backdrop-blur-[6px]">
+                <div className="flex min-h-[124px] flex-col items-center justify-center gap-1.5">
+                  <p className="text-[42px] font-black leading-none text-white">{meterText}</p>
+                  <p className="text-[17px] font-extrabold leading-tight text-white">{alertConfig.title}</p>
+                  <span className={`mt-0.5 inline-block rounded-full bg-white px-3 py-1 text-sm font-bold shadow-sm ${levelTextClass}`}>
+                    {alertConfig.badge}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className={`relative z-10 mt-3 rounded-xl border px-3.5 py-3 text-sm leading-7 shadow-sm ${alertConfig.noticeClass}`}>
+          {alertConfig.description}
+        </div>
+
+        <div className="relative z-10 mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/80">
+          <span>{shortUpdateLabel}</span>
+          <span>{rangeLabel}</span>
+        </div>
+
+        {isLoadingData ? (
+          <div className="relative z-10 mt-2 animate-pulse rounded-lg border border-white/30 bg-white/25 p-2.5">
+            <div className="h-3 w-40 rounded bg-white/55" />
+          </div>
+        ) : null}
+        {sourceTable ? <p className="relative z-10 mt-2 text-xs text-white/75">Data source: {sourceTable}</p> : null}
+        {fetchError ? <p className="relative z-10 mt-2 text-xs text-[#fecaca]">{fetchError}</p> : null}
+      </section>
+
+      <section className="relative hidden overflow-hidden rounded-[30px] border border-[#d7e4f2] bg-[#f8fbff] p-5 shadow-[0_20px_60px_rgba(15,23,42,0.12)] md:block md:p-6">
       <div className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.2),transparent_65%)]" />
       <div className="pointer-events-none absolute -left-20 -bottom-24 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgba(45,212,191,0.18),transparent_70%)]" />
 
@@ -421,6 +509,7 @@ export function CurrentSensorStatus({
           }
         }
       `}</style>
-    </section>
+      </section>
+    </>
   );
 }
