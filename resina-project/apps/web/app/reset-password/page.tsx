@@ -53,6 +53,26 @@ export default function ResetPasswordPage() {
 		let isMounted = true;
 
 		const primeRecoverySession = async () => {
+			if (typeof window !== "undefined") {
+				const url = new URL(window.location.href);
+				const authCode = url.searchParams.get("code");
+
+				if (authCode) {
+					const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(authCode);
+					if (!isMounted) {
+						return;
+					}
+
+					if (exchangeError) {
+						setErrorMessage(normalizeAuthMessage(exchangeError.message));
+						return;
+					}
+
+					url.searchParams.delete("code");
+					window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+				}
+			}
+
 			const {
 				data: { session },
 			} = await supabase.auth.getSession();

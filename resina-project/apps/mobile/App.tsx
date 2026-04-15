@@ -12,6 +12,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Linking,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -268,16 +269,8 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const mobileEmailRedirectUrl =
   process.env.EXPO_PUBLIC_MOBILE_EMAIL_REDIRECT_URL ?? "https://resina-two.vercel.app/";
 const resolveMobilePasswordResetRedirectUrl = (): string => {
-  const configured = process.env.EXPO_PUBLIC_MOBILE_PASSWORD_RESET_REDIRECT_URL?.trim();
   const webBase = mobileEmailRedirectUrl.trim().replace(/\/+$/, "");
-  const fallback = `${webBase}/auth/mobile-reset?view=change-password`;
-  const target = configured || fallback;
-
-  if (target.includes("view=change-password")) {
-    return target;
-  }
-
-  return `${target}${target.includes("?") ? "&" : "?"}view=change-password`;
+  return `${webBase}/reset-password?view=change-password`;
 };
 
 const mobilePasswordResetRedirectUrl = resolveMobilePasswordResetRedirectUrl();
@@ -1176,6 +1169,8 @@ export default function App() {
     password: "",
     confirmPassword: "",
   });
+  const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
+  const [hasAcceptedRegistrationConsent, setHasAcceptedRegistrationConsent] = useState(false);
   const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState<string | null>(null);
 
   const [sensorSyncState, setSensorSyncState] = useState<CacheAwareLoadResult>({ source: "none", cachedAt: null });
@@ -2339,6 +2334,11 @@ export default function App() {
       return;
     }
 
+    if (!hasAcceptedRegistrationConsent) {
+      setErrorMessage("Please agree to the Data Privacy Notice and User Agreement to continue.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     const { data, error } = await supabase.auth.signUp({
@@ -2354,6 +2354,7 @@ export default function App() {
           phone_number: phoneNumber,
           resident_status: residentStatus,
           address_purok: residentStatus === "resident" ? addressPurok : "",
+          data_privacy_accepted: true,
           role: "user",
         },
       },
@@ -2369,11 +2370,13 @@ export default function App() {
     if (!data.session) {
       setPendingConfirmationEmail(email);
       setSuccessMessage("Account created. Check your email and tap the confirmation link to return to the app.");
+      setHasAcceptedRegistrationConsent(false);
       setMode("login");
       return;
     }
 
     setPendingConfirmationEmail(null);
+    setHasAcceptedRegistrationConsent(false);
     setSuccessMessage("Account created and logged in.");
   };
 
@@ -2686,7 +2689,7 @@ export default function App() {
       return;
     }
 
-    setSuccessMessage("Password reset link sent. Check your email inbox.");
+    setSuccessMessage("Password reset link sent. Open the link in your web browser to update your password.");
     setLoginForm((prev) => ({ ...prev, email }));
     setMode("login");
   };
@@ -3692,17 +3695,83 @@ export default function App() {
                   </Pressable>
                 </View>
 
-                <View style={styles.infoCard}>
-                  <Text style={styles.infoTitle}>Automated System:</Text>
-                  <Text style={styles.infoText}>
-                    By registering, you agree to receive automated SMS updates regarding barangay services and community alerts.
-                  </Text>
+                <View style={styles.policyCard}>
+                  <Pressable style={styles.policyHeaderRow} onPress={() => setIsPolicyModalOpen(true)}>
+                    <Text style={styles.policyTitle}>Data Privacy Notice & User Agreement</Text>
+                    <Text style={styles.policyOpenText}>View</Text>
+                  </Pressable>
+                  <Text style={styles.policyHintText}>Please read and review the full agreement before creating your account.</Text>
+                  <Pressable
+                    style={styles.policyConsentRow}
+                    onPress={() => setHasAcceptedRegistrationConsent((prev) => !prev)}
+                  >
+                    <View
+                      style={[
+                        styles.policyCheckbox,
+                        hasAcceptedRegistrationConsent && styles.policyCheckboxChecked,
+                      ]}
+                    >
+                      {hasAcceptedRegistrationConsent ? <Text style={styles.policyCheckboxCheck}>✓</Text> : null}
+                    </View>
+                    <Text style={styles.policyConsentText}>
+                      I have read and agree to the Data Privacy Notice and User Agreement.
+                    </Text>
+                  </Pressable>
                 </View>
 
+                <Modal
+                  visible={isPolicyModalOpen}
+                  transparent
+                  animationType="fade"
+                  onRequestClose={() => setIsPolicyModalOpen(false)}
+                >
+                  <View style={styles.policyModalBackdrop}>
+                    <View style={styles.policyModalCard}>
+                      <View style={styles.policyModalHeader}>
+                        <Text style={styles.policyModalTitle}>Data Privacy & User Agreement</Text>
+                        <Pressable onPress={() => setIsPolicyModalOpen(false)}>
+                          <Text style={styles.policyModalCloseText}>Close</Text>
+                        </Pressable>
+                      </View>
+
+                      <ScrollView style={styles.policyModalScroll} showsVerticalScrollIndicator={false}>
+                        <Text style={styles.policyModalParagraph}>
+                          We collect your registration details, including your name, contact information, resident status,
+                          and account credentials, to verify your identity, create your account, and deliver barangay
+                          services through the RESINA app.
+                        </Text>
+                        <Text style={styles.policyModalParagraph}>
+                          Your phone number may be used for automated SMS notifications related to water level alerts,
+                          emergency advisories, and relevant community updates. Information is only used for official app
+                          functions and barangay service operations.
+                        </Text>
+                        <Text style={styles.policyModalParagraph}>
+                          By proceeding, you confirm that the information you provide is accurate, that you are authorized
+                          to submit it, and that you agree to use the app responsibly in accordance with barangay policies
+                          and applicable data privacy regulations.
+                        </Text>
+                      </ScrollView>
+
+                      <Pressable
+                        style={styles.policyModalAgreeButton}
+                        onPress={() => {
+                          setHasAcceptedRegistrationConsent(true);
+                          setIsPolicyModalOpen(false);
+                        }}
+                      >
+                        <Text style={styles.policyModalAgreeButtonText}>I Understand and Agree</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </Modal>
+
                 <Pressable
-                  style={[styles.primaryButton, isSubmitting && styles.buttonDisabled]}
+                  style={[
+                    styles.primaryButton,
+                    (isSubmitting || !hasAcceptedRegistrationConsent) && styles.buttonDisabled,
+                  ]}
                   onPress={handleRegister}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !hasAcceptedRegistrationConsent}
                 >
                   <Text style={styles.primaryButtonText}>{isSubmitting ? "Please wait..." : "Create My Account"}</Text>
                 </Pressable>
@@ -4624,25 +4693,124 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-  infoCard: {
-    marginTop: 18,
-    marginBottom: 10,
+  policyCard: {
+    marginTop: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#cce5d1",
-    backgroundColor: "#effaf2",
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
     padding: 14,
   },
-  infoTitle: {
-    color: "#2f9e44",
+  policyTitle: {
+    color: "#1d4ed8",
     fontWeight: "700",
-    marginBottom: 4,
+    flex: 1,
     fontSize: 14,
   },
-  infoText: {
-    color: "#4b5563",
-    lineHeight: 22,
+  policyHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  policyOpenText: {
+    color: "#2563eb",
     fontSize: 12,
+    fontWeight: "700",
+  },
+  policyHintText: {
+    color: "#475569",
+    lineHeight: 19,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  policyConsentRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  policyCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#93c5fd",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  policyCheckboxChecked: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  policyCheckboxCheck: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 14,
+  },
+  policyConsentText: {
+    flex: 1,
+    color: "#1e293b",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  policyModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.52)",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+  policyModalCard: {
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    maxHeight: "72%",
+    overflow: "hidden",
+  },
+  policyModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  policyModalTitle: {
+    flex: 1,
+    color: "#0f172a",
+    fontSize: 16,
+    fontWeight: "700",
+    marginRight: 12,
+  },
+  policyModalCloseText: {
+    color: "#2563eb",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  policyModalScroll: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  policyModalParagraph: {
+    color: "#334155",
+    fontSize: 13,
+    lineHeight: 22,
+    marginBottom: 10,
+  },
+  policyModalAgreeButton: {
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+    backgroundColor: "#eff6ff",
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  policyModalAgreeButtonText: {
+    color: "#1d4ed8",
+    fontSize: 14,
+    fontWeight: "700",
   },
   primaryButton: {
     marginTop: 18,
