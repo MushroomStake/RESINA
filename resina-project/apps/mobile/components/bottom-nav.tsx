@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 
@@ -28,7 +28,11 @@ export function BottomNav({ activeTab, onChange, onReselect, themeVariant = "lig
   return (
     <View style={styles.outerWrap}>
       <View style={[styles.wrapper, isDark ? styles.wrapperDark : styles.wrapperLight]}>
-        <BlurView intensity={isDark ? 26 : 20} tint={isDark ? "dark" : "light"} style={styles.blurLayer} />
+        {Platform.OS === "android" ? (
+          <View style={[styles.blurLayer, isDark ? styles.blurLayerAndroidDark : styles.blurLayerAndroidLight]} />
+        ) : (
+          <BlurView intensity={isDark ? 26 : 20} tint={isDark ? "dark" : "light"} style={styles.blurLayer} />
+        )}
         {TABS.map((tab) => {
           const isActive = tab.key === activeTab;
           const iconColor = isActive ? (isDark ? "#8fd4ff" : "#166534") : isDark ? "#a4b6cc" : "#6b7280";
@@ -83,6 +87,12 @@ const styles = StyleSheet.create({
   },
   blurLayer: {
     ...StyleSheet.absoluteFillObject,
+  },
+  blurLayerAndroidLight: {
+    backgroundColor: "rgba(255, 255, 255, 0.48)",
+  },
+  blurLayerAndroidDark: {
+    backgroundColor: "rgba(8, 20, 40, 0.42)",
   },
   wrapperLight: {
     backgroundColor: "rgba(255, 255, 255, 0.72)",

@@ -69,6 +69,44 @@ const BOTTOM_CLASS_BY_BUCKET: Record<(typeof PERCENT_BUCKETS)[number], string> =
   100: "bottom-[100%]",
 };
 
+const METER_MARKER_LEVELS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4] as const;
+
+const METER_BOTTOM_CLASS_BY_LEVEL: Record<(typeof METER_MARKER_LEVELS)[number], string> = {
+  0: "bottom-[11%]",
+  0.5: "bottom-[20.75%]",
+  1: "bottom-[30.5%]",
+  1.5: "bottom-[40.25%]",
+  2: "bottom-[50%]",
+  2.5: "bottom-[59.75%]",
+  3: "bottom-[69.5%]",
+  3.5: "bottom-[79.25%]",
+  4: "bottom-[89%]",
+};
+
+const METER_FILL_CLASS_BY_LEVEL: Record<(typeof METER_MARKER_LEVELS)[number], string> = {
+  0: "h-[11%]",
+  0.5: "h-[20.75%]",
+  1: "h-[30.5%]",
+  1.5: "h-[40.25%]",
+  2: "h-[50%]",
+  2.5: "h-[59.75%]",
+  3: "h-[69.5%]",
+  3.5: "h-[79.25%]",
+  4: "h-[89%]",
+};
+
+const METER_MARKER_TOP_CLASS_BY_LEVEL: Record<(typeof METER_MARKER_LEVELS)[number], string> = {
+  0: "top-[176px]",
+  0.5: "top-[154px]",
+  1: "top-[132px]",
+  1.5: "top-[110px]",
+  2: "top-[88px]",
+  2.5: "top-[66px]",
+  3: "top-[44px]",
+  3.5: "top-[22px]",
+  4: "top-[0px]",
+};
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -111,6 +149,15 @@ function toBucket(percent: number): (typeof PERCENT_BUCKETS)[number] {
   return rounded as (typeof PERCENT_BUCKETS)[number];
 }
 
+function toMeterMarkerLevel(level: number | null): (typeof METER_MARKER_LEVELS)[number] {
+  if (level === null || Number.isNaN(level)) {
+    return 0;
+  }
+
+  const snapped = Math.round(clamp(level, 0, 4) * 2) / 2;
+  return snapped as (typeof METER_MARKER_LEVELS)[number];
+}
+
 export function CurrentSensorStatus({
   alertConfig,
   rangeLabel,
@@ -123,8 +170,9 @@ export function CurrentSensorStatus({
   const safeLevel = waterLevel === null || Number.isNaN(waterLevel) ? null : clamp(waterLevel, 0, 5);
   const normalizedLevel = safeLevel === null ? 0 : clamp(safeLevel, 0, VISUAL_MAX_METER) / VISUAL_MAX_METER;
   const levelBucket = toBucket(normalizedLevel * 100);
-  const levelBottomClass = BOTTOM_CLASS_BY_BUCKET[levelBucket];
-  const fillHeightClass = FILL_CLASS_BY_BUCKET[levelBucket];
+  const markerLevel = toMeterMarkerLevel(safeLevel);
+  const markerTopClass = METER_MARKER_TOP_CLASS_BY_LEVEL[markerLevel];
+  const fillHeightClass = METER_FILL_CLASS_BY_LEVEL[markerLevel];
   const meterText = safeLevel === null ? "--.--m" : `${safeLevel.toFixed(2)}m`;
   const levelColor = resolveLevelColor(safeLevel);
   const levelDotClass = resolveLevelDotClass(safeLevel);
@@ -177,17 +225,28 @@ export function CurrentSensorStatus({
               <div className="h-[34%] bg-[#4b7da6]" />
             </div>
 
-            <div className={`absolute left-[18px] z-20 flex -translate-y-1/2 items-center ${levelBottomClass}`}>
-              <span className={`meter-dot mr-1.5 h-2 w-2 rounded-full ${levelDotClass}`} />
-              <span className="text-[11px] font-extrabold text-white">{safeLevel === null ? "--" : safeLevel.toFixed(2)}</span>
+            <div className={`pointer-events-none absolute left-[19px] top-[12px] z-20 h-[176px] w-[100px]`}>
+              <div className={`absolute left-0 flex -translate-y-1/2 items-center gap-2 ${markerTopClass}`}>
+              <span className={`meter-dot h-2 w-2 rounded-full ${levelDotClass}`} />
+              <span className="text-[11px] font-extrabold tracking-[0.01em] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.42)]">
+                {safeLevel === null ? "--" : safeLevel.toFixed(2)}
+              </span>
+              </div>
             </div>
           </div>
 
           <div className="relative overflow-hidden rounded-2xl border border-white/30 bg-[#12345a33] backdrop-blur-sm">
             <div className="relative h-full min-h-[176px] overflow-hidden rounded-2xl">
               <div className={`absolute inset-x-0 bottom-0 bg-[#2f8cffc8] transition-[height] duration-700 ${fillHeightClass}`}>
-                <div className="wave-a absolute -top-[16px] left-[-58%] h-[28px] w-[230%]" />
-                <div className="wave-b absolute -top-[10px] left-[-60%] h-[24px] w-[230%]" />
+                <div className="water-surface absolute inset-x-0 top-[-2px] h-[10px]" />
+                <div className="wave-layer-primary absolute -top-[8px] left-[-70%] h-[28px] w-[260%]">
+                  <div className="wave-ribbon-primary" />
+                  <div className="wave-ribbon-highlight-primary" />
+                </div>
+                <div className="wave-layer-secondary absolute -top-[5px] left-[-72%] h-[22px] w-[260%]">
+                  <div className="wave-ribbon-secondary" />
+                  <div className="wave-ribbon-highlight-secondary" />
+                </div>
                 <div className="water-noise absolute inset-0" />
                 <div className="water-noise-2 absolute inset-0" />
               </div>
@@ -216,17 +275,53 @@ export function CurrentSensorStatus({
       </div>
 
       <style jsx>{`
-        .wave-a {
-          border-radius: 999px;
-          background: linear-gradient(180deg, rgba(196, 236, 255, 0.65), rgba(124, 203, 250, 0.34));
-          clip-path: polygon(0 68%, 8% 46%, 16% 66%, 24% 44%, 32% 64%, 40% 45%, 48% 67%, 56% 44%, 64% 63%, 72% 46%, 80% 66%, 88% 45%, 96% 64%, 100% 62%, 100% 100%, 0 100%);
+        .wave-layer-primary {
           animation: waveA 7.6s linear infinite;
         }
-        .wave-b {
-          border-radius: 999px;
-          background: linear-gradient(180deg, rgba(234, 248, 255, 0.52), rgba(173, 225, 255, 0.28));
-          clip-path: polygon(0 70%, 10% 52%, 20% 68%, 30% 50%, 40% 69%, 50% 51%, 60% 68%, 70% 52%, 80% 69%, 90% 50%, 100% 66%, 100% 100%, 0 100%);
+        .wave-layer-secondary {
           animation: waveB 9.2s linear infinite;
+        }
+        .wave-ribbon-primary {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          height: 16px;
+          border-radius: 999px;
+          background-color: rgba(150, 221, 255, 0.58);
+        }
+        .wave-ribbon-highlight-primary {
+          position: absolute;
+          left: 8%;
+          right: 8%;
+          bottom: 9px;
+          height: 4px;
+          border-radius: 99px;
+          background-color: rgba(232, 247, 255, 0.46);
+        }
+        .wave-ribbon-secondary {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          height: 12px;
+          border-radius: 999px;
+          background-color: rgba(193, 234, 255, 0.36);
+        }
+        .wave-ribbon-highlight-secondary {
+          position: absolute;
+          left: 14%;
+          right: 14%;
+          bottom: 7px;
+          height: 3px;
+          border-radius: 99px;
+          background-color: rgba(242, 251, 255, 0.34);
+        }
+        .water-surface {
+          pointer-events: none;
+          background: linear-gradient(180deg, rgba(255,255,255,0.0), rgba(255,255,255,0.34), rgba(196,236,255,0.42), rgba(255,255,255,0.1));
+          box-shadow: 0 0 10px rgba(214, 243, 255, 0.55);
+          animation: surfaceGlow 3.8s ease-in-out infinite;
         }
         .water-noise {
           pointer-events: none;
@@ -288,6 +383,16 @@ export function CurrentSensorStatus({
           100% {
             background-position: 20px 14px, -140px 0, -104px 0;
             opacity: 0.11;
+          }
+        }
+        @keyframes surfaceGlow {
+          0%, 100% {
+            opacity: 0.72;
+            transform: translateY(0);
+          }
+          50% {
+            opacity: 1;
+            transform: translateY(-1px);
           }
         }
         @keyframes glintDrift {

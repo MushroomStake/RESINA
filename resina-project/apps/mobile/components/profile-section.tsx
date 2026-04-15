@@ -47,6 +47,13 @@ type ProfileSectionProps = {
   onToggleShowNewPassword: () => void;
   showConfirmPassword: boolean;
   onToggleShowConfirmPassword: () => void;
+  isEditingPhoneNumber: boolean;
+  onToggleEditPhoneNumber: () => void;
+  onChangePhoneNumber: (value: string) => void;
+  onSavePhoneNumber: () => void;
+  isSavingPhoneNumber: boolean;
+  isEditingAddress: boolean;
+  onToggleEditAddress: () => void;
   onChangeAddress: (value: string) => void;
   onSaveAddressPurok: () => void;
   isSavingAddress: boolean;
@@ -78,8 +85,12 @@ export function ProfileSection({
   onToggleShowNewPassword,
   showConfirmPassword,
   onToggleShowConfirmPassword,
+  isEditingPhoneNumber,
+  onToggleEditPhoneNumber,
   onChangeAddress,
   onSaveAddressPurok,
+  isEditingAddress,
+  onToggleEditAddress,
   isSavingAddress,
   onLogout,
   title = "PROFILE",
@@ -87,6 +98,9 @@ export function ProfileSection({
   textVariant = "dark",
   statusLabel,
   statusVariant = "neutral",
+  onChangePhoneNumber,
+  onSavePhoneNumber,
+  isSavingPhoneNumber,
 }: ProfileSectionProps) {
   const isLightText = textVariant === "light";
 
@@ -138,9 +152,28 @@ export function ProfileSection({
         <View style={styles.profileInfoRow}>
           <View style={styles.profileInfoHeadingRow}>
             <Text style={styles.profileInfoLabel}>Phone Number</Text>
-            <Text style={styles.profilePill}>SMS Active</Text>
+            <View style={styles.profileInfoHeadingActions}>
+              <Text style={styles.profilePill}>SMS Active</Text>
+              <Pressable onPress={onToggleEditPhoneNumber} style={styles.profileInlineEditBtnSmall}>
+                <Text style={styles.profileInlineEditTextSmall}>{isEditingPhoneNumber ? "✓" : "✎"}</Text>
+              </Pressable>
+            </View>
           </View>
-          <Text style={styles.profileInfoValue}>{profileState.phoneNumber}</Text>
+          {isEditingPhoneNumber ? (
+            <TextInput
+              value={profileState.phoneNumber}
+              onChangeText={onChangePhoneNumber}
+              onBlur={onSavePhoneNumber}
+              style={styles.profilePhoneInput}
+              placeholder="0912 345 6789"
+              placeholderTextColor="#9ca3af"
+              keyboardType="phone-pad"
+              editable={!isSavingPhoneNumber}
+              autoFocus
+            />
+          ) : (
+            <Text style={styles.profileInfoValue}>{profileState.phoneNumber}</Text>
+          )}
         </View>
         <View style={styles.profileInfoDivider} />
         <View style={styles.profileInfoRow}>
@@ -151,16 +184,26 @@ export function ProfileSection({
           <>
             <View style={styles.profileInfoDivider} />
             <View style={styles.profileInfoRow}>
-              <Text style={styles.profileInfoLabel}>Address / Purok</Text>
-              <TextInput
-                value={profileState.addressPurok}
-                onChangeText={onChangeAddress}
-                onBlur={onSaveAddressPurok}
-                style={styles.profileAddressInput}
-                placeholder="Purok 4, Riverside St."
-                placeholderTextColor="#9ca3af"
-                editable={!isSavingAddress}
-              />
+              <View style={styles.profileInfoHeadingRow}>
+                <Text style={styles.profileInfoLabel}>Address / Purok</Text>
+                <Pressable onPress={onToggleEditAddress} style={styles.profileInlineEditBtnSmall}>
+                  <Text style={styles.profileInlineEditTextSmall}>{isEditingAddress ? "✓" : "✎"}</Text>
+                </Pressable>
+              </View>
+              {isEditingAddress ? (
+                <TextInput
+                  value={profileState.addressPurok}
+                  onChangeText={onChangeAddress}
+                  onBlur={onSaveAddressPurok}
+                  style={styles.profileAddressInput}
+                  placeholder="Purok 4, Riverside St."
+                  placeholderTextColor="#9ca3af"
+                  editable={!isSavingAddress}
+                  autoFocus
+                />
+              ) : (
+                <Text style={styles.profileInfoValue}>{profileState.addressPurok || "-"}</Text>
+              )}
             </View>
           </>
         ) : null}
@@ -299,6 +342,27 @@ const styles = StyleSheet.create({
     color: "#4b5563",
     fontSize: 14,
     fontWeight: "700",
+  },
+  profileInfoHeadingActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  profileInlineEditBtnSmall: {
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+  },
+  profileInlineEditTextSmall: {
+    color: "#4b5563",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 14,
   },
   profileRoleRow: {
     flexDirection: "row",

@@ -43,6 +43,8 @@ export default function AdminLoginPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const hasPortalAccess = (role: string | null | undefined) => role === "admin" || role === "member";
+
   const isRecoveryRequest = () => {
     if (typeof window === "undefined") {
       return false;
@@ -84,6 +86,33 @@ export default function AdminLoginPage() {
 
       if (error) {
         setErrorMessage(normalizeAuthMessage(error.message));
+        return;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setErrorMessage("Unable to verify your account.");
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        setErrorMessage(normalizeAuthMessage(profileError.message));
+        await supabase.auth.signOut();
+        return;
+      }
+
+      if (!hasPortalAccess((profile?.role as string | undefined) ?? null)) {
+        await supabase.auth.signOut();
+        setErrorMessage("You have no access privilege in this portal.");
         return;
       }
 

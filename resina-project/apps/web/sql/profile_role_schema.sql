@@ -9,6 +9,7 @@ create table if not exists public.profiles (
   last_name text,
   full_name text not null,
   email text not null unique,
+  phone_number text,
   address_purok text,
   resident_status text not null check (resident_status in ('resident', 'non_resident')) default 'resident',
   profile_avatar text,
@@ -25,6 +26,9 @@ alter table public.profiles
 
 alter table public.profiles
   add column if not exists profile_avatar text;
+
+alter table public.profiles
+  add column if not exists phone_number text;
 
 alter table public.profiles
   drop constraint if exists profiles_resident_status_check;

@@ -27,9 +27,8 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { Session } from "@supabase/supabase-js";
 import { readCache, writeCache } from "./lib/cache";
 import { flushOfflineWriteQueue, queueProfileWrite } from "./lib/offline-write-queue";
-import { isSupabaseConfigured, supabase } from "./lib/supabase";
+import { clearStoredSupabaseAuth, isSupabaseConfigured, supabase } from "./lib/supabase";
 import { BottomNav, type DashboardTab } from "./components/bottom-nav";
-import { LoadingToast } from "./components/loading-toast";
 import { StatusToast } from "./components/status-toast";
 import { AnnouncementCommentsModal } from "./components/announcement-comments-modal";
 import { HomeHeroSection } from "./components/home-hero-section";
@@ -895,6 +894,11 @@ function isOfflineLikeError(message: string | null | undefined): boolean {
   );
 }
 
+function isAuthSessionMissingError(message: string | null | undefined): boolean {
+  const normalized = (message ?? "").toLowerCase();
+  return normalized.includes("auth session missing");
+}
+
 function trimHistoryForCache(records: HistoryRecord[]): HistoryRecord[] {
   const cutoff = Date.now() - HISTORY_CACHE_MAX_DAYS * 24 * 60 * 60 * 1000;
   return records
@@ -1025,7 +1029,7 @@ function buildTideStatus(tideData: TideExtreme[], hourlyData: TideHourly[]): Tid
   const sortedExtremes = [...tideData].sort((left, right) => new Date(left.time).getTime() - new Date(right.time).getTime());
   const now = new Date();
   const currentHourManila = getManilaHourNow();
-  const currentHour = (currentHourManila - 8 + 24) % 24;
+  const currentHour = currentHourManila;
   const currentHourEntry = hourlyData.find((entry) => entry.hour === currentHour) ?? null;
   const previousHourEntry =
     hourlyData.find((entry) => entry.hour === (currentHour + 23) % 24) ??
@@ -1061,8 +1065,6 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
   const [isRefreshingDashboard, setIsRefreshingDashboard] = useState(false);
-  const [isRefreshToastVisible, setIsRefreshToastVisible] = useState(false);
-  const [refreshToastMessage, setRefreshToastMessage] = useState("Refreshing live data...");
   const [cachedDataBanner, setCachedDataBanner] = useState("");
   const [isUsingCachedData, setIsUsingCachedData] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
@@ -1127,6 +1129,9 @@ export default function App() {
   });
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [isEditingPhoneNumber, setIsEditingPhoneNumber] = useState(false);
+  const [isSavingPhoneNumber, setIsSavingPhoneNumber] = useState(false);
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [isSavingAddress, setIsSavingAddress] = useState(false);
   const [isPasswordEditorOpen, setIsPasswordEditorOpen] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -1138,7 +1143,6 @@ export default function App() {
     confirmPassword: "",
   });
   const latestWeatherRecordedAtRef = useRef<string | null>(null);
-  const refreshToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastScrollRefreshAtRef = useRef(0);
   const atmosphereFloat = useRef(new Animated.Value(0)).current;
   const atmospherePulse = useRef(new Animated.Value(0)).current;
@@ -1259,14 +1263,6 @@ export default function App() {
   }, [weatherSnapshot.recordedAt]);
 
   useEffect(() => {
-    return () => {
-      if (refreshToastTimerRef.current) {
-        clearTimeout(refreshToastTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     if (!isSupabaseConfigured) {
       setErrorMessage("App config is incomplete. Please rebuild with EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.");
     }
@@ -1277,20 +1273,32 @@ export default function App() {
     setSuccessMessage("");
   };
 
-  const runManualRefresh = async (message: string) => {
+  const resolveProfileIdentity = () => {
+    const fallbackEmail = String(session?.user?.email ?? "").trim();
+    const fullName = profileState.fullName.trim() || "Resident";
+    const email = profileState.email.trim() && profileState.email.trim() !== "-" ? profileState.email.trim() : fallbackEmail;
+    const phoneNumber = profileState.phoneNumber.trim() && profileState.phoneNumber.trim() !== "-" ? profileState.phoneNumber.trim() : "";
+    const role = profileState.role === "admin" || profileState.role === "member" || profileState.role === "user" ? profileState.role : "user";
+    const residentStatus = profileState.residentStatus;
+    const addressPurok = residentStatus === "resident" ? profileState.addressPurok.trim() : "";
+    const avatarKey = profileState.avatarKey;
+
+    return {
+      fullName,
+      email,
+      phoneNumber,
+      role,
+      residentStatus,
+      addressPurok,
+      avatarKey,
+    };
+  };
+
+  const runManualRefresh = async () => {
     if (!session || isRefreshingDashboard) {
       return;
     }
-
-    if (refreshToastTimerRef.current) {
-      clearTimeout(refreshToastTimerRef.current);
-      refreshToastTimerRef.current = null;
-    }
-
-    setRefreshToastMessage(isOnline ? message : "Offline mode: showing cached data.");
-    setIsRefreshToastVisible(true);
     setIsRefreshingDashboard(true);
-    const refreshStart = Date.now();
 
     try {
       const results = await Promise.all([
@@ -1304,13 +1312,6 @@ export default function App() {
       setCachedDataBanner(banner.message);
     } finally {
       setIsRefreshingDashboard(false);
-      const elapsed = Date.now() - refreshStart;
-      const minVisibleMs = 900;
-      const hideDelay = Math.max(0, minVisibleMs - elapsed);
-
-      refreshToastTimerRef.current = setTimeout(() => {
-        setIsRefreshToastVisible(false);
-      }, hideDelay);
     }
   };
 
@@ -1427,11 +1428,15 @@ export default function App() {
       const rowAddress = String(row.address_purok ?? "").trim();
       const metadataAddress = String(metadata.address_purok ?? "").trim();
       const rowResidentStatus = normalizeResidentStatus(row.resident_status);
+      const rowPhoneNumber = String(row.phone_number ?? "").trim();
       const addressPurok = residentStatus === "resident" ? rowAddress || metadataAddress : "";
       const normalizedRole = roleValue === "admin" || roleValue === "member" || roleValue === "user" ? roleValue : "user";
       const resolvedAddress = residentStatus === "resident" ? metadataAddress || rowAddress : "";
+      const resolvedPhoneNumber = String(metadata.phone_number ?? row.phone_number ?? "").trim();
       const shouldSyncProfile =
-        rowResidentStatus !== residentStatus || (residentStatus === "resident" ? rowAddress !== resolvedAddress : rowAddress !== "");
+        rowResidentStatus !== residentStatus ||
+        (residentStatus === "resident" ? rowAddress !== resolvedAddress : rowAddress !== "") ||
+        rowPhoneNumber !== resolvedPhoneNumber;
 
       // Keep profile table in sync with auth metadata after registration confirmation.
       if (shouldSyncProfile) {
@@ -1443,6 +1448,7 @@ export default function App() {
               auth_user_id: authUserId,
               full_name: fullName || "Resident",
               email: profileEmail,
+              phone_number: resolvedPhoneNumber,
               role: normalizedRole,
               resident_status: residentStatus,
               address_purok: resolvedAddress,
@@ -1996,15 +2002,28 @@ export default function App() {
     let isMounted = true;
 
     const boot = async () => {
-      const {
-        data: { session: initialSession },
-      } = await supabase.auth.getSession();
+      try {
+        const {
+          data: { session: initialSession },
+        } = await supabase.auth.getSession();
 
-      if (!isMounted) return;
+        if (!isMounted) return;
 
-      setSession(initialSession);
-      if (initialSession?.user?.id) {
-        await loadProfileData(initialSession.user.id, initialSession.user, isOnline);
+        setSession(initialSession);
+        if (initialSession?.user?.id) {
+          await loadProfileData(initialSession.user.id, initialSession.user, isOnline);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.toLowerCase().includes("refresh token")) {
+          await clearStoredSupabaseAuth();
+          await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+          if (isMounted) {
+            setSession(null);
+          }
+        } else {
+          throw error;
+        }
       }
 
       setIsBootstrapping(false);
@@ -2391,17 +2410,21 @@ export default function App() {
     };
 
     const queueProfileAvatar = async () => {
+      const identity = resolveProfileIdentity();
+
       await queueProfileWrite({
         userId: session.user.id,
-        fullName: nextProfileState.fullName,
-        email: nextProfileState.email,
-        role: nextProfileState.role,
-        residentStatus: nextProfileState.residentStatus,
-        addressPurok: nextProfileState.addressPurok,
+        fullName: identity.fullName,
+        email: identity.email,
+        phoneNumber: identity.phoneNumber,
+        role: identity.role,
+        residentStatus: identity.residentStatus,
+        addressPurok: identity.addressPurok,
         profileAvatarKey: avatarKey,
         userMetadata: {
           ...(session.user.user_metadata ?? {}),
           profile_avatar: avatarKey,
+          phone_number: identity.phoneNumber,
         },
       });
 
@@ -2427,20 +2450,25 @@ export default function App() {
     setIsSavingAvatar(true);
 
     try {
+      const identity = resolveProfileIdentity();
+
       const { data, error } = await supabase.auth.updateUser({
         data: {
           ...(session.user.user_metadata ?? {}),
           profile_avatar: avatarKey,
+          phone_number: identity.phoneNumber,
         },
       });
 
       const { error: profileAvatarError } = await supabase.from("profiles").upsert(
         {
           auth_user_id: session.user.id,
-          full_name: nextProfileState.fullName,
-          email: nextProfileState.email,
-          role: nextProfileState.role,
-          resident_status: nextProfileState.residentStatus,
+          full_name: identity.fullName,
+          email: identity.email,
+          phone_number: identity.phoneNumber,
+          role: identity.role,
+          resident_status: identity.residentStatus,
+          address_purok: identity.addressPurok,
           profile_avatar: avatarKey,
         },
         {
@@ -2490,17 +2518,21 @@ export default function App() {
     const normalizedAddress = profileState.addressPurok.trim();
 
     const queueProfileAddress = async () => {
+      const identity = resolveProfileIdentity();
+
       await queueProfileWrite({
         userId: session.user.id,
-        fullName: profileState.fullName,
-        email: profileState.email,
-        role: profileState.role,
-        residentStatus: profileState.residentStatus,
+        fullName: identity.fullName,
+        email: identity.email,
+        phoneNumber: identity.phoneNumber,
+        role: identity.role,
+        residentStatus: identity.residentStatus,
         addressPurok: normalizedAddress,
-        profileAvatarKey: profileState.avatarKey,
+        profileAvatarKey: identity.avatarKey,
         userMetadata: {
           ...(session.user.user_metadata ?? {}),
-          resident_status: profileState.residentStatus,
+          phone_number: identity.phoneNumber,
+          resident_status: identity.residentStatus,
           address_purok: normalizedAddress,
         },
       });
@@ -2518,6 +2550,7 @@ export default function App() {
         addressPurok: normalizedAddress,
       }));
       setProfileSyncState({ source: "cache", cachedAt: Date.now() });
+      setIsEditingAddress(false);
       clearAlerts();
       setSuccessMessage("Address saved locally. It will sync when you're back online.");
       setIsSavingAddress(false);
@@ -2531,11 +2564,18 @@ export default function App() {
     setIsSavingAddress(true);
 
     try {
+      const identity = resolveProfileIdentity();
+
       const { error: profileError } = await supabase.from("profiles").upsert(
         {
           auth_user_id: session.user.id,
-          resident_status: profileState.residentStatus,
+          full_name: identity.fullName,
+          email: identity.email,
+          phone_number: identity.phoneNumber,
+          role: identity.role,
+          resident_status: identity.residentStatus,
           address_purok: normalizedAddress,
+          profile_avatar: identity.avatarKey,
         },
         {
           onConflict: "auth_user_id",
@@ -2553,30 +2593,43 @@ export default function App() {
         return;
       }
 
-      const { data, error } = await supabase.auth.updateUser({
-        data: {
-          ...(session.user.user_metadata ?? {}),
-          resident_status: profileState.residentStatus,
-          address_purok: normalizedAddress,
-        },
-      });
+      let refreshedUser = session.user;
+      const {
+        data: { session: activeSession },
+      } = await supabase.auth.getSession();
 
-      if (error) {
-        if (isOfflineLikeError(error.message)) {
-          await queueProfileAddress();
-          return;
+      if (activeSession) {
+        const { data, error } = await supabase.auth.updateUser({
+          data: {
+            ...(session.user.user_metadata ?? {}),
+            phone_number: identity.phoneNumber,
+            resident_status: identity.residentStatus,
+            address_purok: normalizedAddress,
+          },
+        });
+
+        if (error) {
+          if (isOfflineLikeError(error.message)) {
+            await queueProfileAddress();
+            return;
+          }
+
+          if (!isAuthSessionMissingError(error.message)) {
+            setIsSavingAddress(false);
+            setErrorMessage(error.message);
+            return;
+          }
+        } else {
+          refreshedUser = data.user ?? session.user;
         }
-
-        setIsSavingAddress(false);
-        setErrorMessage(error.message);
-        return;
       }
 
       setIsSavingAddress(false);
 
       clearAlerts();
       setSuccessMessage("Address updated.");
-      await loadProfileData(session.user.id, data.user ?? session.user, true);
+      setIsEditingAddress(false);
+      await loadProfileData(session.user.id, refreshedUser, true);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save address.";
       if (isOfflineLikeError(message)) {
@@ -2585,6 +2638,141 @@ export default function App() {
       }
 
       setIsSavingAddress(false);
+      setErrorMessage(message);
+    }
+  };
+
+  const handleSavePhoneNumber = async () => {
+    if (!session || isSavingPhoneNumber) {
+      return;
+    }
+
+    const normalizedPhoneNumber = profileState.phoneNumber.trim();
+
+    if (!normalizedPhoneNumber) {
+      setErrorMessage("Phone number is required.");
+      return;
+    }
+
+    const queuePhoneNumberUpdate = async () => {
+      const identity = resolveProfileIdentity();
+
+      await queueProfileWrite({
+        userId: session.user.id,
+        fullName: identity.fullName,
+        email: identity.email,
+        phoneNumber: normalizedPhoneNumber,
+        role: identity.role,
+        residentStatus: identity.residentStatus,
+        addressPurok: identity.addressPurok,
+        profileAvatarKey: identity.avatarKey,
+        userMetadata: {
+          ...(session.user.user_metadata ?? {}),
+          phone_number: normalizedPhoneNumber,
+        },
+      });
+
+      await writeCache(CACHE_KEYS.profile(session.user.id), {
+        role: profileState.role,
+        profileState: {
+          ...profileState,
+          phoneNumber: normalizedPhoneNumber,
+        },
+      });
+
+      setProfileState((prev) => ({
+        ...prev,
+        phoneNumber: normalizedPhoneNumber,
+      }));
+      setProfileSyncState({ source: "cache", cachedAt: Date.now() });
+      setIsEditingPhoneNumber(false);
+      clearAlerts();
+      setSuccessMessage("Phone number saved locally. It will sync when you're back online.");
+      setIsSavingPhoneNumber(false);
+    };
+
+    if (!isOnline) {
+      await queuePhoneNumberUpdate();
+      return;
+    }
+
+    setIsSavingPhoneNumber(true);
+
+    try {
+      const identity = resolveProfileIdentity();
+
+      const { error: profileError } = await supabase.from("profiles").upsert(
+        {
+          auth_user_id: session.user.id,
+          full_name: identity.fullName,
+          email: identity.email,
+          phone_number: normalizedPhoneNumber,
+          role: identity.role,
+          resident_status: identity.residentStatus,
+          address_purok: identity.addressPurok,
+          profile_avatar: identity.avatarKey,
+        },
+        {
+          onConflict: "auth_user_id",
+        },
+      );
+
+      if (profileError) {
+        const message = profileError.message ?? "Unable to save phone number.";
+
+        if (isOfflineLikeError(message)) {
+          await queuePhoneNumberUpdate();
+          return;
+        }
+
+        setIsSavingPhoneNumber(false);
+        setErrorMessage(message);
+        return;
+      }
+
+      let refreshedUser = session.user;
+      const {
+        data: { session: activeSession },
+      } = await supabase.auth.getSession();
+
+      if (activeSession) {
+        const { data, error } = await supabase.auth.updateUser({
+          data: {
+            ...(session.user.user_metadata ?? {}),
+            phone_number: normalizedPhoneNumber,
+          },
+        });
+
+        if (error) {
+          if (isOfflineLikeError(error.message)) {
+            await queuePhoneNumberUpdate();
+            return;
+          }
+
+          if (!isAuthSessionMissingError(error.message)) {
+            setIsSavingPhoneNumber(false);
+            setErrorMessage(error.message);
+            return;
+          }
+        } else {
+          refreshedUser = data.user ?? session.user;
+        }
+      }
+
+      setIsSavingPhoneNumber(false);
+      clearAlerts();
+      setSuccessMessage("Phone number updated.");
+      setIsEditingPhoneNumber(false);
+      await loadProfileData(session.user.id, refreshedUser, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to save phone number.";
+
+      if (isOfflineLikeError(message)) {
+        await queuePhoneNumberUpdate();
+        return;
+      }
+
+      setIsSavingPhoneNumber(false);
       setErrorMessage(message);
     }
   };
@@ -2827,6 +3015,18 @@ export default function App() {
         onToggleShowNewPassword={() => setShowNewPassword((prev) => !prev)}
         showConfirmPassword={showConfirmPassword}
         onToggleShowConfirmPassword={() => setShowConfirmPassword((prev) => !prev)}
+        isEditingPhoneNumber={isEditingPhoneNumber}
+        onToggleEditPhoneNumber={() => setIsEditingPhoneNumber((prev) => !prev)}
+        onChangePhoneNumber={(value) =>
+          setProfileState((prev) => ({
+            ...prev,
+            phoneNumber: value,
+          }))
+        }
+        onSavePhoneNumber={() => void handleSavePhoneNumber()}
+        isSavingPhoneNumber={isSavingPhoneNumber}
+        isEditingAddress={isEditingAddress}
+        onToggleEditAddress={() => setIsEditingAddress((prev) => !prev)}
         onChangeAddress={(value) =>
           setProfileState((prev) => ({
             ...prev,
@@ -3356,10 +3556,18 @@ export default function App() {
                     bottomAuraAnimatedStyle,
                   ]}
                 />
-                <BlurView intensity={dashboardAtmosphere.blurIntensity} tint={dashboardAtmosphere.blurTint} style={styles.homeBlurLayer} />
+                {Platform.OS === "android" ? (
+                  <View
+                    style={[
+                      styles.homeBlurLayer,
+                      dashboardAtmosphere.blurTint === "dark" ? styles.homeBlurFallbackDark : styles.homeBlurFallbackLight,
+                    ]}
+                  />
+                ) : (
+                  <BlurView intensity={dashboardAtmosphere.blurIntensity} tint={dashboardAtmosphere.blurTint} style={styles.homeBlurLayer} />
+                )}
                 <View style={[styles.homeAtmosphereVeil, { backgroundColor: dashboardAtmosphere.veil }]} />
               </Animated.View>
-            <LoadingToast visible={isRefreshToastVisible} message={refreshToastMessage} topOffset={66} />
             <StatusToast
               visible={Boolean(statusModalMessage)}
               message={statusModalMessage}
@@ -3385,14 +3593,13 @@ export default function App() {
 
                 if (y <= 0 && now - lastScrollRefreshAtRef.current >= cooldownMs) {
                   lastScrollRefreshAtRef.current = now;
-                  const label = activeTab === "news" ? "Refreshing News..." : "Refreshing Home...";
-                  void runManualRefresh(label);
+                  void runManualRefresh();
                 }
               }}
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshingDashboard}
-                  onRefresh={() => void runManualRefresh("Refreshing dashboard...")}
+                  onRefresh={() => void runManualRefresh()}
                   tintColor="#2f8d41"
                   colors={["#2f8d41"]}
                 />
@@ -3408,17 +3615,17 @@ export default function App() {
               onChange={setActiveTab}
               onReselect={(tab) => {
                 if (tab === "home") {
-                  void runManualRefresh("Refreshing Home...");
+                  void runManualRefresh();
                   return;
                 }
 
                 if (tab === "news") {
-                  void runManualRefresh("Refreshing News...");
+                  void runManualRefresh();
                   return;
                 }
 
                 if (tab === "history") {
-                  void runManualRefresh("Refreshing History...");
+                  void runManualRefresh();
                 }
               }}
             />
@@ -3852,6 +4059,12 @@ const styles = StyleSheet.create({
   homeBlurLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 2,
+  },
+  homeBlurFallbackLight: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+  homeBlurFallbackDark: {
+    backgroundColor: "rgba(8, 18, 32, 0.22)",
   },
   homeAtmosphereVeil: {
     ...StyleSheet.absoluteFillObject,

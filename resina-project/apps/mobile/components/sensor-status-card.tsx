@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Platform, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 
@@ -17,6 +17,10 @@ type SensorStatusCardProps = {
 const MAX_METER = 5;
 const VISUAL_MAX_METER = 4.4;
 const LABEL_MAX_METER = 4;
+const METER_SCALE_TOP = 10;
+const METER_SCALE_BOTTOM = 10;
+const METER_SCALE_HEIGHT = 176;
+const MARKER_DOT_SIZE = 8;
 const NORMAL_MIN = 1.5;
 const CRITICAL_MIN = 2.5;
 const EVACUATION_MIN = 3.0;
@@ -37,11 +41,11 @@ type WaterNoiseSpeckle = {
   opacity: number;
 };
 
-const WATER_NOISE_SPECKLES: WaterNoiseSpeckle[] = Array.from({ length: 18 }, (_, index) => ({
-  left: `${(index * 37) % 100}%`,
-  top: `${(index * 29) % 74}%`,
-  size: index % 3 === 0 ? 3 : 2,
-  opacity: index % 4 === 0 ? 0.16 : index % 2 === 0 ? 0.12 : 0.08,
+const WATER_NOISE_SPECKLES: WaterNoiseSpeckle[] = Array.from({ length: 12 }, (_, index) => ({
+  left: `${(index * 41) % 100}%`,
+  top: `${(index * 23) % 68}%`,
+  size: 2,
+  opacity: index % 3 === 0 ? 0.1 : 0.06,
 }));
 
 type LevelVisual = {
@@ -129,6 +133,10 @@ export function SensorStatusCard({
   waterLevel,
 }: SensorStatusCardProps) {
   const safeLevel = waterLevel === null || Number.isNaN(waterLevel) ? null : clamp(waterLevel, 0, MAX_METER);
+  const snappedMarkerLevel =
+    safeLevel === null
+      ? 0
+      : clamp(Math.round(clamp(safeLevel, 0, LABEL_MAX_METER) * 2) / 2, 0, LABEL_MAX_METER);
   const normalizedLevel = safeLevel === null ? 0 : clamp(safeLevel, 0, VISUAL_MAX_METER) / VISUAL_MAX_METER;
   const meterText = safeLevel === null ? "--.--m" : `${safeLevel.toFixed(2)}m`;
   const levelVisual = resolveLevelVisual(safeLevel);
@@ -158,12 +166,12 @@ export function SensorStatusCard({
     trendRef.current = safeLevel;
 
     Animated.timing(fillAnim, {
-      toValue: normalizedLevel,
+      toValue: snappedMarkerLevel / LABEL_MAX_METER,
       duration: 700,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [fillAnim, normalizedLevel, safeLevel]);
+  }, [fillAnim, safeLevel, snappedMarkerLevel]);
 
   useEffect(() => {
     const loopA = Animated.loop(
@@ -207,9 +215,9 @@ export function SensorStatusCard({
     };
   }, [waveAnimA, waveAnimB, waveAnimC]);
 
-  const fillHeight = fillAnim.interpolate({
+  const fillPercent = fillAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 100],
+    outputRange: ["11%", "89%"],
   });
 
   const waveTranslateA = waveAnimA.interpolate({
@@ -252,13 +260,15 @@ export function SensorStatusCard({
     outputRange: [0.05, 0.12, 0.05],
   });
 
-  const meterMarks = useMemo(() => [4, 3, 2, 1, 0], []);
-
-  const labelScaleRatio = LABEL_MAX_METER / VISUAL_MAX_METER;
-  const levelPointerBottom = fillAnim.interpolate({
-    inputRange: [0, labelScaleRatio, 1],
-    outputRange: ["10%", "90%", "90%"],
+  const shimmerLayerOpacity = waveAnimA.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.1, 0.14, 0.1],
   });
+
+  const meterMarks = useMemo(() => [4, 3, 2, 1, 0], []);
+  const markerCenterFromBottom = METER_SCALE_BOTTOM + (snappedMarkerLevel / LABEL_MAX_METER) * METER_SCALE_HEIGHT;
+  const levelPointerDotBottom = markerCenterFromBottom - MARKER_DOT_SIZE / 2;
+  const levelPointerValueBottom = markerCenterFromBottom - 6;
 
   return (
     <LinearGradient colors={sensorGradientColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.sensorCard}>
@@ -280,12 +290,12 @@ export function SensorStatusCard({
               </View>
             ))}
           </View>
-          <Animated.View style={[styles.levelPointerDotWrap, { bottom: levelPointerBottom }]}>
+          <View style={[styles.levelPointerDotWrap, { bottom: levelPointerDotBottom }]}>
             <View style={[styles.levelPointerDot, { backgroundColor: levelVisual.color }]} />
-          </Animated.View>
-          <Animated.Text style={[styles.levelPointerValue, { bottom: levelPointerBottom }]}>
+          </View>
+          <Text style={[styles.levelPointerValue, { bottom: levelPointerValueBottom }]}>
             {safeLevel === null ? "--" : safeLevel.toFixed(2)}
-          </Animated.Text>
+          </Text>
           <View style={styles.alertBandWrap}>
             <View style={[styles.alertBand, styles.alertBandSpilling, { flex: BAND_FLEX.spilling }]} />
             <View style={[styles.alertBand, styles.alertBandEvacuate, { flex: BAND_FLEX.evacuation }]} />
@@ -297,7 +307,8 @@ export function SensorStatusCard({
 
         <View style={styles.tankWrap}>
           <View style={styles.tankInner}>
-            <Animated.View style={[styles.waterFill, { height: fillHeight.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] }) }]}>
+            <Animated.View style={[styles.waterFill, { height: fillPercent }]}>
+              <Animated.View style={[styles.waterSurfaceLine, { opacity: shimmerGlow }]} />
               <Animated.View style={[styles.waveLayerPrimary, { transform: [{ translateX: waveTranslateA }, { translateY: waveLiftA }] }]}>
                 <View style={styles.waveRibbonPrimary} />
                 <View style={styles.waveRibbonHighlightPrimary} />
@@ -306,17 +317,17 @@ export function SensorStatusCard({
                 <View style={styles.waveRibbonSecondary} />
                 <View style={styles.waveRibbonHighlightSecondary} />
               </Animated.View>
-              <Animated.View style={[styles.waterNoiseLayer, { opacity: shimmerPulse, transform: [{ translateX: shimmerDrift }] }]}> 
+              <Animated.View style={[styles.waterNoiseLayer, { opacity: shimmerLayerOpacity, transform: [{ translateX: shimmerDrift }] }]}> 
                 <LinearGradient
-                  colors={["rgba(255,255,255,0.20)", "rgba(255,255,255,0.03)", "rgba(255,255,255,0.16)"]}
-                  start={{ x: 0, y: 0.1 }}
-                  end={{ x: 1, y: 0.9 }}
+                  colors={["rgba(255,255,255,0.00)", "rgba(255,255,255,0.24)", "rgba(196,236,255,0.32)", "rgba(255,255,255,0.08)"]}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
                   style={styles.waterNoiseSheenA}
                 />
                 <LinearGradient
-                  colors={["rgba(255,255,255,0.00)", "rgba(220,242,255,0.20)", "rgba(255,255,255,0.00)"]}
-                  start={{ x: 0, y: 0.4 }}
-                  end={{ x: 1, y: 0.6 }}
+                  colors={["rgba(255,255,255,0.00)", "rgba(247,252,255,0.18)", "rgba(255,255,255,0.00)"]}
+                  start={{ x: 0, y: 0.1 }}
+                  end={{ x: 1, y: 0.9 }}
                   style={styles.waterNoiseSheenB}
                 />
                 <Animated.View style={[styles.waterNoiseSweep, { opacity: shimmerGlow, transform: [{ translateX: shimmerSweep }] }]} />
@@ -339,15 +350,29 @@ export function SensorStatusCard({
             </Animated.View>
 
             <View style={styles.blurOverlay}>
-              <BlurView intensity={36} tint="light" style={styles.glassBlurLayer} />
+              {Platform.OS === "android" ? (
+                <View style={[styles.glassBlurLayer, styles.glassBlurFallbackAndroid]} />
+              ) : (
+                <BlurView intensity={36} tint="light" style={styles.glassBlurLayer} />
+              )}
               <View style={styles.glassBase} />
               <View style={styles.glassGlowTop} />
               <View style={styles.glassGlowBottom} />
               <View style={styles.glassBloomCenter} />
               <View style={styles.glassVignette} />
               <View style={styles.glassEdgeMask} />
-              <Text style={styles.bigMeterText}>{meterText}</Text>
-              <Text style={styles.levelTitle}>{displayTitle}</Text>
+              <Text style={styles.bigMeterText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} allowFontScaling={false}>
+                {meterText}
+              </Text>
+              <Text
+                style={styles.levelTitle}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                allowFontScaling={false}
+              >
+                {displayTitle}
+              </Text>
               <Text style={[styles.alertBadge, { color: levelVisual.color }]}>{displayBadge}</Text>
               {trendLabel ? <Text style={styles.trendText}>{trendLabel}</Text> : null}
             </View>
@@ -426,6 +451,7 @@ const styles = StyleSheet.create({
   },
   meterWrap: {
     width: 114,
+    height: 208,
     borderRadius: 18,
     backgroundColor: "#ffffff12",
     borderWidth: 1,
@@ -439,15 +465,19 @@ const styles = StyleSheet.create({
   meterPole: {
     position: "absolute",
     left: 20,
-    top: 10,
-    bottom: 10,
+    top: METER_SCALE_TOP,
+    bottom: METER_SCALE_BOTTOM,
     width: 4,
     borderRadius: 99,
     backgroundColor: "#f8fbff",
     opacity: 0.92,
   },
   meterMarksWrap: {
-    flex: 1,
+    position: "absolute",
+    left: 18,
+    right: 18,
+    top: METER_SCALE_TOP,
+    bottom: METER_SCALE_BOTTOM,
     justifyContent: "space-between",
     zIndex: 2,
   },
@@ -470,22 +500,25 @@ const styles = StyleSheet.create({
   },
   levelPointerDotWrap: {
     position: "absolute",
-    left: 18,
+    left: 19,
     zIndex: 3,
   },
   levelPointerDot: {
-    width: 8,
-    height: 8,
+    width: MARKER_DOT_SIZE,
+    height: MARKER_DOT_SIZE,
     borderRadius: 99,
+    backgroundColor: "#ffffff",
   },
   levelPointerValue: {
     position: "absolute",
-    left: 30,
-    marginBottom: -2,
+    left: 32,
     color: "#f6fbff",
     fontSize: 10,
     fontWeight: "800",
     zIndex: 3,
+    textShadowColor: "rgba(0,0,0,0.42)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   alertBandWrap: {
     position: "absolute",
@@ -539,11 +572,23 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "#2f8cffc8",
   },
+  waterSurfaceLine: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: -2,
+    height: 10,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.48)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(194,232,255,0.42)",
+  },
   waveLayerPrimary: {
     position: "absolute",
     left: "-70%",
     width: "260%",
-    top: -17,
+    top: -8,
     height: 28,
     justifyContent: "flex-end",
   },
@@ -551,7 +596,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: "-72%",
     width: "260%",
-    top: -10,
+    top: -5,
     height: 22,
     justifyContent: "flex-end",
   },
@@ -593,8 +638,8 @@ const styles = StyleSheet.create({
   },
   waterNoiseLayer: {
     position: "absolute",
-    left: "-25%",
-    width: "170%",
+    left: "-18%",
+    width: "155%",
     top: 0,
     bottom: 0,
   },
@@ -609,8 +654,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    top: "15%",
-    bottom: "20%",
+    top: 0,
+    bottom: 0,
   },
   waterNoiseSpeckle: {
     position: "absolute",
@@ -619,10 +664,10 @@ const styles = StyleSheet.create({
   },
   waterNoiseSweep: {
     position: "absolute",
-    left: "-18%",
-    right: "-18%",
-    top: "38%",
-    height: 18,
+    left: "-14%",
+    right: "-14%",
+    top: "48%",
+    height: 12,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.18)",
   },
@@ -643,6 +688,9 @@ const styles = StyleSheet.create({
   glassBlurLayer: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 20,
+  },
+  glassBlurFallbackAndroid: {
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
   glassBase: {
     ...StyleSheet.absoluteFillObject,
@@ -689,16 +737,22 @@ const styles = StyleSheet.create({
   },
   bigMeterText: {
     color: "#ffffff",
-    fontSize: 42,
+    width: "100%",
+    textAlign: "center",
+    fontSize: 34,
     fontWeight: "900",
-    lineHeight: 48,
+    lineHeight: 38,
+    includeFontPadding: false,
     letterSpacing: 0.2,
   },
   levelTitle: {
     marginTop: 2,
     color: "#ffffff",
-    fontSize: 17,
+    width: "100%",
+    textAlign: "center",
+    fontSize: 16,
     fontWeight: "800",
+    includeFontPadding: false,
   },
   alertBadge: {
     marginTop: 6,

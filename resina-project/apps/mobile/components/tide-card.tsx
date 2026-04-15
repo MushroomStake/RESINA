@@ -1,5 +1,6 @@
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 import { useMemo } from "react";
+import Svg, { Path } from "react-native-svg";
 
 export interface TideStatus {
   currentHeight: number | null;
@@ -72,6 +73,20 @@ function formatRemainingUntil(value: string): string {
   return `${hours}h ${minutes}m remaining`;
 }
 
+function TideArrowIcon({ direction }: { direction: "up" | "down" }) {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+      <Path
+        d={direction === "up" ? "M12 19V5M12 5l-5 5M12 5l5 5" : "M12 5v14M12 19l-5-5M12 19l5-5"}
+        stroke="#ffffff"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCardProps) {
   const nextHigh = useMemo(() => {
     const now = Date.now();
@@ -141,10 +156,10 @@ export function TideCard({ tideStatus, tideExtremes, isLoading, error }: TideCar
       <View style={styles.currentCard}>
         <View style={styles.currentGradientBg}>
           <View style={styles.currentIconBg}>
-            <Text style={styles.currentIcon}>{tideStatus?.state === "rising" ? "↑" : "↓"}</Text>
+            <TideArrowIcon direction={tideStatus?.state === "rising" ? "up" : "down"} />
           </View>
           <View style={styles.currentContent}>
-            <Text style={styles.currentLabel}>Current Water Level</Text>
+            <Text style={styles.currentLabel}>Current Tide</Text>
             <Text style={styles.currentValue}>{currentTideLabel}</Text>
             <Text style={styles.currentTrend}>{trendLabel}</Text>
           </View>
@@ -213,10 +228,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 2,
     borderColor: "rgba(255, 255, 255, 0.3)",
-  },
-  currentIcon: {
-    fontSize: 28,
-    color: "#ffffff",
   },
   currentContent: {
     flex: 1,

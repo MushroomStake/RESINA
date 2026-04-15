@@ -24,6 +24,20 @@ export const supabase = createClient(
 },
 );
 
+const SUPABASE_AUTH_KEY_PATTERNS = [/^sb-/i, /auth-token/i, /supabase/i];
+
+export async function clearStoredSupabaseAuth(): Promise<void> {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const authKeys = keys.filter((key) => SUPABASE_AUTH_KEY_PATTERNS.some((pattern) => pattern.test(key)));
+    if (authKeys.length > 0) {
+      await AsyncStorage.multiRemove(authKeys);
+    }
+  } catch {
+    // Ignore cleanup failures; auth recovery should continue.
+  }
+}
+
 AppState.addEventListener("change", (nextState) => {
   if (nextState === "active") {
     // Only start the auto-refresh loop when we actually have a stored session
@@ -39,8 +53,12 @@ AppState.addEventListener("change", (nextState) => {
         if (session?.refresh_token) {
           supabase.auth.startAutoRefresh();
         }
-      } catch {
-        // ignore and avoid starting auto-refresh
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.toLowerCase().includes("refresh token")) {
+          await clearStoredSupabaseAuth();
+          await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+        }
       }
     })();
 

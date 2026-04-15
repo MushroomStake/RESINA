@@ -16,6 +16,7 @@ type ProfileRow = {
   last_name: string | null;
   full_name: string;
   email: string;
+  phone_number: string | null;
   role: Role;
   created_at: string;
 };
@@ -40,6 +41,46 @@ type UpdateUserForm = {
 
 function buildFullName(first: string, middle: string, last: string): string {
   return [first.trim(), middle.trim(), last.trim()].filter(Boolean).join(" ");
+}
+
+const ROLE_GUIDE: Record<Role, string[]> = {
+  admin: [
+    "Full access to Dashboard, Announcements, Reports, and Profile settings.",
+    "Can invite users, update personnel roles, and remove personnel.",
+    "Can promote or demote roles (while keeping at least one admin account).",
+  ],
+  member: [
+    "Can access Dashboard, Announcements, Reports, and Profile pages.",
+    "Can view personnel roles but cannot invite, remove, or change other users.",
+    "Can edit only their own profile details and password.",
+  ],
+};
+
+function RoleHoverGuide({ role }: { role: Role }) {
+  return (
+    <span className="group relative inline-flex items-center gap-1.5">
+      <span
+        className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
+          role === "admin" ? "bg-[#dbeafe] text-[#1e3a8a]" : "bg-[#f8f3d8] text-[#334155]"
+        }`}
+      >
+        {role === "admin" ? "Admin" : "Member"}
+      </span>
+      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#d1d5db] text-[10px] font-bold text-[#6b7280]">
+        i
+      </span>
+      <span className="pointer-events-none invisible absolute left-0 top-[calc(100%+8px)] z-20 w-72 rounded-lg border border-[#d1d5db] bg-white p-3 text-xs text-[#374151] opacity-0 shadow-lg transition-all duration-150 group-hover:visible group-hover:opacity-100">
+        <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-[#111827]">
+          {role === "admin" ? "Admin Capabilities" : "Member Capabilities"}
+        </span>
+        <ul className="list-disc space-y-1 pl-4">
+          {ROLE_GUIDE[role].map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </span>
+    </span>
+  );
 }
 
 export default function AdminProfilePage() {
@@ -74,6 +115,7 @@ export default function AdminProfilePage() {
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [position, setPosition] = useState<Role>("member");
   const [password, setPassword] = useState("");
 
@@ -117,10 +159,11 @@ export default function AdminProfilePage() {
     setStatusVisible(true);
   };
 
-  const loadProfiles = async (currentUserId: string, currentEmail: string) => {
+  const loadProfiles = async (currentUserId: string, currentEmail: string, currentPhoneNumber: string) => {
     const { data: rows, error } = await supabase
       .from("profiles")
-      .select("id, auth_user_id, first_name, middle_name, last_name, full_name, email, role, created_at")
+      .select("id, auth_user_id, first_name, middle_name, last_name, full_name, email, phone_number, role, created_at")
+      .in("role", ["admin", "member"])
       .order("created_at", { ascending: true });
 
     if (error) {
@@ -152,7 +195,8 @@ export default function AdminProfilePage() {
 
       const { data: reloadRows } = await supabase
         .from("profiles")
-        .select("id, auth_user_id, first_name, middle_name, last_name, full_name, email, role, created_at")
+        .select("id, auth_user_id, first_name, middle_name, last_name, full_name, email, phone_number, role, created_at")
+        .in("role", ["admin", "member"])
         .order("created_at", { ascending: true });
 
       const reloaded = (reloadRows ?? []) as ProfileRow[];
@@ -163,6 +207,7 @@ export default function AdminProfilePage() {
         setFirstName(reloadedMine.first_name ?? "");
         setMiddleName(reloadedMine.middle_name ?? "");
         setLastName(reloadedMine.last_name ?? "");
+        setPhoneNumber((reloadedMine.phone_number ?? "").trim() || currentPhoneNumber);
         setPosition(reloadedMine.role);
         setMyRole(reloadedMine.role);
       }
@@ -174,6 +219,7 @@ export default function AdminProfilePage() {
     setFirstName(mine.first_name ?? "");
     setMiddleName(mine.middle_name ?? "");
     setLastName(mine.last_name ?? "");
+    setPhoneNumber((mine.phone_number ?? "").trim() || currentPhoneNumber);
     setPosition(mine.role);
     setMyRole(mine.role);
   };
@@ -190,10 +236,11 @@ export default function AdminProfilePage() {
 
       const currentUserId = session.user.id;
       const currentEmail = session.user.email ?? "";
+      const currentPhoneNumber = String(session.user.user_metadata?.phone_number ?? "").trim();
 
       setSessionUserId(currentUserId);
       setSessionEmail(currentEmail);
-      await loadProfiles(currentUserId, currentEmail);
+      await loadProfiles(currentUserId, currentEmail, currentPhoneNumber);
       setIsChecking(false);
     };
 
@@ -217,12 +264,27 @@ export default function AdminProfilePage() {
           middle_name: middleName.trim(),
           last_name: lastName.trim(),
           full_name: fullName,
+          phone_number: phoneNumber.trim(),
           role: position,
         })
         .eq("auth_user_id", sessionUserId);
 
       if (updateError) {
         throw new Error(updateError.message);
+      }
+
+      const { data: authUserData } = await supabase.auth.getUser();
+      const currentMetadata = (authUserData.user?.user_metadata as Record<string, unknown> | undefined) ?? {};
+
+      const { error: metadataError } = await supabase.auth.updateUser({
+        data: {
+          ...currentMetadata,
+          phone_number: phoneNumber.trim(),
+        },
+      });
+
+      if (metadataError) {
+        throw new Error(metadataError.message);
       }
 
       if (password.trim()) {
@@ -237,7 +299,10 @@ export default function AdminProfilePage() {
         setPassword("");
       }
 
-      await loadProfiles(sessionUserId, sessionEmail);
+      const { data: refreshedAuthUser } = await supabase.auth.getUser();
+      const refreshedPhoneNumber = String(refreshedAuthUser.user?.user_metadata?.phone_number ?? "").trim();
+
+      await loadProfiles(sessionUserId, sessionEmail, refreshedPhoneNumber);
       showStatus("success", "Profile updated successfully.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save profile.";
@@ -334,7 +399,7 @@ export default function AdminProfilePage() {
         throw new Error(error ?? "Failed to delete user.");
       }
 
-      await loadProfiles(sessionUserId, sessionEmail);
+      await loadProfiles(sessionUserId, sessionEmail, phoneNumber.trim());
       setDeleteTarget(null);
       showStatus("success", "User removed successfully.");
     } catch (error) {
@@ -392,7 +457,7 @@ export default function AdminProfilePage() {
         throw new Error(error ?? "Failed to update user.");
       }
 
-      await loadProfiles(sessionUserId, sessionEmail);
+      await loadProfiles(sessionUserId, sessionEmail, phoneNumber.trim());
       setIsUpdateUserModalOpen(false);
       setUpdateTarget(null);
       showStatus("success", "User details updated.");
@@ -463,7 +528,7 @@ export default function AdminProfilePage() {
         role: "member",
         password: "admin123",
       });
-      await loadProfiles(sessionUserId, sessionEmail);
+      await loadProfiles(sessionUserId, sessionEmail, phoneNumber.trim());
       showStatus("success", "Invite sent successfully.");
     } catch (error) {
       showStatus("error", error instanceof Error ? error.message : "Unable to send invite.");
@@ -529,6 +594,16 @@ export default function AdminProfilePage() {
               </label>
 
               <label className="block">
+                <span className="mb-1 block text-sm font-medium">Phone Number</span>
+                <input
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="0912 345 6789"
+                  className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="block">
                 <span className="mb-1 block text-sm font-medium">Position</span>
                 <select
                   value={position}
@@ -541,6 +616,11 @@ export default function AdminProfilePage() {
                     Member
                   </option>
                 </select>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-[#6b7280]">Role guide:</span>
+                  <RoleHoverGuide role="admin" />
+                  <RoleHoverGuide role="member" />
+                </div>
               </label>
 
               <label className="block">
@@ -585,6 +665,12 @@ export default function AdminProfilePage() {
             </div>
 
             <div className="space-y-4 px-5 py-4">
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2">
+                <span className="text-xs font-medium text-[#4b5563]">Hover guide:</span>
+                <RoleHoverGuide role="admin" />
+                <RoleHoverGuide role="member" />
+              </div>
+
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

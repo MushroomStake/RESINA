@@ -13,6 +13,7 @@ export type OfflineWriteQueueItem =
         userId: string;
         fullName: string;
         email: string;
+        phoneNumber: string;
         role: string;
         residentStatus: "resident" | "non_resident";
         addressPurok: string;
@@ -121,6 +122,7 @@ export async function flushOfflineWriteQueue(): Promise<OfflineQueueSummary> {
           data: {
             ...metadata,
             full_name: payload.fullName,
+            phone_number: payload.phoneNumber,
             role: payload.role,
             resident_status: payload.residentStatus,
             address_purok: payload.addressPurok,
@@ -137,6 +139,7 @@ export async function flushOfflineWriteQueue(): Promise<OfflineQueueSummary> {
             auth_user_id: payload.userId,
             full_name: payload.fullName,
             email: payload.email,
+            phone_number: payload.phoneNumber,
             role: payload.role,
             resident_status: payload.residentStatus,
             address_purok: payload.addressPurok,

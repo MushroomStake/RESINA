@@ -93,6 +93,20 @@ function formatRemainingUntil(value: string): string {
   return `${hours}h ${minutes}m remaining`;
 }
 
+function TideArrowIcon({ direction }: { direction: "up" | "down" }) {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d={direction === "up" ? "M12 19V5M12 5l-5 5M12 5l5 5" : "M12 5v14M12 19l-5-5M12 19l5-5"}
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function TideMonitorSection({
   isLoading,
   error,
@@ -156,12 +170,19 @@ export function TideMonitorSection({
       ) : (
         <div className="mt-4 grid grid-cols-1 gap-3">
           <div className="rounded-3xl border border-[#d5e4f2] bg-[linear-gradient(135deg,#e9f3ff_0%,#dceeff_100%)] p-4 shadow-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5d7292]">Current Tide</p>
-            <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-              <p className="text-3xl font-black leading-none text-[#12335e] md:text-[40px]">{currentTideLabel}</p>
-              <span className="rounded-full border border-[#c1d6ee] bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#34639c]">
-                {trendLabel}
-              </span>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#edf6ff] text-[#1e63a8] shadow-inner">
+                <TideArrowIcon direction={trend === "rising" ? "up" : "down"} />
+              </div>
+              <div className="flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5d7292]">Current Tide</p>
+                <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+                  <p className="text-3xl font-black leading-none text-[#12335e] md:text-[40px]">{currentTideLabel}</p>
+                  <span className="rounded-full border border-[#c1d6ee] bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#34639c]">
+                    {trendLabel}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
