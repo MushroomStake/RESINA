@@ -30,6 +30,20 @@ const BAND_FLEX = {
   spilling: Math.max(1, Math.round((VISUAL_MAX_METER - SPILLING_MIN) * 100)),
 };
 
+type WaterNoiseSpeckle = {
+  left: string;
+  top: string;
+  size: number;
+  opacity: number;
+};
+
+const WATER_NOISE_SPECKLES: WaterNoiseSpeckle[] = Array.from({ length: 18 }, (_, index) => ({
+  left: `${(index * 37) % 100}%`,
+  top: `${(index * 29) % 74}%`,
+  size: index % 3 === 0 ? 3 : 2,
+  opacity: index % 4 === 0 ? 0.16 : index % 2 === 0 ? 0.12 : 0.08,
+}));
+
 type LevelVisual = {
   title: string;
   badge: string;
@@ -127,6 +141,7 @@ export function SensorStatusCard({
   const fillAnim = useRef(new Animated.Value(normalizedLevel)).current;
   const waveAnimA = useRef(new Animated.Value(0)).current;
   const waveAnimB = useRef(new Animated.Value(0)).current;
+  const waveAnimC = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const previous = trendRef.current;
@@ -154,7 +169,7 @@ export function SensorStatusCard({
     const loopA = Animated.loop(
       Animated.timing(waveAnimA, {
         toValue: 1,
-        duration: 4200,
+        duration: 6800,
         easing: Easing.linear,
         useNativeDriver: true,
       }),
@@ -163,7 +178,16 @@ export function SensorStatusCard({
     const loopB = Animated.loop(
       Animated.timing(waveAnimB, {
         toValue: 1,
-        duration: 5600,
+        duration: 8600,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+
+    const loopC = Animated.loop(
+      Animated.timing(waveAnimC, {
+        toValue: 1,
+        duration: 10400,
         easing: Easing.linear,
         useNativeDriver: true,
       }),
@@ -171,14 +195,17 @@ export function SensorStatusCard({
 
     loopA.start();
     loopB.start();
+    loopC.start();
 
     return () => {
       loopA.stop();
       loopB.stop();
+      loopC.stop();
       waveAnimA.setValue(0);
       waveAnimB.setValue(0);
+      waveAnimC.setValue(0);
     };
-  }, [waveAnimA, waveAnimB]);
+  }, [waveAnimA, waveAnimB, waveAnimC]);
 
   const fillHeight = fillAnim.interpolate({
     inputRange: [0, 1],
@@ -187,17 +214,42 @@ export function SensorStatusCard({
 
   const waveTranslateA = waveAnimA.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -56],
+    outputRange: [0, -110],
   });
 
   const waveTranslateB = waveAnimB.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -64],
+    outputRange: [0, -130],
   });
 
-  const wavePulse = waveAnimA.interpolate({
+  const waveLiftA = waveAnimA.interpolate({
     inputRange: [0, 0.5, 1],
-    outputRange: [0, -4, 0],
+    outputRange: [0, -1.5, 0],
+  });
+
+  const waveLiftB = waveAnimB.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0, -1, 0],
+  });
+
+  const shimmerDrift = waveAnimB.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -28],
+  });
+
+  const shimmerPulse = waveAnimA.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.11, 0.17, 0.11],
+  });
+
+  const shimmerSweep = waveAnimC.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -44],
+  });
+
+  const shimmerGlow = waveAnimC.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.05, 0.12, 0.05],
   });
 
   const meterMarks = useMemo(() => [4, 3, 2, 1, 0], []);
@@ -246,8 +298,44 @@ export function SensorStatusCard({
         <View style={styles.tankWrap}>
           <View style={styles.tankInner}>
             <Animated.View style={[styles.waterFill, { height: fillHeight.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] }) }]}>
-              <Animated.View style={[styles.waveLayerPrimary, { transform: [{ translateX: waveTranslateA }, { translateY: wavePulse }] }]} />
-              <Animated.View style={[styles.waveLayerSecondary, { transform: [{ translateX: waveTranslateB }, { translateY: wavePulse }] }]} />
+              <Animated.View style={[styles.waveLayerPrimary, { transform: [{ translateX: waveTranslateA }, { translateY: waveLiftA }] }]}>
+                <View style={styles.waveRibbonPrimary} />
+                <View style={styles.waveRibbonHighlightPrimary} />
+              </Animated.View>
+              <Animated.View style={[styles.waveLayerSecondary, { transform: [{ translateX: waveTranslateB }, { translateY: waveLiftB }] }]}>
+                <View style={styles.waveRibbonSecondary} />
+                <View style={styles.waveRibbonHighlightSecondary} />
+              </Animated.View>
+              <Animated.View style={[styles.waterNoiseLayer, { opacity: shimmerPulse, transform: [{ translateX: shimmerDrift }] }]}> 
+                <LinearGradient
+                  colors={["rgba(255,255,255,0.20)", "rgba(255,255,255,0.03)", "rgba(255,255,255,0.16)"]}
+                  start={{ x: 0, y: 0.1 }}
+                  end={{ x: 1, y: 0.9 }}
+                  style={styles.waterNoiseSheenA}
+                />
+                <LinearGradient
+                  colors={["rgba(255,255,255,0.00)", "rgba(220,242,255,0.20)", "rgba(255,255,255,0.00)"]}
+                  start={{ x: 0, y: 0.4 }}
+                  end={{ x: 1, y: 0.6 }}
+                  style={styles.waterNoiseSheenB}
+                />
+                <Animated.View style={[styles.waterNoiseSweep, { opacity: shimmerGlow, transform: [{ translateX: shimmerSweep }] }]} />
+                {WATER_NOISE_SPECKLES.map((speckle, index) => (
+                  <View
+                    key={`water-speckle-${index}`}
+                    style={[
+                      styles.waterNoiseSpeckle,
+                      {
+                        left: speckle.left,
+                        top: speckle.top,
+                        width: speckle.size,
+                        height: speckle.size,
+                        opacity: speckle.opacity,
+                      },
+                    ]}
+                  />
+                ))}
+              </Animated.View>
             </Animated.View>
 
             <View style={styles.blurOverlay}>
@@ -453,21 +541,90 @@ const styles = StyleSheet.create({
   },
   waveLayerPrimary: {
     position: "absolute",
-    left: "10%",
-    right: "10%",
-    top: -14,
-    height: 22,
-    borderRadius: 99,
-    backgroundColor: "#8edbffc9",
+    left: "-70%",
+    width: "260%",
+    top: -17,
+    height: 28,
+    justifyContent: "flex-end",
   },
   waveLayerSecondary: {
     position: "absolute",
-    left: "17%",
-    right: "17%",
-    top: -8,
-    height: 18,
+    left: "-72%",
+    width: "260%",
+    top: -10,
+    height: 22,
+    justifyContent: "flex-end",
+  },
+  waveRibbonPrimary: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 16,
+    borderRadius: 999,
+    backgroundColor: "rgba(150,221,255,0.58)",
+  },
+  waveRibbonHighlightPrimary: {
+    position: "absolute",
+    left: "8%",
+    right: "8%",
+    bottom: 9,
+    height: 4,
     borderRadius: 99,
-    backgroundColor: "#e5f8ff94",
+    backgroundColor: "rgba(232,247,255,0.46)",
+  },
+  waveRibbonSecondary: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(193,234,255,0.36)",
+  },
+  waveRibbonHighlightSecondary: {
+    position: "absolute",
+    left: "14%",
+    right: "14%",
+    bottom: 7,
+    height: 3,
+    borderRadius: 99,
+    backgroundColor: "rgba(242,251,255,0.34)",
+  },
+  waterNoiseLayer: {
+    position: "absolute",
+    left: "-25%",
+    width: "170%",
+    top: 0,
+    bottom: 0,
+  },
+  waterNoiseSheenA: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  waterNoiseSheenB: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: "15%",
+    bottom: "20%",
+  },
+  waterNoiseSpeckle: {
+    position: "absolute",
+    borderRadius: 99,
+    backgroundColor: "#f2fbff",
+  },
+  waterNoiseSweep: {
+    position: "absolute",
+    left: "-18%",
+    right: "-18%",
+    top: "38%",
+    height: 18,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.18)",
   },
   blurOverlay: {
     position: "absolute",

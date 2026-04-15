@@ -186,8 +186,10 @@ export function CurrentSensorStatus({
           <div className="relative overflow-hidden rounded-2xl border border-white/30 bg-[#12345a33] backdrop-blur-sm">
             <div className="relative h-full min-h-[176px] overflow-hidden rounded-2xl">
               <div className={`absolute inset-x-0 bottom-0 bg-[#2f8cffc8] transition-[height] duration-700 ${fillHeightClass}`}>
-                <div className="wave-a absolute left-[8%] right-[8%] top-[-14px] h-[24px] rounded-full bg-[#8edbffc4]" />
-                <div className="wave-b absolute left-[16%] right-[16%] top-[-8px] h-[20px] rounded-full bg-[#e5f8ff8f]" />
+                <div className="wave-a absolute -top-[16px] left-[-58%] h-[28px] w-[230%]" />
+                <div className="wave-b absolute -top-[10px] left-[-60%] h-[24px] w-[230%]" />
+                <div className="water-noise absolute inset-0" />
+                <div className="water-noise-2 absolute inset-0" />
               </div>
 
               <div className="absolute left-1/2 top-4 w-[68%] -translate-x-1/2 rounded-2xl border border-white/35 bg-[linear-gradient(180deg,rgba(255,255,255,0.16),rgba(255,255,255,0.06))] px-5 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] backdrop-blur-[6px] md:w-[58%] xl:w-[52%]">
@@ -215,10 +217,39 @@ export function CurrentSensorStatus({
 
       <style jsx>{`
         .wave-a {
-          animation: waveA 4.2s linear infinite;
+          border-radius: 999px;
+          background: linear-gradient(180deg, rgba(196, 236, 255, 0.65), rgba(124, 203, 250, 0.34));
+          clip-path: polygon(0 68%, 8% 46%, 16% 66%, 24% 44%, 32% 64%, 40% 45%, 48% 67%, 56% 44%, 64% 63%, 72% 46%, 80% 66%, 88% 45%, 96% 64%, 100% 62%, 100% 100%, 0 100%);
+          animation: waveA 7.6s linear infinite;
         }
         .wave-b {
-          animation: waveB 5.6s linear infinite;
+          border-radius: 999px;
+          background: linear-gradient(180deg, rgba(234, 248, 255, 0.52), rgba(173, 225, 255, 0.28));
+          clip-path: polygon(0 70%, 10% 52%, 20% 68%, 30% 50%, 40% 69%, 50% 51%, 60% 68%, 70% 52%, 80% 69%, 90% 50%, 100% 66%, 100% 100%, 0 100%);
+          animation: waveB 9.2s linear infinite;
+        }
+        .water-noise {
+          pointer-events: none;
+          opacity: 0.14;
+          mix-blend-mode: screen;
+          background-image:
+            radial-gradient(rgba(255, 255, 255, 0.24) 0.9px, transparent 1.2px),
+            linear-gradient(120deg, transparent 18%, rgba(236, 248, 255, 0.22) 42%, transparent 64%),
+            linear-gradient(165deg, transparent 24%, rgba(206, 238, 255, 0.18) 48%, transparent 70%);
+          background-size: 18px 18px, 170% 100%, 190% 100%;
+          background-position: 0 0, 0 0, 0 0;
+          animation: noiseDrift 11.5s linear infinite;
+        }
+        .water-noise-2 {
+          pointer-events: none;
+          opacity: 0.09;
+          mix-blend-mode: screen;
+          background-image:
+            linear-gradient(102deg, transparent 32%, rgba(255, 255, 255, 0.16) 49%, transparent 62%),
+            linear-gradient(180deg, transparent 0%, rgba(247, 252, 255, 0.08) 50%, transparent 100%);
+          background-size: 160% 100%, 100% 100%;
+          background-position: 0 0, 0 0;
+          animation: glintDrift 14s linear infinite;
         }
         .meter-dot {
           animation: meterPulse 1.4s ease-in-out infinite;
@@ -228,10 +259,10 @@ export function CurrentSensorStatus({
             transform: translateX(0) translateY(0);
           }
           50% {
-            transform: translateX(-26px) translateY(-4px);
+            transform: translateX(-24px) translateY(-1.5px);
           }
           100% {
-            transform: translateX(-52px) translateY(0);
+            transform: translateX(-48px) translateY(0);
           }
         }
         @keyframes waveB {
@@ -239,10 +270,38 @@ export function CurrentSensorStatus({
             transform: translateX(0) translateY(0);
           }
           50% {
-            transform: translateX(-30px) translateY(-4px);
+            transform: translateX(-20px) translateY(-1px);
           }
           100% {
-            transform: translateX(-60px) translateY(0);
+            transform: translateX(-40px) translateY(0);
+          }
+        }
+        @keyframes noiseDrift {
+          0% {
+            background-position: 0 0, 0 0, 0 0;
+            opacity: 0.1;
+          }
+          50% {
+            background-position: 10px 7px, -70px 0, -52px 0;
+            opacity: 0.16;
+          }
+          100% {
+            background-position: 20px 14px, -140px 0, -104px 0;
+            opacity: 0.11;
+          }
+        }
+        @keyframes glintDrift {
+          0% {
+            background-position: 0 0, 0 0;
+            opacity: 0.06;
+          }
+          45% {
+            background-position: 48% 0, 0 0;
+            opacity: 0.11;
+          }
+          100% {
+            background-position: 100% 0, 0 0;
+            opacity: 0.07;
           }
         }
         @keyframes meterPulse {
