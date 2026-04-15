@@ -55,7 +55,38 @@ export default function ResetPasswordPage() {
 		const primeRecoverySession = async () => {
 			if (typeof window !== "undefined") {
 				const url = new URL(window.location.href);
+				const hash = url.hash.startsWith("#") ? url.hash.slice(1) : "";
+				const hashParams = new URLSearchParams(hash);
+				const accessToken = hashParams.get("access_token") ?? url.searchParams.get("access_token");
+				const refreshToken = hashParams.get("refresh_token") ?? url.searchParams.get("refresh_token");
 				const authCode = url.searchParams.get("code");
+
+				if (accessToken && refreshToken) {
+					const { error: tokenSessionError } = await supabase.auth.setSession({
+						access_token: accessToken,
+						refresh_token: refreshToken,
+					});
+
+					if (!isMounted) {
+						return;
+					}
+
+					if (tokenSessionError) {
+						setErrorMessage(normalizeAuthMessage(tokenSessionError.message));
+						return;
+					}
+
+					url.searchParams.delete("access_token");
+					url.searchParams.delete("refresh_token");
+					url.searchParams.delete("token_type");
+					url.searchParams.delete("type");
+					hashParams.delete("access_token");
+					hashParams.delete("refresh_token");
+					hashParams.delete("token_type");
+					hashParams.delete("type");
+					const cleanHash = hashParams.toString();
+					window.history.replaceState({}, "", `${url.pathname}${url.search}${cleanHash ? `#${cleanHash}` : ""}`);
+				}
 
 				if (authCode) {
 					const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(authCode);

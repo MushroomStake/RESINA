@@ -42,6 +42,7 @@ type ProfileSectionProps = {
     confirmPassword: string;
   }) => void;
   onSavePassword: () => void;
+  isChangingPassword: boolean;
   isRecoveryPasswordFlow?: boolean;
   showNewPassword: boolean;
   onToggleShowNewPassword: () => void;
@@ -80,6 +81,7 @@ export function ProfileSection({
   passwordForm,
   onPasswordFormChange,
   onSavePassword,
+  isChangingPassword,
   isRecoveryPasswordFlow = false,
   showNewPassword,
   onToggleShowNewPassword,
@@ -266,8 +268,12 @@ export function ProfileSection({
             <Text style={styles.passwordToggleMiniText}>{showConfirmPassword ? "Hide" : "Show"}</Text>
           </Pressable>
 
-          <Pressable style={styles.profilePasswordSaveBtn} onPress={onSavePassword}>
-            <Text style={styles.profilePasswordSaveText}>Update Password</Text>
+          <Pressable
+            style={[styles.profilePasswordSaveBtn, isChangingPassword ? styles.profilePasswordSaveBtnDisabled : null]}
+            onPress={onSavePassword}
+            disabled={isChangingPassword}
+          >
+            <Text style={styles.profilePasswordSaveText}>{isChangingPassword ? "Updating..." : "Update Password"}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -556,6 +562,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#2f8d41",
     paddingVertical: 12,
     alignItems: "center",
+  },
+  profilePasswordSaveBtnDisabled: {
+    opacity: 0.65,
   },
   profilePasswordSaveText: {
     color: "#ffffff",

@@ -2816,38 +2816,51 @@ export default function App() {
 
     setIsChangingPassword(true);
 
-    if (!isRecoveryPasswordFlow) {
-      const { error: verifyError } = await supabase.auth.signInWithPassword({
-        email,
-        password: currentPassword,
-      });
+    try {
+      const {
+        data: { session: activeSession },
+      } = await supabase.auth.getSession();
 
-      if (verifyError) {
-        setIsChangingPassword(false);
-        setErrorMessage("Current password is incorrect.");
+      if (!activeSession) {
+        setErrorMessage("Session expired. Please log in again before updating your password.");
         return;
       }
+
+      if (!isRecoveryPasswordFlow) {
+        const { error: verifyError } = await supabase.auth.signInWithPassword({
+          email,
+          password: currentPassword,
+        });
+
+        if (verifyError) {
+          setErrorMessage("Current password is incorrect.");
+          return;
+        }
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        setErrorMessage(updateError.message);
+        return;
+      }
+
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+      setIsRecoveryPasswordFlow(false);
+      setIsPasswordEditorOpen(false);
+      setSuccessMessage("Password updated successfully.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update password right now.";
+      setErrorMessage(message);
+    } finally {
+      setIsChangingPassword(false);
     }
-
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
-
-    setIsChangingPassword(false);
-
-    if (updateError) {
-      setErrorMessage(updateError.message);
-      return;
-    }
-
-    setPasswordForm({
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    });
-    setIsRecoveryPasswordFlow(false);
-    setIsPasswordEditorOpen(false);
-    setSuccessMessage("Password updated successfully.");
   };
 
   const handleForgotPassword = async () => {
@@ -2866,20 +2879,25 @@ export default function App() {
 
     setIsSendingPasswordReset(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: mobilePasswordResetRedirectUrl,
-    });
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: mobilePasswordResetRedirectUrl,
+      });
 
-    setIsSendingPasswordReset(false);
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
 
-    if (error) {
-      setErrorMessage(error.message);
-      return;
+      setSuccessMessage("Password reset link sent. Open the link in your web browser to update your password.");
+      setLoginForm((prev) => ({ ...prev, email }));
+      setMode("login");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to send reset link right now.";
+      setErrorMessage(message);
+    } finally {
+      setIsSendingPasswordReset(false);
     }
-
-    setSuccessMessage("Password reset link sent. Open the link in your web browser to update your password.");
-    setLoginForm((prev) => ({ ...prev, email }));
-    setMode("login");
   };
 
   const handleLogout = async () => {
@@ -3010,6 +3028,7 @@ export default function App() {
         passwordForm={passwordForm}
         onPasswordFormChange={(nextForm) => setPasswordForm(nextForm)}
         onSavePassword={() => void handleChangePassword()}
+        isChangingPassword={isChangingPassword}
         isRecoveryPasswordFlow={isRecoveryPasswordFlow}
         showNewPassword={showNewPassword}
         onToggleShowNewPassword={() => setShowNewPassword((prev) => !prev)}
