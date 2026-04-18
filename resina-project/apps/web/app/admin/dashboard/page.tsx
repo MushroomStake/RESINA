@@ -438,6 +438,42 @@ export default function AdminDashboardPage() {
     const supabase = createClient();
     let isMounted = true;
     let liveChannel: ReturnType<typeof supabase.channel> | null = null;
+    let sensorReloadTimer: ReturnType<typeof setTimeout> | null = null;
+    let weatherReloadTimer: ReturnType<typeof setTimeout> | null = null;
+    let tideReloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleSensorReload = () => {
+      if (sensorReloadTimer) {
+        return;
+      }
+
+      sensorReloadTimer = setTimeout(() => {
+        sensorReloadTimer = null;
+        void loadLatestSensorData();
+      }, 350);
+    };
+
+    const scheduleWeatherReload = () => {
+      if (weatherReloadTimer) {
+        return;
+      }
+
+      weatherReloadTimer = setTimeout(() => {
+        weatherReloadTimer = null;
+        void loadWeatherFromSupabase();
+      }, 450);
+    };
+
+    const scheduleTideReload = () => {
+      if (tideReloadTimer) {
+        return;
+      }
+
+      tideReloadTimer = setTimeout(() => {
+        tideReloadTimer = null;
+        void loadTideFromSupabase(true);
+      }, 500);
+    };
 
     const loadLatestSensorData = async () => {
       const sources = [
@@ -509,22 +545,37 @@ export default function AdminDashboardPage() {
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "sensor_readings" },
-          () => void loadLatestSensorData(),
+          scheduleSensorReload,
         )
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "sensor_status" },
-          () => void loadLatestSensorData(),
+          scheduleSensorReload,
         )
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "water_levels" },
-          () => void loadLatestSensorData(),
+          scheduleSensorReload,
         )
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "sensor_logs" },
-          () => void loadLatestSensorData(),
+          scheduleSensorReload,
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "weather_logs" },
+          scheduleWeatherReload,
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "tide_predictions" },
+          scheduleTideReload,
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "tide_hourly" },
+          scheduleTideReload,
         )
         .subscribe();
     };
@@ -533,6 +584,19 @@ export default function AdminDashboardPage() {
 
     return () => {
       isMounted = false;
+
+      if (sensorReloadTimer !== null) {
+        clearTimeout(sensorReloadTimer);
+      }
+
+      if (weatherReloadTimer !== null) {
+        clearTimeout(weatherReloadTimer);
+      }
+
+      if (tideReloadTimer !== null) {
+        clearTimeout(tideReloadTimer);
+      }
+
       if (liveChannel) {
         void supabase.removeChannel(liveChannel);
       }

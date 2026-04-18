@@ -977,6 +977,7 @@ export default function App() {
 
       if (data) {
         const nextSnapshot = mapWeatherRowToSnapshot(data as WeatherRow);
+        latestWeatherRecordedAtRef.current = nextSnapshot.recordedAt;
         setWeatherSnapshot(nextSnapshot);
         await writeCache(CACHE_KEYS.weather, nextSnapshot);
         setWeatherSyncState({ source: "live", cachedAt: null });
@@ -1520,6 +1521,43 @@ export default function App() {
   useEffect(() => {
     if (!session || !isOnline) return;
     let liveChannel: ReturnType<typeof supabase.channel> | null = null;
+    let sensorReloadTimer: ReturnType<typeof setTimeout> | null = null;
+    let historyReloadTimer: ReturnType<typeof setTimeout> | null = null;
+    let tideReloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleSensorReload = () => {
+      if (sensorReloadTimer) {
+        return;
+      }
+
+      sensorReloadTimer = setTimeout(() => {
+        sensorReloadTimer = null;
+        void loadSensorSnapshot(true);
+      }, 350);
+    };
+
+    const scheduleHistoryReload = () => {
+      if (historyReloadTimer) {
+        return;
+      }
+
+      historyReloadTimer = setTimeout(() => {
+        historyReloadTimer = null;
+        void loadHistoryRecords(0, "replace", true);
+      }, 500);
+    };
+
+    const scheduleTideReload = () => {
+      if (tideReloadTimer) {
+        return;
+      }
+
+      // Tide upserts can emit many row-level events; coalesce into one reload.
+      tideReloadTimer = setTimeout(() => {
+        tideReloadTimer = null;
+        void loadTideStatus(true);
+      }, 500);
+    };
 
     liveChannel = supabase
       .channel("resina-mobile-dashboard-live")
@@ -1527,24 +1565,24 @@ export default function App() {
         "postgres_changes",
         { event: "*", schema: "public", table: "sensor_readings" },
         () => {
-          void loadSensorSnapshot(true);
-          void loadHistoryRecords(0, "replace", true);
+          scheduleSensorReload();
+          scheduleHistoryReload();
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sensor_status" },
-        () => void loadSensorSnapshot(true),
+        scheduleSensorReload,
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "water_levels" },
-        () => void loadSensorSnapshot(true),
+        scheduleSensorReload,
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sensor_logs" },
-        () => void loadSensorSnapshot(true),
+        scheduleSensorReload,
       )
       .on(
         "postgres_changes",
@@ -1554,6 +1592,7 @@ export default function App() {
 
           if (row && Object.keys(row).length > 0) {
             const nextSnapshot = mapWeatherRowToSnapshot(row);
+            latestWeatherRecordedAtRef.current = nextSnapshot.recordedAt;
             setWeatherSnapshot(nextSnapshot);
             void writeCache(CACHE_KEYS.weather, nextSnapshot);
             return;
@@ -1561,6 +1600,16 @@ export default function App() {
 
           void loadWeatherSnapshot(true);
         },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tide_predictions" },
+        scheduleTideReload,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tide_hourly" },
+        scheduleTideReload,
       )
       .on(
         "postgres_changes",
@@ -1575,6 +1624,18 @@ export default function App() {
       .subscribe();
 
     return () => {
+      if (sensorReloadTimer) {
+        clearTimeout(sensorReloadTimer);
+      }
+
+      if (historyReloadTimer) {
+        clearTimeout(historyReloadTimer);
+      }
+
+      if (tideReloadTimer) {
+        clearTimeout(tideReloadTimer);
+      }
+
       if (liveChannel) {
         void supabase.removeChannel(liveChannel);
       }
@@ -1672,7 +1733,9 @@ export default function App() {
       if (state === "active" && isOnline) {
         void (async () => {
           const results = await Promise.all([
+            loadSensorSnapshot(true),
             loadWeatherSnapshot(true),
+            loadTideStatus(true),
             loadAnnouncements(0, "replace", true),
             loadHistoryRecords(0, "replace", true),
           ]);
