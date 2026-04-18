@@ -283,6 +283,57 @@ export default function AdminDashboardPage() {
     setStatusVisible(true);
   };
 
+  const loadLatestSensorData = async (silent = false): Promise<void> => {
+    const supabase = createClient();
+    const sources = [
+      { table: "sensor_readings", orderBy: "created_at" },
+      { table: "sensor_status", orderBy: "created_at" },
+      { table: "water_levels", orderBy: "created_at" },
+      { table: "sensor_logs", orderBy: "timestamp" },
+    ];
+
+    if (!silent) {
+      setIsLoadingData(true);
+      setFetchError(null);
+    }
+
+    let found = false;
+    for (const source of sources) {
+      const { data: rows, error } = await supabase
+        .from(source.table)
+        .select("*")
+        .order(source.orderBy, { ascending: false })
+        .limit(1);
+
+      if (error || !rows || rows.length === 0) {
+        continue;
+      }
+
+      const row = rows[0] as Record<string, unknown>;
+      const waterLevel = Number(
+        row.water_level ?? row.level ?? row.sensor_level ?? row.reading ?? row.value ?? Number.NaN,
+      );
+
+      setSnapshot({
+        waterLevel: Number.isNaN(waterLevel) ? null : waterLevel,
+        statusText: (row.status ?? row.level_status ?? row.alert_status ?? row.alert_level ?? null) as string | null,
+        updatedAt: (row.created_at ?? row.timestamp ?? row.recorded_at ?? null) as string | null,
+        sourceTable: source.table,
+      });
+
+      found = true;
+      break;
+    }
+
+    if (!found) {
+      setFetchError("No sensor rows found yet. Waiting for Twilio to write records into Supabase.");
+    }
+
+    if (!silent) {
+      setIsLoadingData(false);
+    }
+  };
+
   const loadWeatherFromSupabase = async (): Promise<boolean> => {
     const supabase = createClient();
     const { data } = await supabase
@@ -439,6 +490,7 @@ export default function AdminDashboardPage() {
     let isMounted = true;
     let liveChannel: ReturnType<typeof supabase.channel> | null = null;
     let sensorReloadTimer: ReturnType<typeof setTimeout> | null = null;
+    let sensorFallbackTimer: ReturnType<typeof setInterval> | null = null;
     let weatherReloadTimer: ReturnType<typeof setTimeout> | null = null;
     let tideReloadTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -449,7 +501,7 @@ export default function AdminDashboardPage() {
 
       sensorReloadTimer = setTimeout(() => {
         sensorReloadTimer = null;
-        void loadLatestSensorData();
+        void loadLatestSensorData(true);
       }, 350);
     };
 
@@ -475,58 +527,6 @@ export default function AdminDashboardPage() {
       }, 500);
     };
 
-    const loadLatestSensorData = async () => {
-      const sources = [
-        { table: "sensor_readings", orderBy: "created_at" },
-        { table: "sensor_status", orderBy: "created_at" },
-        { table: "water_levels", orderBy: "created_at" },
-        { table: "sensor_logs", orderBy: "timestamp" },
-      ];
-
-      if (isMounted) {
-        setIsLoadingData(true);
-        setFetchError(null);
-      }
-
-      let found = false;
-      for (const source of sources) {
-        const { data: rows, error } = await supabase
-          .from(source.table)
-          .select("*")
-          .order(source.orderBy, { ascending: false })
-          .limit(1);
-
-        if (error || !rows || rows.length === 0) {
-          continue;
-        }
-
-        const row = rows[0] as Record<string, unknown>;
-        const waterLevel = Number(
-          row.water_level ?? row.level ?? row.sensor_level ?? row.reading ?? row.value ?? Number.NaN,
-        );
-
-        if (isMounted) {
-          setSnapshot({
-            waterLevel: Number.isNaN(waterLevel) ? null : waterLevel,
-            statusText: (row.status ?? row.level_status ?? row.alert_status ?? row.alert_level ?? null) as string | null,
-            updatedAt: (row.created_at ?? row.timestamp ?? row.recorded_at ?? null) as string | null,
-            sourceTable: source.table,
-          });
-        }
-
-        found = true;
-        break;
-      }
-
-      if (!found && isMounted) {
-        setFetchError("No sensor rows found yet. Waiting for Twilio to write records into Supabase.");
-      }
-
-      if (isMounted) {
-        setIsLoadingData(false);
-      }
-    };
-
     const initialize = async () => {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) {
@@ -539,6 +539,13 @@ export default function AdminDashboardPage() {
       }
 
       await loadLatestSensorData();
+
+      // Keep sensor card fresh even if Realtime misses a push event.
+      sensorFallbackTimer = setInterval(() => {
+        if (isMounted) {
+          void loadLatestSensorData(true);
+        }
+      }, 5_000);
 
       liveChannel = supabase
         .channel("resina-dashboard-live")
@@ -577,7 +584,16 @@ export default function AdminDashboardPage() {
           { event: "*", schema: "public", table: "tide_hourly" },
           scheduleTideReload,
         )
-        .subscribe();
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            console.log("Dashboard realtime subscriptions active");
+          }
+
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            // Recover quickly from transient channel issues.
+            void loadLatestSensorData(true);
+          }
+        });
     };
 
     void initialize();
@@ -587,6 +603,10 @@ export default function AdminDashboardPage() {
 
       if (sensorReloadTimer !== null) {
         clearTimeout(sensorReloadTimer);
+      }
+
+      if (sensorFallbackTimer !== null) {
+        clearInterval(sensorFallbackTimer);
       }
 
       if (weatherReloadTimer !== null) {
@@ -602,6 +622,30 @@ export default function AdminDashboardPage() {
       }
     };
   }, [router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const refreshSensor = () => {
+      void loadLatestSensorData(true);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSensor();
+      }
+    };
+
+    window.addEventListener("focus", refreshSensor);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", refreshSensor);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;

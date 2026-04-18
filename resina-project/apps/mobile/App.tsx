@@ -1621,7 +1621,11 @@ export default function App() {
         { event: "*", schema: "public", table: "announcement_media" },
         () => void loadAnnouncements(0, "replace", true),
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log("Mobile realtime subscriptions active");
+        }
+      });
 
     return () => {
       if (sensorReloadTimer) {

@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-const webAppUrl = process.env.NEXT_PUBLIC_WEB_APP_URL ?? "#";
+const webAppUrl = process.env.NEXT_PUBLIC_WEB_APP_URL ?? "/admin";
 const mobileAppUrl = process.env.NEXT_PUBLIC_MOBILE_APP_URL ?? "#";
 const apkDownloadUrl = process.env.NEXT_PUBLIC_APK_DOWNLOAD_URL ?? "#";
 

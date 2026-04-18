@@ -62,6 +62,24 @@ CREATE POLICY "Allow service role to upsert tide hourly"
   TO service_role
   USING (TRUE);
 
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.tide_predictions;
+  exception
+    when duplicate_object then null;
+    when undefined_object then null;
+  end;
+
+  begin
+    alter publication supabase_realtime add table public.tide_hourly;
+  exception
+    when duplicate_object then null;
+    when undefined_object then null;
+  end;
+end
+$$;
+
 -- Comments
 COMMENT ON TABLE tide_predictions IS 'Daily tide extremes (highs/lows) from StormGlass API for Sta. Rita Bridge';
 COMMENT ON TABLE tide_hourly IS 'Hourly interpolated tide heights derived from extremes using Rule of Twelfths';

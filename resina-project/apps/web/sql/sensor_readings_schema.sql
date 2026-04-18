@@ -46,3 +46,14 @@ on public.sensor_readings
 for delete
 to authenticated
 using (auth.uid() is not null);
+
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.sensor_readings;
+  exception
+    when duplicate_object then null;
+    when undefined_object then null;
+  end;
+end
+$$;

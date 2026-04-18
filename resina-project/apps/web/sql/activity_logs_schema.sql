@@ -32,3 +32,14 @@ on public.activity_logs
 for insert
 to authenticated
 with check (auth.uid() is not null);
+
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.activity_logs;
+  exception
+    when duplicate_object then null;
+    when undefined_object then null;
+  end;
+end
+$$;
