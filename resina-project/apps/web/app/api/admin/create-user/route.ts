@@ -140,8 +140,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const adminSupabaseDynamic = adminSupabase as any;
+
     // 6. Insert or update matching profiles row using explicit flow for clearer error handling.
-    const { data: existingProfile, error: selectError } = await adminSupabase
+    const { data: existingProfile, error: selectError } = await adminSupabaseDynamic
       .from("profiles")
       .select("id")
       .eq("email", normalizedEmail)
@@ -155,7 +157,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (existingProfile?.id) {
-      const { error: updateError } = await adminSupabase
+      const { error: updateError } = await adminSupabaseDynamic
         .from("profiles")
         .update({
           auth_user_id: invitedUserId,
@@ -174,7 +176,7 @@ export async function POST(request: NextRequest) {
         );
       }
     } else {
-      const { error: insertError } = await adminSupabase.from("profiles").insert({
+      const { error: insertError } = await adminSupabaseDynamic.from("profiles").insert({
         auth_user_id: invitedUserId,
         first_name: firstName.trim(),
         middle_name: middleName.trim(),
@@ -196,6 +198,7 @@ export async function POST(request: NextRequest) {
       id: invitedUserId,
       email: inviteResult.user.email,
       message: "Invite sent.",
+      temporaryPassword: defaultPassword,
       metadata: {
         fullName: normalizedFullName,
         position: role,

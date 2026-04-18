@@ -33,11 +33,9 @@ export async function GET(request: NextRequest) {
   }
 
   // 1. Fetch current weather from OpenWeatherMap.
-  const owmResponse = await fetch("https://api.openweathermap.org/data/2.5/weather?q=Olongapo,PH&units=metric", {
+  const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=Olongapo,PH&units=metric&appid=${encodeURIComponent(openWeatherApiKey)}`;
+  const owmResponse = await fetch(weatherUrl, {
     cache: "no-store",
-    headers: {
-      "x-api-key": openWeatherApiKey,
-    },
   });
 
   if (!owmResponse.ok) {

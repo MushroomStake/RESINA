@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "../../../lib/supabase/admin";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 type AnnouncementApiRow = {
   id: string;
@@ -18,9 +18,17 @@ type AnnouncementApiRow = {
 
 export async function GET() {
   try {
-    const adminSupabase = createAdminClient();
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json({ error: "Missing Supabase public environment variables." }, { status: 500 });
+    }
 
-    const { data, error } = await adminSupabase
+    const publicSupabase = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const { data, error } = await publicSupabase
       .from("announcements")
       .select("id, title, description, alert_level, posted_by_name, created_at, announcement_media(id, file_name, public_url, display_order)")
       .order("created_at", { ascending: false });

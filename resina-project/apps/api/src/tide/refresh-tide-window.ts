@@ -18,22 +18,19 @@ async function upsertHourlyForDate(predictionDate: string): Promise<number> {
 
   const hourly = generateHourlyTideEstimates(tideData, predictionDate, "rule-of-twelfths");
 
-  for (const entry of hourly) {
-    const { error } = await supabase.from("tide_hourly").upsert(
-      {
-        prediction_date: predictionDate,
-        hour_of_day: entry.hour,
-        estimated_height: entry.estimatedHeight,
-        confidence: entry.confidence,
-      },
-      {
-        onConflict: "prediction_date,hour_of_day",
-      },
-    );
+  const payload = hourly.map((entry) => ({
+    prediction_date: predictionDate,
+    hour_of_day: entry.hour,
+    estimated_height: entry.estimatedHeight,
+    confidence: entry.confidence,
+  }));
 
-    if (error) {
-      throw new Error(`Hourly upsert failed for ${predictionDate} hour ${entry.hour}: ${error.message}`);
-    }
+  const { error } = await supabase.from("tide_hourly").upsert(payload, {
+    onConflict: "prediction_date,hour_of_day",
+  });
+
+  if (error) {
+    throw new Error(`Hourly upsert failed for ${predictionDate}: ${error.message}`);
   }
 
   return hourly.length;

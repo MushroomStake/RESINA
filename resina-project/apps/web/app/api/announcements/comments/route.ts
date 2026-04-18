@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "../../../../lib/supabase/server";
 import { createAdminClient } from "../../../../lib/supabase/admin";
 
+const ANON_COMMENT_WINDOW_MS = 15 * 60 * 1000;
+const ANON_COMMENT_MAX_PER_WINDOW = 10;
+
+type RateLimitEntry = {
+  count: number;
+  resetAt: number;
+};
+
+const anonCommentRateLimitStore = new Map<string, RateLimitEntry>();
+
 type CreateCommentBody = {
   announcementId?: string;
   parentCommentId?: string | null;
@@ -37,6 +47,38 @@ async function requirePortalUser() {
   }
 
   return { user, error: null, status: 200 as const };
+}
+
+function getClientIp(request: NextRequest): string {
+  const forwardedFor = request.headers.get("x-forwarded-for") ?? "";
+  const firstIp = forwardedFor.split(",")[0]?.trim();
+  return firstIp || request.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+function enforceAnonymousCommentRateLimit(request: NextRequest, authUserId: string | null): boolean {
+  if (authUserId) {
+    return true;
+  }
+
+  const now = Date.now();
+  const key = `anon:${getClientIp(request)}`;
+  const existing = anonCommentRateLimitStore.get(key);
+
+  if (!existing || now >= existing.resetAt) {
+    anonCommentRateLimitStore.set(key, {
+      count: 1,
+      resetAt: now + ANON_COMMENT_WINDOW_MS,
+    });
+    return true;
+  }
+
+  if (existing.count >= ANON_COMMENT_MAX_PER_WINDOW) {
+    return false;
+  }
+
+  existing.count += 1;
+  anonCommentRateLimitStore.set(key, existing);
+  return true;
 }
 
 export async function GET(request: NextRequest) {
@@ -123,6 +165,13 @@ export async function POST(request: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    if (!enforceAnonymousCommentRateLimit(request, user?.id ?? null)) {
+      return NextResponse.json(
+        { error: "Too many anonymous comments. Please try again later." },
+        { status: 429 },
+      );
+    }
 
     const adminSupabase = createAdminClient();
 

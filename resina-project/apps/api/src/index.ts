@@ -216,6 +216,7 @@ app.get("/api/tide/hourly", async (req: Request, res: Response) => {
 app.get("/api/tide/estimate", tideEstimateLimiter, async (req: Request, res: Response) => {
   try {
     let queryTime: Date;
+    const method = resolveInterpolationMethod(req.query.method);
 
     if (req.query.time) {
       // Use explicit time parameter
@@ -227,7 +228,10 @@ app.get("/api/tide/estimate", tideEstimateLimiter, async (req: Request, res: Res
         return res.status(400).json({ error: dateError });
       }
 
-      const hour = parseInt(req.query.hour as string) || new Date().getUTCHours();
+      const requestedHour = Number.parseInt((req.query.hour as string) ?? "", 10);
+      const hour = Number.isInteger(requestedHour) && requestedHour >= 0 && requestedHour <= 23
+        ? requestedHour
+        : new Date().getUTCHours();
       queryTime = new Date(`${date}T${String(hour).padStart(2, "0")}:00:00Z`);
     }
 
@@ -235,22 +239,22 @@ app.get("/api/tide/estimate", tideEstimateLimiter, async (req: Request, res: Res
       return res.status(400).json({ error: "Invalid time parameter" });
     }
 
-    const date = queryTime.toISOString().split("T")[0];
-    const tideData = await getTidePredictionFromDB(date);
+    const queryDate = queryTime.toISOString().split("T")[0];
+    const tideData = await getTidePredictionFromDB(queryDate);
 
     if (!tideData) {
       return res.status(404).json({
         error: "No tide data for specified date",
-        date,
+        date: queryDate,
       });
     }
 
-    const height = estimateTideHeight(tideData, queryTime);
+    const height = estimateTideHeight(tideData, queryTime, method);
     res.json({
       queryTime: queryTime.toISOString(),
       estimatedHeight: height ? Math.round(height * 100) / 100 : null,
       unit: "meters",
-      method: "rule-of-twelfths",
+      method,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

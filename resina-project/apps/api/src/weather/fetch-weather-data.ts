@@ -30,11 +30,8 @@ async function main() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const response = await fetch("https://api.openweathermap.org/data/2.5/weather?q=Olongapo,PH&units=metric", {
-    headers: {
-      "x-api-key": openWeatherApiKey,
-    },
-  });
+  const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=Olongapo,PH&units=metric&appid=${encodeURIComponent(openWeatherApiKey)}`;
+  const response = await fetch(weatherUrl);
 
   if (!response.ok) {
     const text = await response.text();
