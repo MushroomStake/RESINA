@@ -4,6 +4,9 @@ import { MobileSectionHeader, SectionSyncBadge, type SectionSyncBadgeVariant } f
 export type ProfileAvatarKey = "boy" | "man" | "user" | "woman" | "woman2";
 
 export type ProfileState = {
+  firstName: string;
+  middleName: string;
+  lastName: string;
   fullName: string;
   email: string;
   phoneNumber: string;
@@ -48,6 +51,12 @@ type ProfileSectionProps = {
   onToggleShowNewPassword: () => void;
   showConfirmPassword: boolean;
   onToggleShowConfirmPassword: () => void;
+  isEditingName: boolean;
+  onChangeFirstName: (value: string) => void;
+  onChangeMiddleName: (value: string) => void;
+  onChangeLastName: (value: string) => void;
+  onSaveProfileName: () => void;
+  isSavingProfileName: boolean;
   isEditingPhoneNumber: boolean;
   onToggleEditPhoneNumber: () => void;
   onChangePhoneNumber: (value: string) => void;
@@ -65,6 +74,24 @@ type ProfileSectionProps = {
   statusLabel?: string | null;
   statusVariant?: SectionSyncBadgeVariant;
 };
+
+function extractPhoneLocalDigits(value: string): string {
+  const digitsOnly = value.replace(/\D/g, "");
+
+  if (!digitsOnly) {
+    return "";
+  }
+
+  if (digitsOnly.startsWith("63")) {
+    return digitsOnly.slice(2, 12);
+  }
+
+  if (digitsOnly.startsWith("0")) {
+    return digitsOnly.slice(1, 11);
+  }
+
+  return digitsOnly.slice(0, 10);
+}
 
 export function ProfileSection({
   profileState,
@@ -87,6 +114,12 @@ export function ProfileSection({
   onToggleShowNewPassword,
   showConfirmPassword,
   onToggleShowConfirmPassword,
+  isEditingName,
+  onChangeFirstName,
+  onChangeMiddleName,
+  onChangeLastName,
+  onSaveProfileName,
+  isSavingProfileName,
   isEditingPhoneNumber,
   onToggleEditPhoneNumber,
   onChangeAddress,
@@ -105,6 +138,7 @@ export function ProfileSection({
   isSavingPhoneNumber,
 }: ProfileSectionProps) {
   const isLightText = textVariant === "light";
+  const isProfileCustomizationOpen = isAvatarPickerOpen || isEditingName;
 
   return (
     <View>
@@ -115,14 +149,52 @@ export function ProfileSection({
       <View style={styles.profileCard}>
         <Image source={selectedAvatar.source} style={styles.profileAvatar} resizeMode="cover" />
         <View style={styles.profileInfoCol}>
-          <Text style={styles.profileName}>{profileState.fullName}</Text>
+          <View style={styles.profileNameRow}>
+            <Text style={styles.profileName}>{profileState.fullName}</Text>
+          </View>
+          {isEditingName ? (
+            <View style={styles.profileNameEditor}>
+              <TextInput
+                value={profileState.firstName}
+                onChangeText={onChangeFirstName}
+                style={styles.profileNameInput}
+                placeholder="First name"
+                placeholderTextColor="#9ca3af"
+                autoFocus
+                editable={!isSavingProfileName}
+              />
+              <TextInput
+                value={profileState.middleName}
+                onChangeText={onChangeMiddleName}
+                style={styles.profileNameInput}
+                placeholder="Middle name (optional)"
+                placeholderTextColor="#9ca3af"
+                editable={!isSavingProfileName}
+              />
+              <TextInput
+                value={profileState.lastName}
+                onChangeText={onChangeLastName}
+                style={styles.profileNameInput}
+                placeholder="Last name"
+                placeholderTextColor="#9ca3af"
+                editable={!isSavingProfileName}
+              />
+              <Pressable
+                style={[styles.profileNameSaveBtn, isSavingProfileName ? styles.profileNameSaveBtnDisabled : null]}
+                onPress={onSaveProfileName}
+                disabled={isSavingProfileName}
+              >
+                <Text style={styles.profileNameSaveText}>{isSavingProfileName ? "Saving..." : "Save Name"}</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <View style={styles.profileRoleRow}>
             <Text style={styles.profileRoleBadge}>{displayRoleLabel}</Text>
             <Text style={styles.profileRoleText}>{residentStatusCaption}</Text>
           </View>
         </View>
         <Pressable style={styles.profileInlineEditBtn} onPress={onToggleAvatarPicker}>
-          <Text style={styles.profileInlineEditText}>{isAvatarPickerOpen ? "✕" : "✎"}</Text>
+          <Text style={styles.profileInlineEditText}>{isProfileCustomizationOpen ? "✕" : "✎"}</Text>
         </Pressable>
       </View>
 
@@ -155,27 +227,37 @@ export function ProfileSection({
           <View style={styles.profileInfoHeadingRow}>
             <Text style={styles.profileInfoLabel}>Phone Number</Text>
             <View style={styles.profileInfoHeadingActions}>
-              <Text style={styles.profilePill}>SMS Active</Text>
+              <View style={styles.profilePill}>
+                <Text style={styles.profilePillText}>SMS Active</Text>
+              </View>
               <Pressable onPress={onToggleEditPhoneNumber} style={styles.profileInlineEditBtnSmall}>
                 <Text style={styles.profileInlineEditTextSmall}>{isEditingPhoneNumber ? "✓" : "✎"}</Text>
               </Pressable>
             </View>
           </View>
           {isEditingPhoneNumber ? (
-            <TextInput
-              value={profileState.phoneNumber}
-              onChangeText={onChangePhoneNumber}
-              onBlur={onSavePhoneNumber}
-              style={styles.profilePhoneInput}
-              placeholder="0912 345 6789"
-              placeholderTextColor="#9ca3af"
-              keyboardType="phone-pad"
-              editable={!isSavingPhoneNumber}
-              autoFocus
-            />
+            <View style={styles.profilePhoneInputRow}>
+              <Text style={styles.profilePhonePrefix}>+63</Text>
+              <TextInput
+                value={extractPhoneLocalDigits(profileState.phoneNumber)}
+                onChangeText={(value) => onChangePhoneNumber(`+63${value}`)}
+                style={styles.profilePhoneInput}
+                placeholder="9123456789"
+                placeholderTextColor="#9ca3af"
+                keyboardType="phone-pad"
+                editable={!isSavingPhoneNumber}
+                autoFocus
+              />
+            </View>
           ) : (
             <Text style={styles.profileInfoValue}>{profileState.phoneNumber}</Text>
           )}
+          <View style={styles.smsTooltip}>
+            <Text style={styles.smsTooltipText}>
+              We use your phone number only for urgent SMS alerts like critical, evacuation, and spilling-level
+              warnings.
+            </Text>
+          </View>
         </View>
         <View style={styles.profileInfoDivider} />
         <View style={styles.profileInfoRow}>
@@ -326,9 +408,47 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1,
   },
+  profileNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   profileName: {
+    flex: 1,
     color: "#1f2937",
     fontSize: 16,
+    fontWeight: "700",
+  },
+  profileNameEditor: {
+    marginTop: 8,
+    gap: 6,
+  },
+  profileNameInput: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: "#1f2937",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  profileNameSaveBtn: {
+    marginTop: 4,
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    backgroundColor: "#2f8d41",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  profileNameSaveBtnDisabled: {
+    opacity: 0.6,
+  },
+  profileNameSaveText: {
+    color: "#ffffff",
+    fontSize: 12,
     fontWeight: "700",
   },
   profileInlineEditBtn: {
@@ -466,18 +586,61 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   profilePill: {
-    color: "#1f2937",
     backgroundColor: "#e5e7eb",
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 3,
+  },
+  profilePillText: {
+    color: "#1f2937",
     fontSize: 11,
     fontWeight: "700",
+  },
+  smsTooltip: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#c7d2e2",
+    backgroundColor: "#f8fbff",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  smsTooltipText: {
+    color: "#334155",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "500",
   },
   profileInfoValue: {
     color: "#1f2937",
     fontSize: 14,
     fontWeight: "600",
+  },
+  profilePhoneInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#d9dde3",
+    borderRadius: 10,
+    backgroundColor: "#f9fbfd",
+    overflow: "hidden",
+  },
+  profilePhonePrefix: {
+    color: "#4b5563",
+    fontSize: 14,
+    fontWeight: "700",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRightWidth: 1,
+    borderRightColor: "#d9dde3",
+    backgroundColor: "#eef2f7",
+  },
+  profilePhoneInput: {
+    flex: 1,
+    color: "#1f2937",
+    fontSize: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   profileInfoDivider: {
     height: 1,

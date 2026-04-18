@@ -8,11 +8,36 @@ type CreateUserBody = {
   firstName?: string;
   middleName?: string;
   lastName?: string;
+  phoneNumber?: string;
   email?: string;
   confirmEmail?: string;
   role?: string;
   password?: string;
 };
+
+const PHONE_COUNTRY_PREFIX = "+63";
+
+function extractPhoneDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function normalizePhoneNumber(value: string): string {
+  const digits = extractPhoneDigits(value);
+
+  if (digits.startsWith("63")) {
+    return `${PHONE_COUNTRY_PREFIX}${digits.slice(2, 12)}`;
+  }
+
+  if (digits.startsWith("0")) {
+    return `${PHONE_COUNTRY_PREFIX}${digits.slice(1, 11)}`;
+  }
+
+  return `${PHONE_COUNTRY_PREFIX}${digits.slice(0, 10)}`;
+}
+
+function isValidPhoneNumber(value: string): boolean {
+  return /^\+639\d{9}$/.test(value);
+}
 
 function buildFullName(first: string, middle: string, last: string): string {
   return [first.trim(), middle.trim(), last.trim()].filter(Boolean).join(" ");
@@ -62,6 +87,7 @@ export async function POST(request: NextRequest) {
       firstName = "",
       middleName = "",
       lastName = "",
+      phoneNumber = "",
       email = "",
       confirmEmail = "",
       role = "member",
@@ -84,7 +110,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Default password must be at least 6 characters." }, { status: 400 });
     }
 
-    const normalizedFullName = fullName.trim() || buildFullName(firstName, middleName, lastName);
+    const normalizedFirstName = firstName.trim();
+    const normalizedMiddleName = middleName.trim();
+    const normalizedLastName = lastName.trim();
+    const normalizedFullName = fullName.trim() || buildFullName(normalizedFirstName, normalizedMiddleName, normalizedLastName);
+    const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber.trim());
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedConfirmEmail = confirmEmail.trim().toLowerCase();
     // Use provided password or generate a strong random one
@@ -99,12 +129,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Email and confirm email do not match." }, { status: 400 });
     }
 
+    if (!isValidPhoneNumber(normalizedPhoneNumber)) {
+      return NextResponse.json(
+        { error: "Phone number must be in the format +639XXXXXXXXX." },
+        { status: 400 },
+      );
+    }
+
     // 4. Send an invite email with metadata and admin redirect.
     const adminSupabase = createAdminClient();
     const { data: inviteResult, error: inviteError } = await adminSupabase.auth.admin.inviteUserByEmail(normalizedEmail, {
       redirectTo: adminLink,
       data: {
+        first_name: normalizedFirstName,
+        middle_name: normalizedMiddleName,
+        last_name: normalizedLastName,
         full_name: normalizedFullName,
+        phone_number: normalizedPhoneNumber,
+        role,
         position: role,
         admin_link: adminLink,
       },
@@ -127,7 +169,12 @@ export async function POST(request: NextRequest) {
       password: defaultPassword,
       email_confirm: true,
       user_metadata: {
+        first_name: normalizedFirstName,
+        middle_name: normalizedMiddleName,
+        last_name: normalizedLastName,
         full_name: normalizedFullName,
+        phone_number: normalizedPhoneNumber,
+        role,
         position: role,
         admin_link: adminLink,
       },
@@ -161,10 +208,11 @@ export async function POST(request: NextRequest) {
         .from("profiles")
         .update({
           auth_user_id: invitedUserId,
-          first_name: firstName.trim(),
-          middle_name: middleName.trim(),
-          last_name: lastName.trim(),
+          first_name: normalizedFirstName,
+          middle_name: normalizedMiddleName,
+          last_name: normalizedLastName,
           full_name: normalizedFullName,
+          phone_number: normalizedPhoneNumber,
           role,
         })
         .eq("id", existingProfile.id);
@@ -178,10 +226,11 @@ export async function POST(request: NextRequest) {
     } else {
       const { error: insertError } = await adminSupabaseDynamic.from("profiles").insert({
         auth_user_id: invitedUserId,
-        first_name: firstName.trim(),
-        middle_name: middleName.trim(),
-        last_name: lastName.trim(),
+        first_name: normalizedFirstName,
+        middle_name: normalizedMiddleName,
+        last_name: normalizedLastName,
         full_name: normalizedFullName,
+        phone_number: normalizedPhoneNumber,
         email: normalizedEmail,
         role,
       });

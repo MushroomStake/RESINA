@@ -7,9 +7,34 @@ type UpdateUserBody = {
   firstName?: string;
   middleName?: string;
   lastName?: string;
+  phoneNumber?: string;
   email?: string;
   role?: string;
 };
+
+const PHONE_COUNTRY_PREFIX = "+63";
+
+function extractPhoneDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function normalizePhoneNumber(value: string): string {
+  const digits = extractPhoneDigits(value);
+
+  if (digits.startsWith("63")) {
+    return `${PHONE_COUNTRY_PREFIX}${digits.slice(2, 12)}`;
+  }
+
+  if (digits.startsWith("0")) {
+    return `${PHONE_COUNTRY_PREFIX}${digits.slice(1, 11)}`;
+  }
+
+  return `${PHONE_COUNTRY_PREFIX}${digits.slice(0, 10)}`;
+}
+
+function isValidPhoneNumber(value: string): boolean {
+  return /^\+639\d{9}$/.test(value);
+}
 
 function buildFullName(first: string, middle: string, last: string): string {
   return [first.trim(), middle.trim(), last.trim()].filter(Boolean).join(" ");
@@ -43,6 +68,7 @@ export async function PUT(request: NextRequest) {
       firstName = "",
       middleName = "",
       lastName = "",
+      phoneNumber = "",
       email = "",
       role = "member",
     } = body;
@@ -58,7 +84,12 @@ export async function PUT(request: NextRequest) {
     const adminSupabase = createAdminClient();
     const adminSupabaseDynamic = adminSupabase as any;
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber.trim());
     const fullName = buildFullName(firstName, middleName, lastName);
+
+    if (!isValidPhoneNumber(normalizedPhoneNumber)) {
+      return NextResponse.json({ error: "Phone number must be in the format +639XXXXXXXXX." }, { status: 400 });
+    }
 
     const { data: existingProfile, error: loadError } = await adminSupabaseDynamic
       .from("profiles")
@@ -81,6 +112,24 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    if (existingProfile.auth_user_id) {
+      const { error: updateMetadataError } = await adminSupabase.auth.admin.updateUserById(existingProfile.auth_user_id, {
+        user_metadata: {
+          first_name: firstName.trim(),
+          middle_name: middleName.trim(),
+          last_name: lastName.trim(),
+          full_name: fullName,
+          phone_number: normalizedPhoneNumber,
+          role,
+          position: role,
+        },
+      });
+
+      if (updateMetadataError) {
+        return NextResponse.json({ error: `Failed to update auth metadata: ${updateMetadataError.message}` }, { status: 500 });
+      }
+    }
+
     const { error: updateProfileError } = await adminSupabaseDynamic
       .from("profiles")
       .update({
@@ -88,6 +137,7 @@ export async function PUT(request: NextRequest) {
         middle_name: middleName.trim(),
         last_name: lastName.trim(),
         full_name: fullName,
+        phone_number: normalizedPhoneNumber,
         email: normalizedEmail,
         role,
       })

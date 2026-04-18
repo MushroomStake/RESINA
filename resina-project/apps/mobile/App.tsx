@@ -213,6 +213,9 @@ type TideHourlyRow = {
 };
 
 type ProfileState = {
+  firstName: string;
+  middleName: string;
+  lastName: string;
   fullName: string;
   email: string;
   phoneNumber: string;
@@ -247,6 +250,8 @@ const PROFILE_AVATAR_OPTIONS: Array<{ key: ProfileAvatarKey; label: string; sour
 ];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_COUNTRY_PREFIX = "+63";
+const PHONE_LOCAL_LENGTH = 10;
 const mobileEmailRedirectUrl =
   process.env.EXPO_PUBLIC_MOBILE_EMAIL_REDIRECT_URL ?? "https://resina-two.vercel.app/";
 const resolveMobilePasswordResetRedirectUrl = (): string => {
@@ -300,6 +305,43 @@ function buildFullName(firstName: string, middleName: string, lastName: string):
   return [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(" ");
 }
 
+function splitFullName(fullName: string): { firstName: string; middleName: string; lastName: string } {
+  const parts = fullName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return {
+      firstName: "",
+      middleName: "",
+      lastName: "",
+    };
+  }
+
+  if (parts.length === 1) {
+    return {
+      firstName: parts[0],
+      middleName: "",
+      lastName: "",
+    };
+  }
+
+  if (parts.length === 2) {
+    return {
+      firstName: parts[0],
+      middleName: "",
+      lastName: parts[1],
+    };
+  }
+
+  return {
+    firstName: parts[0],
+    middleName: parts.slice(1, -1).join(" "),
+    lastName: parts[parts.length - 1],
+  };
+}
+
 function formatAnnouncementDate(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -328,6 +370,42 @@ function isOfflineLikeError(message: string | null | undefined): boolean {
 function isAuthSessionMissingError(message: string | null | undefined): boolean {
   const normalized = (message ?? "").toLowerCase();
   return normalized.includes("auth session missing");
+}
+
+function extractPhoneLocalDigits(value: string): string {
+  const digitsOnly = value.replace(/\D/g, "");
+
+  if (!digitsOnly) {
+    return "";
+  }
+
+  if (digitsOnly.startsWith("63")) {
+    return digitsOnly.slice(2, 2 + PHONE_LOCAL_LENGTH);
+  }
+
+  if (digitsOnly.startsWith("0")) {
+    return digitsOnly.slice(1, 1 + PHONE_LOCAL_LENGTH);
+  }
+
+  return digitsOnly.slice(0, PHONE_LOCAL_LENGTH);
+}
+
+function normalizePhoneNumber(value: string): string {
+  const localDigits = extractPhoneLocalDigits(value);
+  if (!localDigits) {
+    return "";
+  }
+
+  return `${PHONE_COUNTRY_PREFIX}${localDigits}`;
+}
+
+function normalizePhoneInput(value: string): string {
+  const normalized = normalizePhoneNumber(value);
+  return normalized || PHONE_COUNTRY_PREFIX;
+}
+
+function isValidPhoneNumber(value: string): boolean {
+  return extractPhoneLocalDigits(value).length === PHONE_LOCAL_LENGTH;
 }
 
 function normalizeStatusMessage(message: string, variant: "error" | "success"): string {
@@ -527,6 +605,9 @@ export default function App() {
   const [hasMoreHistoryRecords, setHasMoreHistoryRecords] = useState(true);
   const [historyPage, setHistoryPage] = useState(0);
   const [profileState, setProfileState] = useState<ProfileState>({
+    firstName: "",
+    middleName: "",
+    lastName: "",
     fullName: "Resident",
     email: "-",
     phoneNumber: "-",
@@ -537,6 +618,8 @@ export default function App() {
   });
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [isSavingProfileName, setIsSavingProfileName] = useState(false);
   const [isEditingPhoneNumber, setIsEditingPhoneNumber] = useState(false);
   const [isSavingPhoneNumber, setIsSavingPhoneNumber] = useState(false);
   const [isEditingAddress, setIsEditingAddress] = useState(false);
@@ -576,7 +659,7 @@ export default function App() {
     middleName: "",
     lastName: "",
     email: "",
-    phoneNumber: "",
+    phoneNumber: PHONE_COUNTRY_PREFIX,
     residentStatus: "resident",
     addressPurok: "",
     password: "",
@@ -705,15 +788,23 @@ export default function App() {
 
   const resolveProfileIdentity = () => {
     const fallbackEmail = String(session?.user?.email ?? "").trim();
-    const fullName = profileState.fullName.trim() || "Resident";
+    const firstName = profileState.firstName.trim();
+    const middleName = profileState.middleName.trim();
+    const lastName = profileState.lastName.trim();
+    const fullName = buildFullName(firstName, middleName, lastName) || profileState.fullName.trim() || "Resident";
     const email = profileState.email.trim() && profileState.email.trim() !== "-" ? profileState.email.trim() : fallbackEmail;
-    const phoneNumber = profileState.phoneNumber.trim() && profileState.phoneNumber.trim() !== "-" ? profileState.phoneNumber.trim() : "";
+    const phoneNumber = normalizePhoneNumber(
+      profileState.phoneNumber.trim() && profileState.phoneNumber.trim() !== "-" ? profileState.phoneNumber.trim() : "",
+    );
     const role = profileState.role === "admin" || profileState.role === "member" || profileState.role === "user" ? profileState.role : "user";
     const residentStatus = profileState.residentStatus;
     const addressPurok = residentStatus === "resident" ? profileState.addressPurok.trim() : "";
     const avatarKey = profileState.avatarKey;
 
     return {
+      firstName,
+      middleName,
+      lastName,
       fullName,
       email,
       phoneNumber,
@@ -842,31 +933,47 @@ export default function App() {
       const row = (data ?? {}) as Record<string, unknown>;
       const metadata = ((fallbackUser?.user_metadata as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
 
-      const firstName = String(row.first_name ?? metadata.first_name ?? "").trim();
-      const middleName = String(row.middle_name ?? metadata.middle_name ?? "").trim();
-      const lastName = String(row.last_name ?? metadata.last_name ?? "").trim();
+      const rowFirstName = String(row.first_name ?? "").trim();
+      const rowMiddleName = String(row.middle_name ?? "").trim();
+      const rowLastName = String(row.last_name ?? "").trim();
+      const rowFullName = String(row.full_name ?? "").trim();
+      const metadataFirstName = String(metadata.first_name ?? "").trim();
+      const metadataMiddleName = String(metadata.middle_name ?? "").trim();
+      const metadataLastName = String(metadata.last_name ?? "").trim();
+      const metadataFullName = String(metadata.full_name ?? "").trim();
+      const firstName = rowFirstName || metadataFirstName;
+      const middleName = rowMiddleName || metadataMiddleName;
+      const lastName = rowLastName || metadataLastName;
       const fallbackName = [firstName, middleName, lastName].filter(Boolean).join(" ").trim();
 
       const roleValue = String(row.role ?? metadata.role ?? "user");
       const avatarRaw = String(metadata.profile_avatar ?? "user") as ProfileAvatarKey;
       const avatarKey = PROFILE_AVATAR_OPTIONS.some((item) => item.key === avatarRaw) ? avatarRaw : "user";
 
-      const fullName = String((row.full_name ?? metadata.full_name ?? fallbackName) || "Resident").trim();
+      const fullName = String(rowFullName || metadataFullName || fallbackName || "Resident").trim();
+      const derivedNameParts = splitFullName(fullName);
+      const resolvedFirstName = firstName || derivedNameParts.firstName;
+      const resolvedMiddleName = middleName || derivedNameParts.middleName;
+      const resolvedLastName = lastName || derivedNameParts.lastName;
       const email = String(row.email ?? fallbackUser?.email ?? "-").trim();
-      const phoneNumber = String(row.phone_number ?? metadata.phone_number ?? "-").trim();
+      const phoneNumber = normalizePhoneNumber(String(row.phone_number ?? metadata.phone_number ?? ""));
       const residentStatus = normalizeResidentStatus(row.resident_status ?? metadata.resident_status);
       const rowAddress = String(row.address_purok ?? "").trim();
       const metadataAddress = String(metadata.address_purok ?? "").trim();
       const rowResidentStatus = normalizeResidentStatus(row.resident_status);
-      const rowPhoneNumber = String(row.phone_number ?? "").trim();
+      const rowPhoneNumber = normalizePhoneNumber(String(row.phone_number ?? "").trim());
       const addressPurok = residentStatus === "resident" ? rowAddress || metadataAddress : "";
       const normalizedRole = roleValue === "admin" || roleValue === "member" || roleValue === "user" ? roleValue : "user";
       const resolvedAddress = residentStatus === "resident" ? metadataAddress || rowAddress : "";
-      const resolvedPhoneNumber = String(metadata.phone_number ?? row.phone_number ?? "").trim();
+      const resolvedPhoneNumber = normalizePhoneNumber(String(metadata.phone_number ?? row.phone_number ?? "").trim());
       const shouldSyncProfile =
         rowResidentStatus !== residentStatus ||
         (residentStatus === "resident" ? rowAddress !== resolvedAddress : rowAddress !== "") ||
-        rowPhoneNumber !== resolvedPhoneNumber;
+        rowPhoneNumber !== resolvedPhoneNumber ||
+        rowFirstName !== resolvedFirstName ||
+        rowMiddleName !== resolvedMiddleName ||
+        rowLastName !== resolvedLastName ||
+        rowFullName !== fullName;
 
       // Keep profile table in sync with auth metadata after registration confirmation.
       if (shouldSyncProfile) {
@@ -876,6 +983,9 @@ export default function App() {
           await supabase.from("profiles").upsert(
             {
               auth_user_id: authUserId,
+              first_name: resolvedFirstName,
+              middle_name: resolvedMiddleName,
+              last_name: resolvedLastName,
               full_name: fullName || "Resident",
               email: profileEmail,
               phone_number: resolvedPhoneNumber,
@@ -891,6 +1001,9 @@ export default function App() {
       }
 
       const nextProfileState: ProfileState = {
+        firstName: resolvedFirstName,
+        middleName: resolvedMiddleName,
+        lastName: resolvedLastName,
         fullName,
         email: email || "-",
         phoneNumber: phoneNumber || "-",
@@ -1807,14 +1920,19 @@ export default function App() {
     const lastName = registerForm.lastName.trim();
     const fullName = buildFullName(firstName, middleName, lastName);
     const email = registerForm.email.trim().toLowerCase();
-    const phoneNumber = registerForm.phoneNumber.trim();
+    const phoneNumber = normalizePhoneNumber(registerForm.phoneNumber.trim());
     const residentStatus = registerForm.residentStatus;
     const addressPurok = registerForm.addressPurok.trim();
     const password = registerForm.password;
     const confirmPassword = registerForm.confirmPassword;
 
-    if (!firstName || !lastName || !email || !phoneNumber || !password || !confirmPassword) {
-      setErrorMessage("Please complete all registration fields.");
+    if (!firstName || !lastName || !email || !password || !confirmPassword) {
+      setErrorMessage("Please complete all required fields.");
+      return;
+    }
+
+    if (!isValidPhoneNumber(phoneNumber)) {
+      setErrorMessage("Please enter a valid phone number in the format +639XXXXXXXXX.");
       return;
     }
 
@@ -1899,6 +2017,9 @@ export default function App() {
 
       await queueProfileWrite({
         userId: session.user.id,
+        firstName: identity.firstName,
+        middleName: identity.middleName,
+        lastName: identity.lastName,
         fullName: identity.fullName,
         email: identity.email,
         phoneNumber: identity.phoneNumber,
@@ -1908,6 +2029,10 @@ export default function App() {
         profileAvatarKey: avatarKey,
         userMetadata: {
           ...(session.user.user_metadata ?? {}),
+          first_name: identity.firstName,
+          middle_name: identity.middleName,
+          last_name: identity.lastName,
+          full_name: identity.fullName,
           profile_avatar: avatarKey,
           phone_number: identity.phoneNumber,
         },
@@ -1940,6 +2065,10 @@ export default function App() {
       const { data, error } = await supabase.auth.updateUser({
         data: {
           ...(session.user.user_metadata ?? {}),
+          first_name: identity.firstName,
+          middle_name: identity.middleName,
+          last_name: identity.lastName,
+          full_name: identity.fullName,
           profile_avatar: avatarKey,
           phone_number: identity.phoneNumber,
         },
@@ -1948,6 +2077,9 @@ export default function App() {
       const { error: profileAvatarError } = await supabase.from("profiles").upsert(
         {
           auth_user_id: session.user.id,
+          first_name: identity.firstName,
+          middle_name: identity.middleName,
+          last_name: identity.lastName,
           full_name: identity.fullName,
           email: identity.email,
           phone_number: identity.phoneNumber,
@@ -1991,6 +2123,140 @@ export default function App() {
     }
   };
 
+  const handleSaveProfileName = async () => {
+    if (!session || isSavingProfileName) {
+      return;
+    }
+
+    const normalizedFirstName = profileState.firstName.trim();
+    const normalizedMiddleName = profileState.middleName.trim();
+    const normalizedLastName = profileState.lastName.trim();
+
+    if (!normalizedFirstName || !normalizedLastName) {
+      setErrorMessage("First name and last name are required.");
+      return;
+    }
+
+    const normalizedFullName = buildFullName(normalizedFirstName, normalizedMiddleName, normalizedLastName);
+
+    const queueProfileName = async () => {
+      const identity = resolveProfileIdentity();
+      const nextProfileState: ProfileState = {
+        ...profileState,
+        firstName: normalizedFirstName,
+        middleName: normalizedMiddleName,
+        lastName: normalizedLastName,
+        fullName: normalizedFullName,
+      };
+
+      await queueProfileWrite({
+        userId: session.user.id,
+        firstName: normalizedFirstName,
+        middleName: normalizedMiddleName,
+        lastName: normalizedLastName,
+        fullName: normalizedFullName,
+        email: identity.email,
+        phoneNumber: identity.phoneNumber,
+        role: identity.role,
+        residentStatus: identity.residentStatus,
+        addressPurok: identity.addressPurok,
+        profileAvatarKey: identity.avatarKey,
+        userMetadata: {
+          ...(session.user.user_metadata ?? {}),
+          first_name: normalizedFirstName,
+          middle_name: normalizedMiddleName,
+          last_name: normalizedLastName,
+          full_name: normalizedFullName,
+          phone_number: identity.phoneNumber,
+        },
+      });
+
+      await writeCache(CACHE_KEYS.profile(session.user.id), {
+        role: nextProfileState.role,
+        profileState: nextProfileState,
+      });
+
+      setProfileState(nextProfileState);
+      setProfileSyncState({ source: "cache", cachedAt: Date.now() });
+      setIsEditingName(false);
+      clearAlerts();
+      setSuccessMessage("Name saved locally. It will sync when you're back online.");
+      setIsSavingProfileName(false);
+    };
+
+    if (!isOnline) {
+      await queueProfileName();
+      return;
+    }
+
+    setIsSavingProfileName(true);
+
+    try {
+      const identity = resolveProfileIdentity();
+
+      const { data, error } = await supabase.auth.updateUser({
+        data: {
+          ...(session.user.user_metadata ?? {}),
+          first_name: normalizedFirstName,
+          middle_name: normalizedMiddleName,
+          last_name: normalizedLastName,
+          full_name: normalizedFullName,
+          phone_number: identity.phoneNumber,
+          resident_status: identity.residentStatus,
+          address_purok: identity.addressPurok,
+          profile_avatar: identity.avatarKey,
+          role: identity.role,
+        },
+      });
+
+      const { error: profileError } = await supabase.from("profiles").upsert(
+        {
+          auth_user_id: session.user.id,
+          first_name: normalizedFirstName,
+          middle_name: normalizedMiddleName,
+          last_name: normalizedLastName,
+          full_name: normalizedFullName,
+          email: identity.email,
+          phone_number: identity.phoneNumber,
+          role: identity.role,
+          resident_status: identity.residentStatus,
+          address_purok: identity.addressPurok,
+          profile_avatar: identity.avatarKey,
+        },
+        {
+          onConflict: "auth_user_id",
+        },
+      );
+
+      if (error || profileError) {
+        const message = error?.message ?? profileError?.message ?? "Unable to update name.";
+        if (isOfflineLikeError(message)) {
+          await queueProfileName();
+          return;
+        }
+
+        setIsSavingProfileName(false);
+        setErrorMessage(message);
+        return;
+      }
+
+      setIsSavingProfileName(false);
+      setIsEditingName(false);
+      clearAlerts();
+      setSuccessMessage("Name updated.");
+      await loadProfileData(session.user.id, data.user ?? session.user, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update name.";
+      if (isOfflineLikeError(message)) {
+        await queueProfileName();
+        return;
+      }
+
+      setIsSavingProfileName(false);
+      setErrorMessage(message);
+    }
+  };
+
   const handleSaveAddressPurok = async () => {
     if (!session || isSavingAddress) {
       return;
@@ -2007,6 +2273,9 @@ export default function App() {
 
       await queueProfileWrite({
         userId: session.user.id,
+        firstName: identity.firstName,
+        middleName: identity.middleName,
+        lastName: identity.lastName,
         fullName: identity.fullName,
         email: identity.email,
         phoneNumber: identity.phoneNumber,
@@ -2016,6 +2285,10 @@ export default function App() {
         profileAvatarKey: identity.avatarKey,
         userMetadata: {
           ...(session.user.user_metadata ?? {}),
+          first_name: identity.firstName,
+          middle_name: identity.middleName,
+          last_name: identity.lastName,
+          full_name: identity.fullName,
           phone_number: identity.phoneNumber,
           resident_status: identity.residentStatus,
           address_purok: normalizedAddress,
@@ -2054,6 +2327,9 @@ export default function App() {
       const { error: profileError } = await supabase.from("profiles").upsert(
         {
           auth_user_id: session.user.id,
+          first_name: identity.firstName,
+          middle_name: identity.middleName,
+          last_name: identity.lastName,
           full_name: identity.fullName,
           email: identity.email,
           phone_number: identity.phoneNumber,
@@ -2085,6 +2361,10 @@ export default function App() {
         const { data, error } = await supabase.auth.updateUser({
           data: {
             ...(session.user.user_metadata ?? {}),
+            first_name: identity.firstName,
+            middle_name: identity.middleName,
+            last_name: identity.lastName,
+            full_name: identity.fullName,
             phone_number: identity.phoneNumber,
             resident_status: identity.residentStatus,
             address_purok: normalizedAddress,
@@ -2130,10 +2410,10 @@ export default function App() {
       return;
     }
 
-    const normalizedPhoneNumber = profileState.phoneNumber.trim();
+    const normalizedPhoneNumber = normalizePhoneNumber(profileState.phoneNumber.trim());
 
-    if (!normalizedPhoneNumber) {
-      setErrorMessage("Phone number is required.");
+    if (!isValidPhoneNumber(normalizedPhoneNumber)) {
+      setErrorMessage("Please enter a valid phone number in the format +639XXXXXXXXX.");
       return;
     }
 
@@ -2142,6 +2422,9 @@ export default function App() {
 
       await queueProfileWrite({
         userId: session.user.id,
+        firstName: identity.firstName,
+        middleName: identity.middleName,
+        lastName: identity.lastName,
         fullName: identity.fullName,
         email: identity.email,
         phoneNumber: normalizedPhoneNumber,
@@ -2151,6 +2434,10 @@ export default function App() {
         profileAvatarKey: identity.avatarKey,
         userMetadata: {
           ...(session.user.user_metadata ?? {}),
+          first_name: identity.firstName,
+          middle_name: identity.middleName,
+          last_name: identity.lastName,
+          full_name: identity.fullName,
           phone_number: normalizedPhoneNumber,
         },
       });
@@ -2187,6 +2474,9 @@ export default function App() {
       const { error: profileError } = await supabase.from("profiles").upsert(
         {
           auth_user_id: session.user.id,
+          first_name: identity.firstName,
+          middle_name: identity.middleName,
+          last_name: identity.lastName,
           full_name: identity.fullName,
           email: identity.email,
           phone_number: normalizedPhoneNumber,
@@ -2220,6 +2510,10 @@ export default function App() {
         const { data, error } = await supabase.auth.updateUser({
           data: {
             ...(session.user.user_metadata ?? {}),
+            first_name: identity.firstName,
+            middle_name: identity.middleName,
+            last_name: identity.lastName,
+            full_name: identity.fullName,
             phone_number: normalizedPhoneNumber,
           },
         });
@@ -2445,6 +2739,14 @@ export default function App() {
     );
   };
 
+  const isProfileCustomizationOpen = isAvatarPickerOpen || isEditingName;
+
+  const toggleProfileCustomization = () => {
+    const nextOpenState = !isProfileCustomizationOpen;
+    setIsAvatarPickerOpen(nextOpenState);
+    setIsEditingName(nextOpenState);
+  };
+
   const renderDashboardBody = () => {
     if (activeTab === "home") {
       return renderHomeTab();
@@ -2495,7 +2797,7 @@ export default function App() {
         selectedAvatar={selectedAvatar}
         avatarOptions={PROFILE_AVATAR_OPTIONS}
         isAvatarPickerOpen={isAvatarPickerOpen}
-        onToggleAvatarPicker={() => setIsAvatarPickerOpen((prev) => !prev)}
+        onToggleAvatarPicker={toggleProfileCustomization}
         onSelectAvatar={(avatarKey) => void handleSelectProfileAvatar(avatarKey)}
         isSavingAvatar={isSavingAvatar}
         isPasswordEditorOpen={isPasswordEditorOpen}
@@ -2509,12 +2811,47 @@ export default function App() {
         onToggleShowNewPassword={() => setShowNewPassword((prev) => !prev)}
         showConfirmPassword={showConfirmPassword}
         onToggleShowConfirmPassword={() => setShowConfirmPassword((prev) => !prev)}
+        isEditingName={isEditingName}
+        onChangeFirstName={(value) =>
+          setProfileState((prev) => ({
+            ...prev,
+            firstName: value,
+          }))
+        }
+        onChangeMiddleName={(value) =>
+          setProfileState((prev) => ({
+            ...prev,
+            middleName: value,
+          }))
+        }
+        onChangeLastName={(value) =>
+          setProfileState((prev) => ({
+            ...prev,
+            lastName: value,
+          }))
+        }
+        onSaveProfileName={() => void handleSaveProfileName()}
+        isSavingProfileName={isSavingProfileName}
         isEditingPhoneNumber={isEditingPhoneNumber}
-        onToggleEditPhoneNumber={() => setIsEditingPhoneNumber((prev) => !prev)}
+        onToggleEditPhoneNumber={() => {
+          if (isEditingPhoneNumber) {
+            void handleSavePhoneNumber();
+            return;
+          }
+
+          setIsEditingPhoneNumber(true);
+          setProfileState((current) => ({
+            ...current,
+            phoneNumber:
+              current.phoneNumber.trim() && current.phoneNumber.trim() !== "-"
+                ? normalizePhoneInput(current.phoneNumber)
+                : PHONE_COUNTRY_PREFIX,
+          }));
+        }}
         onChangePhoneNumber={(value) =>
           setProfileState((prev) => ({
             ...prev,
-            phoneNumber: value,
+            phoneNumber: normalizePhoneInput(value),
           }))
         }
         onSavePhoneNumber={() => void handleSavePhoneNumber()}
@@ -3263,12 +3600,12 @@ export default function App() {
                   placeholderTextColor="#9ca3af"
                 />
 
-                <Text style={styles.inputLabelRegister}>Middle Name</Text>
+                <Text style={styles.inputLabelRegister}>Middle Name (Optional)</Text>
                 <TextInput
                   value={registerForm.middleName}
                   onChangeText={(value) => setRegisterForm((prev) => ({ ...prev, middleName: value }))}
                   style={styles.input}
-                  placeholder="Santos"
+                  placeholder="S"
                   placeholderTextColor="#9ca3af"
                 />
 
@@ -3294,14 +3631,22 @@ export default function App() {
                 />
 
                 <Text style={styles.inputLabelRegister}>Phone Number</Text>
-                <TextInput
-                  value={registerForm.phoneNumber}
-                  onChangeText={(value) => setRegisterForm((prev) => ({ ...prev, phoneNumber: value }))}
-                  style={styles.input}
-                  placeholder="0912 345 6789"
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="phone-pad"
-                />
+                <View style={styles.phoneInputRow}>
+                  <Text style={styles.phonePrefixText}>{PHONE_COUNTRY_PREFIX}</Text>
+                  <TextInput
+                    value={extractPhoneLocalDigits(registerForm.phoneNumber)}
+                    onChangeText={(value) =>
+                      setRegisterForm((prev) => ({
+                        ...prev,
+                        phoneNumber: normalizePhoneInput(`${PHONE_COUNTRY_PREFIX}${value}`),
+                      }))
+                    }
+                    style={styles.phoneLocalInput}
+                    placeholder="9123456789"
+                    placeholderTextColor="#9ca3af"
+                    keyboardType="phone-pad"
+                  />
+                </View>
 
                 <Text style={styles.inputLabelRegister}>Resident Type</Text>
                 <View style={styles.registerResidentRow}>
@@ -4338,6 +4683,36 @@ const styles = StyleSheet.create({
     minHeight: 54,
     fontSize: 15,
     color: "#111827",
+  },
+  phoneInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#f3f4f6",
+    borderRadius: 18,
+    minHeight: 54,
+    overflow: "hidden",
+  },
+  phonePrefixText: {
+    color: "#4b5563",
+    fontSize: 15,
+    fontWeight: "700",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRightWidth: 1,
+    borderRightColor: "#d1d5db",
+    backgroundColor: "#e5e7eb",
+    alignSelf: "stretch",
+    textAlignVertical: "center",
+  },
+  phoneLocalInput: {
+    flex: 1,
+    color: "#111827",
+    fontSize: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    minHeight: 54,
   },
   registerResidentRow: {
     flexDirection: "row",

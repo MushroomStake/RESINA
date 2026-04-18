@@ -25,6 +25,7 @@ type AddUserForm = {
   firstName: string;
   middleName: string;
   lastName: string;
+  phoneNumber: string;
   email: string;
   confirmEmail: string;
   role: Role;
@@ -35,12 +36,51 @@ type UpdateUserForm = {
   firstName: string;
   middleName: string;
   lastName: string;
+  phoneNumber: string;
   email: string;
   role: Role;
 };
 
 function buildFullName(first: string, middle: string, last: string): string {
   return [first.trim(), middle.trim(), last.trim()].filter(Boolean).join(" ");
+}
+
+const PHONE_COUNTRY_PREFIX = "+63";
+const PHONE_LOCAL_LENGTH = 10;
+
+function extractPhoneLocalDigits(value: string): string {
+  const digitsOnly = value.replace(/\D/g, "");
+
+  if (!digitsOnly) {
+    return "";
+  }
+
+  if (digitsOnly.startsWith("63")) {
+    return digitsOnly.slice(2, 2 + PHONE_LOCAL_LENGTH);
+  }
+
+  if (digitsOnly.startsWith("0")) {
+    return digitsOnly.slice(1, 1 + PHONE_LOCAL_LENGTH);
+  }
+
+  return digitsOnly.slice(0, PHONE_LOCAL_LENGTH);
+}
+
+function normalizePhoneNumber(value: string): string {
+  const localDigits = extractPhoneLocalDigits(value);
+  if (!localDigits) {
+    return "";
+  }
+
+  return `${PHONE_COUNTRY_PREFIX}${localDigits}`;
+}
+
+function normalizePhoneLocalInput(value: string): string {
+  return normalizePhoneNumber(`${PHONE_COUNTRY_PREFIX}${value}`);
+}
+
+function isValidPhoneNumber(value: string): boolean {
+  return extractPhoneLocalDigits(value).length === PHONE_LOCAL_LENGTH;
 }
 
 const ROLE_GUIDE: Record<Role, string[]> = {
@@ -115,7 +155,7 @@ export default function AdminProfilePage() {
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState(PHONE_COUNTRY_PREFIX);
   const [position, setPosition] = useState<Role>("member");
   const [password, setPassword] = useState("");
 
@@ -125,6 +165,7 @@ export default function AdminProfilePage() {
     firstName: "",
     middleName: "",
     lastName: "",
+    phoneNumber: "",
     email: "",
     confirmEmail: "",
     role: "member",
@@ -135,6 +176,7 @@ export default function AdminProfilePage() {
     firstName: "",
     middleName: "",
     lastName: "",
+    phoneNumber: "",
     email: "",
     role: "member",
   });
@@ -159,7 +201,7 @@ export default function AdminProfilePage() {
     setStatusVisible(true);
   };
 
-  const loadProfiles = async (currentUserId: string, currentEmail: string, currentPhoneNumber: string) => {
+  const loadProfiles = async (currentUserId: string, currentEmail: string) => {
     const { data: rows, error } = await supabase
       .from("profiles")
       .select("id, auth_user_id, first_name, middle_name, last_name, full_name, email, phone_number, role, created_at")
@@ -207,7 +249,7 @@ export default function AdminProfilePage() {
         setFirstName(reloadedMine.first_name ?? "");
         setMiddleName(reloadedMine.middle_name ?? "");
         setLastName(reloadedMine.last_name ?? "");
-        setPhoneNumber((reloadedMine.phone_number ?? "").trim() || currentPhoneNumber);
+        setPhoneNumber(normalizePhoneNumber((reloadedMine.phone_number ?? "").trim()) || PHONE_COUNTRY_PREFIX);
         setPosition(reloadedMine.role);
         setMyRole(reloadedMine.role);
       }
@@ -219,7 +261,7 @@ export default function AdminProfilePage() {
     setFirstName(mine.first_name ?? "");
     setMiddleName(mine.middle_name ?? "");
     setLastName(mine.last_name ?? "");
-    setPhoneNumber((mine.phone_number ?? "").trim() || currentPhoneNumber);
+    setPhoneNumber(normalizePhoneNumber((mine.phone_number ?? "").trim()) || PHONE_COUNTRY_PREFIX);
     setPosition(mine.role);
     setMyRole(mine.role);
   };
@@ -236,11 +278,9 @@ export default function AdminProfilePage() {
 
       const currentUserId = user.id;
       const currentEmail = user.email ?? "";
-      const currentPhoneNumber = String(user.user_metadata?.phone_number ?? "").trim();
-
       setSessionUserId(currentUserId);
       setSessionEmail(currentEmail);
-      await loadProfiles(currentUserId, currentEmail, currentPhoneNumber);
+      await loadProfiles(currentUserId, currentEmail);
       setIsChecking(false);
     };
 
@@ -249,6 +289,12 @@ export default function AdminProfilePage() {
 
   const handleSaveProfile = async () => {
     if (!sessionUserId) {
+      return;
+    }
+
+    const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
+    if (!isValidPhoneNumber(normalizedPhoneNumber)) {
+      showStatus("error", "Please enter a valid 10-digit phone number after +63.");
       return;
     }
 
@@ -264,7 +310,7 @@ export default function AdminProfilePage() {
           middle_name: middleName.trim(),
           last_name: lastName.trim(),
           full_name: fullName,
-          phone_number: phoneNumber.trim(),
+          phone_number: normalizedPhoneNumber,
           role: position,
         })
         .eq("auth_user_id", sessionUserId);
@@ -279,7 +325,7 @@ export default function AdminProfilePage() {
       const { error: metadataError } = await supabase.auth.updateUser({
         data: {
           ...currentMetadata,
-          phone_number: phoneNumber.trim(),
+          phone_number: normalizedPhoneNumber,
         },
       });
 
@@ -300,9 +346,9 @@ export default function AdminProfilePage() {
       }
 
       const { data: refreshedAuthUser } = await supabase.auth.getUser();
-      const refreshedPhoneNumber = String(refreshedAuthUser.user?.user_metadata?.phone_number ?? "").trim();
+      const refreshedPhoneNumber = normalizePhoneNumber(String(refreshedAuthUser.user?.user_metadata?.phone_number ?? "").trim());
 
-      await loadProfiles(sessionUserId, sessionEmail, refreshedPhoneNumber);
+      await loadProfiles(sessionUserId, sessionEmail);
       showStatus("success", "Profile updated successfully.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save profile.";
@@ -399,7 +445,7 @@ export default function AdminProfilePage() {
         throw new Error(error ?? "Failed to delete user.");
       }
 
-      await loadProfiles(sessionUserId, sessionEmail, phoneNumber.trim());
+      await loadProfiles(sessionUserId, sessionEmail);
       setDeleteTarget(null);
       showStatus("success", "User removed successfully.");
     } catch (error) {
@@ -419,6 +465,7 @@ export default function AdminProfilePage() {
       firstName: row.first_name ?? "",
       middleName: row.middle_name ?? "",
       lastName: row.last_name ?? "",
+      phoneNumber: normalizePhoneNumber((row.phone_number ?? "").trim()),
       email: row.email,
       role: row.role,
     });
@@ -431,8 +478,14 @@ export default function AdminProfilePage() {
     }
 
     const fullName = buildFullName(updateUserForm.firstName, updateUserForm.middleName, updateUserForm.lastName);
+    const normalizedPhoneNumber = normalizePhoneNumber(updateUserForm.phoneNumber);
     if (!fullName || !updateUserForm.email.trim()) {
       showStatus("error", "First name, last name, and email are required.");
+      return;
+    }
+
+    if (!isValidPhoneNumber(normalizedPhoneNumber)) {
+      showStatus("error", "Please enter a valid phone number in the format +639XXXXXXXXX.");
       return;
     }
 
@@ -447,6 +500,7 @@ export default function AdminProfilePage() {
           firstName: updateUserForm.firstName.trim(),
           middleName: updateUserForm.middleName.trim(),
           lastName: updateUserForm.lastName.trim(),
+          phoneNumber: normalizedPhoneNumber,
           email: updateUserForm.email.trim().toLowerCase(),
           role: updateUserForm.role,
         }),
@@ -457,7 +511,7 @@ export default function AdminProfilePage() {
         throw new Error(error ?? "Failed to update user.");
       }
 
-      await loadProfiles(sessionUserId, sessionEmail, phoneNumber.trim());
+      await loadProfiles(sessionUserId, sessionEmail);
       setIsUpdateUserModalOpen(false);
       setUpdateTarget(null);
       showStatus("success", "User details updated.");
@@ -474,6 +528,7 @@ export default function AdminProfilePage() {
     }
 
     const fullName = buildFullName(addUserForm.firstName, addUserForm.middleName, addUserForm.lastName);
+    const normalizedPhoneNumber = normalizePhoneNumber(addUserForm.phoneNumber);
 
     if (!fullName || !addUserForm.email.trim()) {
       showStatus("error", "First name, last name, and email are required.");
@@ -495,6 +550,11 @@ export default function AdminProfilePage() {
       return;
     }
 
+    if (!isValidPhoneNumber(normalizedPhoneNumber)) {
+      showStatus("error", "Please enter a valid phone number in the format +639XXXXXXXXX.");
+      return;
+    }
+
     setIsAddingUser(true);
 
     try {
@@ -506,6 +566,7 @@ export default function AdminProfilePage() {
           firstName: addUserForm.firstName.trim(),
           middleName: addUserForm.middleName.trim(),
           lastName: addUserForm.lastName.trim(),
+          phoneNumber: normalizedPhoneNumber,
           email: addUserForm.email.trim().toLowerCase(),
           confirmEmail: addUserForm.confirmEmail.trim().toLowerCase(),
           role: addUserForm.role,
@@ -523,12 +584,13 @@ export default function AdminProfilePage() {
         firstName: "",
         middleName: "",
         lastName: "",
+        phoneNumber: "",
         email: "",
         confirmEmail: "",
         role: "member",
         password: "admin123",
       });
-      await loadProfiles(sessionUserId, sessionEmail, phoneNumber.trim());
+      await loadProfiles(sessionUserId, sessionEmail);
       showStatus("success", "Invite sent successfully.");
     } catch (error) {
       showStatus("error", error instanceof Error ? error.message : "Unable to send invite.");
@@ -595,12 +657,19 @@ export default function AdminProfilePage() {
 
               <label className="block">
                 <span className="mb-1 block text-sm font-medium">Phone Number</span>
-                <input
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="0912 345 6789"
-                  className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm"
-                />
+                <div className="flex w-full overflow-hidden rounded-lg border border-[#d1d5db] bg-white">
+                  <span className="flex items-center border-r border-[#e5e7eb] bg-[#f9fafb] px-3 text-sm font-semibold text-[#374151]">
+                    {PHONE_COUNTRY_PREFIX}
+                  </span>
+                  <input
+                    value={extractPhoneLocalDigits(phoneNumber)}
+                    onChange={(e) => setPhoneNumber(normalizePhoneLocalInput(e.target.value))}
+                    placeholder="10-digit local number"
+                    className="w-full px-3 py-2 text-sm outline-none"
+                    inputMode="numeric"
+                  />
+                </div>
+                <span className="mt-1 block text-xs text-[#9ca3af]">Enter the 10 digits after +63 only.</span>
               </label>
 
               <label className="block">
@@ -750,7 +819,7 @@ export default function AdminProfilePage() {
                 <input
                   value={addUserForm.middleName}
                   onChange={(e) => setAddUserForm((prev) => ({ ...prev, middleName: e.target.value }))}
-                  placeholder="e.g. C."
+                  placeholder="e.g. S"
                   className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm"
                 />
               </label>
@@ -764,6 +833,27 @@ export default function AdminProfilePage() {
                   <option value="member">Member</option>
                   <option value="admin">Admin</option>
                 </select>
+              </label>
+
+              <label className="md:col-span-2">
+                <span className="mb-1 block text-sm font-medium">Phone Number</span>
+                <div className="flex w-full overflow-hidden rounded-lg border border-[#d1d5db] bg-white">
+                  <span className="flex items-center border-r border-[#e5e7eb] bg-[#f9fafb] px-3 text-sm font-semibold text-[#374151]">
+                    {PHONE_COUNTRY_PREFIX}
+                  </span>
+                  <input
+                    value={extractPhoneLocalDigits(addUserForm.phoneNumber)}
+                    onChange={(e) =>
+                      setAddUserForm((prev) => ({
+                        ...prev,
+                        phoneNumber: normalizePhoneLocalInput(e.target.value),
+                      }))
+                    }
+                    placeholder="9123456789"
+                    className="w-full px-3 py-2 text-sm outline-none"
+                    inputMode="numeric"
+                  />
+                </div>
               </label>
 
               <label className="md:col-span-2">
@@ -868,6 +958,27 @@ export default function AdminProfilePage() {
                     Member
                   </option>
                 </select>
+              </label>
+
+              <label className="md:col-span-2">
+                <span className="mb-1 block text-sm font-medium">Phone Number</span>
+                <div className="flex w-full overflow-hidden rounded-lg border border-[#d1d5db] bg-white">
+                  <span className="flex items-center border-r border-[#e5e7eb] bg-[#f9fafb] px-3 text-sm font-semibold text-[#374151]">
+                    {PHONE_COUNTRY_PREFIX}
+                  </span>
+                  <input
+                    value={extractPhoneLocalDigits(updateUserForm.phoneNumber)}
+                    onChange={(e) =>
+                      setUpdateUserForm((prev) => ({
+                        ...prev,
+                        phoneNumber: normalizePhoneLocalInput(e.target.value),
+                      }))
+                    }
+                    placeholder="9123456789"
+                    className="w-full px-3 py-2 text-sm outline-none"
+                    inputMode="numeric"
+                  />
+                </div>
               </label>
 
               <label className="md:col-span-2">

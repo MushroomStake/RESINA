@@ -37,7 +37,7 @@ const VARIANT_CONFIG: Record<StatusToastVariant, {
     icon: "close",
     iconColor: "#e56f75",
     iconBorder: "#e56f75",
-    title: "Unauthorized User",
+    title: "Validation Error",
     titleColor: "#4b5563",
     text: "#334155",
     buttonBg: "#6b5fd6",

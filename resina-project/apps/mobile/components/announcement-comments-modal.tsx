@@ -6,6 +6,7 @@ import {
   Platform,
   type ImageSourcePropType,
   Modal,
+  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -190,7 +191,7 @@ export function AnnouncementCommentsModal({
   const [editingCommentInput, setEditingCommentInput] = useState("");
   const [isSavingCommentAction, setIsSavingCommentAction] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const keyboardOffset = Platform.OS === "ios" ? keyboardHeight : 0;
+  const keyboardOffset = keyboardHeight;
   const composerInset = replyingToCommentName ? 150 : 118;
   const modalMaxHeight = Math.max(
     300,
@@ -388,8 +389,8 @@ export function AnnouncementCommentsModal({
       handleHide,
     );
 
-    // iOS can resize keyboard frame (emoji/suggested bars); keep the input aligned.
-    const frameSub = Platform.OS === "ios" ? Keyboard.addListener("keyboardWillChangeFrame", handleShow) : null;
+    // Keep the composer aligned when the keyboard frame changes on either platform.
+    const frameSub = Keyboard.addListener("keyboardDidShow", handleShow);
 
     return () => {
       showSub.remove();
@@ -804,94 +805,98 @@ export function AnnouncementCommentsModal({
   return (
     <>
       <Modal visible={visible} transparent animationType="slide" onRequestClose={handleModalClose}>
-      <View style={[styles.commentsModalOverlay, { paddingBottom: 14 + keyboardOffset }]}> 
-        <View style={[styles.commentsModalCard, { maxHeight: modalMaxHeight }]}> 
-          <View style={styles.commentsModalHeader}>
-            <Text style={styles.commentsModalTitle}>Comments</Text>
-            <Pressable style={styles.commentsCloseBtn} onPress={handleModalClose}>
-              <Text style={styles.commentsCloseText}>Close</Text>
-            </Pressable>
-          </View>
-
-          {announcement ? <Text style={styles.commentsAnnouncementTitle}>{announcement.title}</Text> : null}
-
-          <ScrollView
-            style={styles.commentsList}
-            contentContainerStyle={[styles.commentsListContent, { paddingBottom: composerInset + 20 }]}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.commentsSummaryCard}>
-              <Text style={styles.commentsSummaryText}>{commentsTotalCount} comment{commentsTotalCount === 1 ? "" : "s"}</Text>
-              <Text style={styles.commentsSummaryText}>{commentsHasMore ? "More comments available" : "All comments loaded"}</Text>
+        <KeyboardAvoidingView
+          style={styles.commentsModalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 56 : 0}
+        >
+          <View style={[styles.commentsModalCard, { maxHeight: modalMaxHeight, paddingBottom: 14 + keyboardOffset }]}> 
+            <View style={styles.commentsModalHeader}>
+              <Text style={styles.commentsModalTitle}>Comments</Text>
+              <Pressable style={styles.commentsCloseBtn} onPress={handleModalClose}>
+                <Text style={styles.commentsCloseText}>Close</Text>
+              </Pressable>
             </View>
 
-            {modalError ? <Text style={styles.commentsErrorText}>{modalError}</Text> : null}
-            {isCommentsLoading ? <Text style={styles.loaderText}>Loading comments...</Text> : null}
+            {announcement ? <Text style={styles.commentsAnnouncementTitle}>{announcement.title}</Text> : null}
 
-            {!isCommentsLoading && announcementComments.length === 0 ? (
-              <Text style={styles.placeholderText}>No comments yet.</Text>
-            ) : null}
+            <ScrollView
+              style={styles.commentsList}
+              contentContainerStyle={[styles.commentsListContent, { paddingBottom: composerInset + 20 }]}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.commentsSummaryCard}>
+                <Text style={styles.commentsSummaryText}>{commentsTotalCount} comment{commentsTotalCount === 1 ? "" : "s"}</Text>
+                <Text style={styles.commentsSummaryText}>{commentsHasMore ? "More comments available" : "All comments loaded"}</Text>
+              </View>
 
-            {!isCommentsLoading ? renderCommentThread(null) : null}
+              {modalError ? <Text style={styles.commentsErrorText}>{modalError}</Text> : null}
+              {isCommentsLoading ? <Text style={styles.loaderText}>Loading comments...</Text> : null}
 
-            {!isCommentsLoading && !modalError && commentsHasMore ? (
-              <Pressable
-                style={[styles.loadMoreBtn, isLoadingMoreComments && styles.buttonDisabled]}
-                onPress={() => void handleLoadMoreComments()}
-                disabled={isLoadingMoreComments}
-              >
-                <Text style={styles.loadMoreBtnText}>{isLoadingMoreComments ? "Loading more..." : "Load more comments"}</Text>
-              </Pressable>
-            ) : null}
-          </ScrollView>
+              {!isCommentsLoading && announcementComments.length === 0 ? (
+                <Text style={styles.placeholderText}>No comments yet.</Text>
+              ) : null}
 
-          <View style={styles.commentComposerWrap}>
-            {replyingToCommentName ? (
-              <View style={styles.replyingTagRow}>
-                <Text style={styles.replyingTagText}>Replying to {replyingToCommentName}</Text>
+              {!isCommentsLoading ? renderCommentThread(null) : null}
+
+              {!isCommentsLoading && !modalError && commentsHasMore ? (
                 <Pressable
-                  onPress={() => {
-                    setReplyingToCommentName(null);
-                    setReplyingToCommentId(null);
-                  }}
+                  style={[styles.loadMoreBtn, isLoadingMoreComments && styles.buttonDisabled]}
+                  onPress={() => void handleLoadMoreComments()}
+                  disabled={isLoadingMoreComments}
                 >
-                  <Text style={styles.replyingTagClear}>Clear</Text>
+                  <Text style={styles.loadMoreBtnText}>{isLoadingMoreComments ? "Loading more..." : "Load more comments"}</Text>
+                </Pressable>
+              ) : null}
+            </ScrollView>
+
+            <View style={styles.commentComposerWrap}>
+              {replyingToCommentName ? (
+                <View style={styles.replyingTagRow}>
+                  <Text style={styles.replyingTagText}>Replying to {replyingToCommentName}</Text>
+                  <Pressable
+                    onPress={() => {
+                      setReplyingToCommentName(null);
+                      setReplyingToCommentId(null);
+                    }}
+                  >
+                    <Text style={styles.replyingTagClear}>Clear</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
+              <View style={styles.commentInputRow}>
+                <Image source={currentUserAvatarSource} style={styles.inputAvatarImage} resizeMode="cover" />
+                <TextInput
+                  value={commentInput}
+                  onChangeText={setCommentInput}
+                  onBlur={() => {
+                    // Some Android keyboards skip hide events; force reset as fallback.
+                    setTimeout(() => setKeyboardHeight(0), 120);
+                  }}
+                  multiline
+                  numberOfLines={3}
+                  scrollEnabled
+                  blurOnSubmit={false}
+                  style={styles.commentInput}
+                  placeholder="Write a comment..."
+                  placeholderTextColor="#9ca3af"
+                />
+                <Pressable
+                  style={[styles.commentSendBtn, isPostingComment && styles.buttonDisabled]}
+                  onPress={() => void handlePostComment()}
+                  disabled={isPostingComment}
+                >
+                  {isPostingComment ? (
+                    <Text style={styles.commentSendText}>...</Text>
+                  ) : (
+                    <Ionicons name="paper-plane-outline" size={24} color="#9ca3af" />
+                  )}
                 </Pressable>
               </View>
-            ) : null}
-
-            <View style={styles.commentInputRow}>
-              <Image source={currentUserAvatarSource} style={styles.inputAvatarImage} resizeMode="cover" />
-              <TextInput
-                value={commentInput}
-                onChangeText={setCommentInput}
-                onBlur={() => {
-                  // Some Android keyboards skip hide events; force reset as fallback.
-                  setTimeout(() => setKeyboardHeight(0), 120);
-                }}
-                multiline
-                numberOfLines={3}
-                scrollEnabled
-                blurOnSubmit={false}
-                style={styles.commentInput}
-                placeholder="Write a comment..."
-                placeholderTextColor="#9ca3af"
-              />
-              <Pressable
-                style={[styles.commentSendBtn, isPostingComment && styles.buttonDisabled]}
-                onPress={() => void handlePostComment()}
-                disabled={isPostingComment}
-              >
-                {isPostingComment ? (
-                  <Text style={styles.commentSendText}>...</Text>
-                ) : (
-                  <Ionicons name="paper-plane-outline" size={24} color="#9ca3af" />
-                )}
-              </Pressable>
             </View>
           </View>
-        </View>
-      </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal

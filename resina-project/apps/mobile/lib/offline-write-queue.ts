@@ -13,6 +13,9 @@ export type OfflineWriteQueueItem =
   retryCount?: number;
       payload: {
         userId: string;
+        firstName?: string;
+        middleName?: string;
+        lastName?: string;
         fullName: string;
         email: string;
         phoneNumber: string;
@@ -45,6 +48,31 @@ type OfflineQueueSummary = {
 
 function buildQueueId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function splitFullName(fullName: string): { firstName: string; middleName: string; lastName: string } {
+  const parts = fullName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return { firstName: "", middleName: "", lastName: "" };
+  }
+
+  if (parts.length === 1) {
+    return { firstName: parts[0], middleName: "", lastName: "" };
+  }
+
+  if (parts.length === 2) {
+    return { firstName: parts[0], middleName: "", lastName: parts[1] };
+  }
+
+  return {
+    firstName: parts[0],
+    middleName: parts.slice(1, -1).join(" "),
+    lastName: parts[parts.length - 1],
+  };
 }
 
 async function readQueue(): Promise<OfflineWriteQueueItem[]> {
@@ -122,10 +150,17 @@ export async function flushOfflineWriteQueue(): Promise<OfflineQueueSummary> {
       if (entry.kind === "profile-upsert") {
         const { payload } = entry;
         const metadata = payload.userMetadata;
+        const fallbackNameParts = splitFullName(payload.fullName);
+        const firstName = String(payload.firstName ?? fallbackNameParts.firstName).trim();
+        const middleName = String(payload.middleName ?? fallbackNameParts.middleName).trim();
+        const lastName = String(payload.lastName ?? fallbackNameParts.lastName).trim();
 
         const { error: updateError } = await supabase.auth.updateUser({
           data: {
             ...metadata,
+            first_name: firstName,
+            middle_name: middleName,
+            last_name: lastName,
             full_name: payload.fullName,
             phone_number: payload.phoneNumber,
             role: payload.role,
@@ -142,6 +177,9 @@ export async function flushOfflineWriteQueue(): Promise<OfflineQueueSummary> {
         const { error: profileError } = await supabase.from("profiles").upsert(
           {
             auth_user_id: payload.userId,
+            first_name: firstName,
+            middle_name: middleName,
+            last_name: lastName,
             full_name: payload.fullName,
             email: payload.email,
             phone_number: payload.phoneNumber,

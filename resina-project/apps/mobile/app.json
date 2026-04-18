@@ -22,6 +22,7 @@
     "android": {
       "package": "com.resina.mobile",
       "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/Sta Rita.png",
         "backgroundColor": "#ffffff"
