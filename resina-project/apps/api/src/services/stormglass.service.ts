@@ -1,5 +1,5 @@
 import type { TideData, TideExtreme } from "./tide.service";
-import { toStormGlassWindow } from "../utils/stormglass-window.js";
+import { toStormGlassWindow } from "../utils/stormglass-window";
 
 /**
  * Fetch tide predictions from StormGlass API
