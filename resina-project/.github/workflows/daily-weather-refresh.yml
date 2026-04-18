@@ -1,5 +1,8 @@
 name: Weather Auto Refresh
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   schedule:
     # Run every hour at minute 5 (UTC)
@@ -20,7 +23,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "24"
           cache: "npm"
           cache-dependency-path: "apps/api/package-lock.json"
 
@@ -28,7 +31,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "17"
+          java-version: "21"
 
       - name: Install dependencies
         working-directory: apps/api

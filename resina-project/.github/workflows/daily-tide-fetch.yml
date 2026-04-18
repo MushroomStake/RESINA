@@ -1,5 +1,8 @@
 name: Daily Tide Fetch
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   schedule:
     # Run at 12:05 AM Asia/Manila (UTC+8) every day
@@ -19,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: 'apps/api/package-lock.json'
       
