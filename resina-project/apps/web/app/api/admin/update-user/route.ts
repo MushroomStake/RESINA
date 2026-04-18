@@ -56,10 +56,11 @@ export async function PUT(request: NextRequest) {
     }
 
     const adminSupabase = createAdminClient();
+    const adminSupabaseDynamic = adminSupabase as any;
     const normalizedEmail = email.trim().toLowerCase();
     const fullName = buildFullName(firstName, middleName, lastName);
 
-    const { data: existingProfile, error: loadError } = await adminSupabase
+    const { data: existingProfile, error: loadError } = await adminSupabaseDynamic
       .from("profiles")
       .select("auth_user_id, email")
       .eq("id", profileId)
@@ -80,7 +81,7 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const { error: updateProfileError } = await adminSupabase
+    const { error: updateProfileError } = await adminSupabaseDynamic
       .from("profiles")
       .update({
         first_name: firstName.trim(),

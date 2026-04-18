@@ -12,6 +12,7 @@ type TideExtreme = {
 
 
 async function upsertHourlyRows(adminSupabase: ReturnType<typeof createAdminClient>, predictionDate: string, tideData: TideExtreme[]): Promise<number> {
+  const adminSupabaseDynamic = adminSupabase as any;
   const hourly = generateHourlyTideEstimates(tideData, predictionDate);
   if (!hourly.length) {
     return 0;
@@ -24,7 +25,7 @@ async function upsertHourlyRows(adminSupabase: ReturnType<typeof createAdminClie
     confidence: entry.confidence,
   }));
 
-  const { error } = await adminSupabase
+  const { error } = await adminSupabaseDynamic
     .from("tide_hourly")
     .upsert(payload, { onConflict: "prediction_date,hour_of_day" });
 
@@ -49,15 +50,16 @@ export async function GET(request: NextRequest) {
   try {
     const predictionDate = getManilaDate();
     const adminSupabase = createAdminClient();
+    const adminSupabaseDynamic = adminSupabase as any;
 
-    const { data: existing } = await adminSupabase
+    const { data: existing } = await adminSupabaseDynamic
       .from("tide_predictions")
       .select("prediction_date, tide_data")
       .eq("prediction_date", predictionDate)
       .maybeSingle();
 
     if (existing) {
-      const { count: existingHourlyCount } = await adminSupabase
+      const { count: existingHourlyCount } = await adminSupabaseDynamic
         .from("tide_hourly")
         .select("hour_of_day", { count: "exact", head: true })
         .eq("prediction_date", predictionDate);
@@ -96,7 +98,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { error: upsertError } = await adminSupabase.from("tide_predictions").upsert(
+    const { error: upsertError } = await adminSupabaseDynamic.from("tide_predictions").upsert(
       {
         prediction_date: predictionDate,
         tide_data: tideData,

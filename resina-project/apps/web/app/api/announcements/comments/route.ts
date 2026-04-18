@@ -35,7 +35,8 @@ async function requirePortalUser() {
   }
 
   const adminSupabase = createAdminClient();
-  const { data: profile } = await adminSupabase
+  const adminSupabaseDynamic = adminSupabase as any;
+  const { data: profile } = await adminSupabaseDynamic
     .from("profiles")
     .select("role")
     .eq("auth_user_id", user.id)
@@ -91,7 +92,8 @@ export async function GET(request: NextRequest) {
     const announcementId = request.nextUrl.searchParams.get("announcementId")?.trim() ?? "";
 
     const adminSupabase = createAdminClient();
-    let threadedQuery = adminSupabase
+    const adminSupabaseDynamic = adminSupabase as any;
+    let threadedQuery = adminSupabaseDynamic
       .from("announcement_comments")
       .select("id, announcement_id, parent_comment_id, commenter_name, comment_body, created_at")
       .order("created_at", { ascending: true });
@@ -110,7 +112,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: threadedResult.error.message }, { status: 500 });
     }
 
-    let fallbackQuery = adminSupabase
+    let fallbackQuery = adminSupabaseDynamic
       .from("announcement_comments")
       .select("id, announcement_id, commenter_name, comment_body, created_at")
       .order("created_at", { ascending: true });
@@ -126,10 +128,17 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      comments: (fallbackResult.data ?? []).map((row) => ({
-        ...row,
-        parent_comment_id: null,
-      })),
+      comments: (fallbackResult.data ?? []).map((rawRow: unknown) => {
+        const row = rawRow as Record<string, unknown>;
+        return {
+          id: String(row.id ?? ""),
+          announcement_id: String(row.announcement_id ?? ""),
+          commenter_name: String(row.commenter_name ?? ""),
+          comment_body: String(row.comment_body ?? ""),
+          created_at: String(row.created_at ?? ""),
+          parent_comment_id: null,
+        };
+      }),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load comments.";
@@ -174,8 +183,9 @@ export async function POST(request: NextRequest) {
     }
 
     const adminSupabase = createAdminClient();
+    const adminSupabaseDynamic = adminSupabase as any;
 
-    const { data: announcement, error: announcementError } = await adminSupabase
+    const { data: announcement, error: announcementError } = await adminSupabaseDynamic
       .from("announcements")
       .select("id")
       .eq("id", announcementId)
@@ -193,7 +203,7 @@ export async function POST(request: NextRequest) {
       comment_body: commentBody,
     };
 
-    const insertResult = await adminSupabase
+    const insertResult = await adminSupabaseDynamic
       .from("announcement_comments")
       .insert(insertPayload)
       .select("id, announcement_id, parent_comment_id, commenter_name, comment_body, created_at")
@@ -203,7 +213,7 @@ export async function POST(request: NextRequest) {
       insertResult.error &&
       insertResult.error.message.toLowerCase().includes("parent_comment_id")
     ) {
-      const fallbackInsert = await adminSupabase
+      const fallbackInsert = await adminSupabaseDynamic
         .from("announcement_comments")
         .insert({
           announcement_id: announcementId,
@@ -218,7 +228,22 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: fallbackInsert.error.message }, { status: 500 });
       }
 
-      return NextResponse.json({ success: true, comment: { ...fallbackInsert.data, parent_comment_id: null } }, { status: 201 });
+      const fallbackComment = fallbackInsert.data as Record<string, unknown>;
+
+      return NextResponse.json(
+        {
+          success: true,
+          comment: {
+            id: String(fallbackComment.id ?? ""),
+            announcement_id: String(fallbackComment.announcement_id ?? ""),
+            commenter_name: String(fallbackComment.commenter_name ?? ""),
+            comment_body: String(fallbackComment.comment_body ?? ""),
+            created_at: String(fallbackComment.created_at ?? ""),
+            parent_comment_id: null,
+          },
+        },
+        { status: 201 },
+      );
     }
 
     if (insertResult.error) {
@@ -248,7 +273,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     const adminSupabase = createAdminClient();
-    let deleteQuery = adminSupabase.from("announcement_comments").delete().eq("id", commentId);
+    const adminSupabaseDynamic = adminSupabase as any;
+    let deleteQuery = adminSupabaseDynamic.from("announcement_comments").delete().eq("id", commentId);
 
     if (announcementId) {
       deleteQuery = deleteQuery.eq("announcement_id", announcementId);

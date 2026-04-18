@@ -76,8 +76,9 @@ export async function GET(request: NextRequest) {
 
   // 2. Save a new row to weather_logs using the service-role key (bypasses RLS).
   const adminSupabase = createAdminClient();
+  const adminSupabaseDynamic = adminSupabase as any;
 
-  const { error: insertError } = await adminSupabase.from("weather_logs").insert({
+  const { error: insertError } = await adminSupabaseDynamic.from("weather_logs").insert({
     temperature,
     humidity,
     heat_index: Math.round(heatIndex),
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest) {
   // 3. Prune records older than 60 days to keep the table lean.
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 60);
-  await adminSupabase.from("weather_logs").delete().lt("recorded_at", cutoff.toISOString());
+  await adminSupabaseDynamic.from("weather_logs").delete().lt("recorded_at", cutoff.toISOString());
 
   return NextResponse.json({
     ok: true,
