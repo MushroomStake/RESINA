@@ -15,13 +15,13 @@ export const supabase = createClient(
   supabaseUrl ?? "https://placeholder.supabase.co",
   supabaseAnonKey ?? "public-anon-key-placeholder",
   {
-  auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
+    auth: {
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
   },
-},
 );
 
 const SUPABASE_AUTH_KEY_PATTERNS = [/^sb-/i, /auth-token/i, /supabase/i];

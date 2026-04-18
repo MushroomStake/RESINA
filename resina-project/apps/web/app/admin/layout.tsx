@@ -99,7 +99,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             isSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
           }`}
           onClick={() => setIsSidebarOpen(false)}
-          aria-hidden
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " " || event.key === "Escape") {
+              event.preventDefault();
+              setIsSidebarOpen(false);
+            }
+          }}
+          role="button"
+          aria-label="Close sidebar"
+          tabIndex={0}
         />
 
         <aside

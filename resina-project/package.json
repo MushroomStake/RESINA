@@ -3,13 +3,30 @@
   "private": true,
   "version": "1.0.0",
   "workspaces": [
-    "apps/web"
+    "apps/web",
+    "apps/api",
+    "apps/mobile"
   ],
   "scripts": {
-    "start": "npm run dev --workspace web",
-    "dev": "npm run dev --workspace web",
-    "build": "npm run build --workspace web",
-    "lint": "npm run lint --workspace web"
+    "start": "npm run start:web",
+    "dev": "npm run dev:web",
+    "build": "npm run build:web",
+    "lint": "npm run lint:web",
+    "dev:web": "npm run dev --workspace web",
+    "build:web": "npm run build --workspace web",
+    "start:web": "npm run start --workspace web",
+    "lint:web": "npm run lint --workspace web",
+    "dev:api": "npm run dev --workspace resina-api",
+    "build:api": "npm run build --workspace resina-api",
+    "start:api": "npm run start --workspace resina-api",
+    "tide:fetch": "npm run tide:fetch --workspace resina-api",
+    "tide:interpolate": "npm run tide:interpolate --workspace resina-api",
+    "tide:refresh-window": "npm run tide:refresh-window --workspace resina-api",
+    "weather:fetch": "npm run weather:fetch --workspace resina-api",
+    "start:mobile": "npm run start --workspace mobile",
+    "android:mobile": "npm run android --workspace mobile",
+    "ios:mobile": "npm run ios --workspace mobile",
+    "web:mobile": "npm run web --workspace mobile"
   },
   "engines": {
     "node": ">=18"

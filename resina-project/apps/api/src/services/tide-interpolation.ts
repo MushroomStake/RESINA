@@ -53,23 +53,25 @@ function sineWaveInterpolation(
   lowPoint: number,
   highPoint: number,
   cycleStartTime: string,
+  cycleEndTime: string,
   queryTime: string
 ): number {
   const start = new Date(cycleStartTime).getTime();
+  const end = new Date(cycleEndTime).getTime();
   const query = new Date(queryTime).getTime();
-  const duration = query - start;
+  const elapsed = query - start;
 
-  // Half tidal cycle is approximately 6 hours = 21600000 ms
-  const halfCycleDurationMs = 6 * 60 * 60 * 1000;
+  // Use actual duration between surrounding extremes instead of fixed 6-hour cycles.
+  const halfCycleDurationMs = Math.max(end - start, 1);
 
-  // Normalized position in cycle (0 to 1)
-  const position = (duration % (2 * halfCycleDurationMs)) / (2 * halfCycleDurationMs);
+  // Normalized position between surrounding extremes (0 to 1).
+  const position = Math.min(Math.max(elapsed / halfCycleDurationMs, 0), 1);
 
-  // Sine curve: starts at low (0), peaks at high (0.5), back to low (1)
+  // Sine curve from low to high over half cycle.
   const midpoint = (lowPoint + highPoint) / 2;
   const amplitude = (highPoint - lowPoint) / 2;
 
-  return midpoint + amplitude * Math.sin(Math.PI * position);
+  return midpoint + amplitude * Math.sin(-Math.PI / 2 + Math.PI * position);
 }
 
 /**
@@ -147,17 +149,22 @@ export function estimateTideHeight(
   }
 
   const { low, high } = surrounding;
-
-  if (method === "sine-wave") {
-    return sineWaveInterpolation(low.height, high.height, low.time, query.toISOString());
-  }
-
-  // Default: Rule of Twelfths
-  // Determine if tide is rising or falling by comparing times
   const lowTime = new Date(low.time).getTime();
   const highTime = new Date(high.time).getTime();
   const queryMs = query.getTime();
 
+  if (method === "sine-wave") {
+    if (lowTime < highTime) {
+      // Rising tide: low -> high
+      return sineWaveInterpolation(low.height, high.height, low.time, high.time, query.toISOString());
+    }
+
+    // Falling tide: high -> low
+    return sineWaveInterpolation(high.height, low.height, high.time, low.time, query.toISOString());
+  }
+
+  // Default: Rule of Twelfths
+  // Determine if tide is rising or falling by comparing times
   if (lowTime < highTime) {
     // Rising tide: from low to high
     const hoursInto = (queryMs - lowTime) / (60 * 60 * 1000);
