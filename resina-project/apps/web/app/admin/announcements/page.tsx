@@ -172,24 +172,24 @@ export default function AdminAnnouncementsPage() {
 
   useEffect(() => {
     const initialize = async () => {
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
 
-      if (!session) {
+      if (!user) {
         router.replace("/admin");
         return;
       }
 
-      setSessionUserId(session.user.id);
+      setSessionUserId(user.id);
 
       const { data: profile } = await supabase
         .from("profiles")
         .select("full_name, email")
-        .eq("auth_user_id", session.user.id)
+        .eq("auth_user_id", user.id)
         .maybeSingle();
 
       const profileRow = profile as ProfileRow | null;
-      const fallbackName = session.user.email?.split("@")[0] ?? "Unknown Admin";
+      const fallbackName = user.email?.split("@")[0] ?? "Unknown Admin";
       const finalName = profileRow?.full_name?.trim() || profileRow?.email?.trim() || fallbackName;
       setPostedByName(finalName);
 
@@ -472,19 +472,21 @@ export default function AdminAnnouncementsPage() {
     setIsCommentsModalOpen(true);
     setIsLoadingComments(true);
 
-    const { data, error } = await supabase
-      .from("announcement_comments")
-      .select("id, announcement_id, commenter_name, comment_body, created_at")
-      .eq("announcement_id", announcement.id)
-      .order("created_at", { ascending: true });
+    const response = await fetch(`/api/announcements/comments?announcementId=${encodeURIComponent(announcement.id)}`, {
+      method: "GET",
+      cache: "no-store",
+    });
 
-    if (error) {
-      setCommentsError(error.message);
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      setCommentsError(payload.error ?? "Failed to load comments.");
       setIsLoadingComments(false);
       return;
     }
 
-    setSelectedComments((data ?? []) as CommentRow[]);
+    const payload = (await response.json()) as { comments?: CommentRow[] };
+
+    setSelectedComments(payload.comments ?? []);
     setIsLoadingComments(false);
   };
 
@@ -492,13 +494,17 @@ export default function AdminAnnouncementsPage() {
     if (!selectedAnnouncement) return;
     setDeletingCommentId(commentId);
 
-    const { error: deleteError } = await supabase
-      .from("announcement_comments")
-      .delete()
-      .eq("id", commentId);
+    const response = await fetch("/api/announcements/comments", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ commentId, announcementId: selectedAnnouncement.id }),
+    });
 
-    if (deleteError) {
-      setCommentsError(deleteError.message);
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      setCommentsError(payload.error ?? "Failed to delete comment.");
       setDeletingCommentId(null);
       return;
     }
@@ -524,23 +530,27 @@ export default function AdminAnnouncementsPage() {
     setIsSubmittingComment(true);
     setCommentsError(null);
 
-    const payload = replyToCommentId ? `[[reply:${replyToCommentId}]] ${trimmed}` : trimmed;
+    const response = await fetch("/api/announcements/comments", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        announcementId: selectedAnnouncement.id,
+        parentCommentId: replyToCommentId,
+        commenterName: ADMIN_COMMENTER_NAME,
+        commentBody: trimmed,
+      }),
+    });
 
-    const { data, error } = await supabase
-      .from("announcement_comments")
-      .insert({
-        announcement_id: selectedAnnouncement.id,
-        commenter_name: ADMIN_COMMENTER_NAME,
-        comment_body: payload,
-      })
-      .select("id, announcement_id, commenter_name, comment_body, created_at")
-      .single();
-
-    if (error) {
-      setCommentsError(error.message);
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      setCommentsError(payload.error ?? "Failed to add comment.");
       setIsSubmittingComment(false);
       return;
     }
+
+    const payload = (await response.json()) as { comment?: CommentRow };
 
     await supabase.from("activity_logs").insert({
       action_type: "comment_added",
@@ -549,7 +559,9 @@ export default function AdminAnnouncementsPage() {
       reference_id: selectedAnnouncement.id,
     });
 
-    setSelectedComments((prev) => [...prev, data as CommentRow]);
+    if (payload.comment) {
+      setSelectedComments((prev) => [...prev, payload.comment as CommentRow]);
+    }
     setIsSubmittingComment(false);
   };
 

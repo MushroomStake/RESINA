@@ -3,12 +3,14 @@ import { supabase } from "./supabase";
 import type { ProfileAvatarKey } from "../components/profile-section";
 
 const OFFLINE_WRITE_QUEUE_KEY = "resina:queue:offline-writes";
+const MAX_OFFLINE_WRITE_RETRIES = 3;
 
 export type OfflineWriteQueueItem =
   | {
       id: string;
       kind: "profile-upsert";
       createdAt: number;
+  retryCount?: number;
       payload: {
         userId: string;
         fullName: string;
@@ -25,6 +27,7 @@ export type OfflineWriteQueueItem =
       id: string;
       kind: "announcement-comment";
       createdAt: number;
+      retryCount?: number;
       payload: {
         announcementId: string;
         commenterAuthUserId: string;
@@ -74,6 +77,7 @@ export async function enqueueProfileWrite(payload: Extract<OfflineWriteQueueItem
     id: buildQueueId("profile"),
     kind: "profile-upsert",
     createdAt: Date.now(),
+    retryCount: 0,
     payload,
   });
 
@@ -88,6 +92,7 @@ export async function enqueueAnnouncementComment(
     id: buildQueueId("comment"),
     kind: "announcement-comment",
     createdAt: Date.now(),
+    retryCount: 0,
     payload,
   });
   await writeQueue(queue);
@@ -190,7 +195,20 @@ export async function flushOfflineWriteQueue(): Promise<OfflineQueueSummary> {
 
       syncedCount += 1;
     } catch {
-      nextQueue = queue.slice(index);
+      const nextRetryCount = (entry.retryCount ?? 0) + 1;
+
+      // Drop permanently failing item after retry limit so it cannot block the queue forever.
+      if (nextRetryCount > MAX_OFFLINE_WRITE_RETRIES) {
+        syncedCount += 1;
+        continue;
+      }
+
+      const failedEntry: OfflineWriteQueueItem = {
+        ...entry,
+        retryCount: nextRetryCount,
+      };
+
+      nextQueue = [failedEntry, ...queue.slice(index + 1)];
       break;
     }
   }

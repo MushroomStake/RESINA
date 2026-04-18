@@ -1,5 +1,5 @@
 import "./global.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import type { DateTimePickerEvent } from "@react-native-community/datetimepicker";
@@ -369,6 +369,9 @@ function inferAlertLevel(snapshot: SensorSnapshot): AlertLevelKey {
   if (status.includes("evac")) return "evacuation";
   if (status.includes("critical") || status.includes("alert level 2") || status.includes("alert 2")) {
     return "critical";
+  }
+  if (status.includes("normal") || status.includes("alert level 1") || status.includes("alert 1")) {
+    return "normal";
   }
   if (snapshot.waterLevel !== null) {
     if (snapshot.waterLevel >= 4) return "spilling";
@@ -1155,6 +1158,7 @@ export default function App() {
   const starTwinkle = useRef(new Animated.Value(0)).current;
   const rainFall = useRef(new Animated.Value(0)).current;
   const rainFallSoft = useRef(new Animated.Value(0)).current;
+  const isOnlineRef = useRef(isOnline);
 
   const [loginForm, setLoginForm] = useState<LoginForm>({
     email: "",
@@ -1261,6 +1265,10 @@ export default function App() {
   useEffect(() => {
     latestWeatherRecordedAtRef.current = weatherSnapshot.recordedAt;
   }, [weatherSnapshot.recordedAt]);
+
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -1557,7 +1565,7 @@ export default function App() {
     };
   };
 
-  const loadWeatherSnapshot = async (allowLiveFetch = true): Promise<CacheAwareLoadResult> => {
+  const loadWeatherSnapshot = useCallback(async (allowLiveFetch = true): Promise<CacheAwareLoadResult> => {
     const cached = await readCache<WeatherSnapshot>(CACHE_KEYS.weather, CACHE_TTL_MS.weather);
     if (cached) {
       setWeatherSnapshot(cached.value);
@@ -1608,7 +1616,7 @@ export default function App() {
       source: "none",
       cachedAt: null,
     };
-  };
+  }, []);
 
   const loadTideStatus = async (allowLiveFetch = true): Promise<CacheAwareLoadResult> => {
     setIsTideLoading(true);
@@ -1958,13 +1966,14 @@ export default function App() {
   };
 
   const loadDashboard = async () => {
+    const onlineNow = isOnlineRef.current;
     setIsDashboardLoading(true);
     const results = await Promise.all([
-      loadSensorSnapshot(isOnline),
-      loadWeatherSnapshot(isOnline),
-      loadTideStatus(isOnline),
-      loadAnnouncements(0, "replace", isOnline),
-      loadHistoryRecords(0, "replace", isOnline),
+      loadSensorSnapshot(onlineNow),
+      loadWeatherSnapshot(onlineNow),
+      loadTideStatus(onlineNow),
+      loadAnnouncements(0, "replace", onlineNow),
+      loadHistoryRecords(0, "replace", onlineNow),
     ]);
     const banner = resolveLoadBanner(results);
     setIsUsingCachedData(banner.showCached);
@@ -2004,14 +2013,20 @@ export default function App() {
     const boot = async () => {
       try {
         const {
+          data: { user: initialUser },
+        } = await supabase.auth.getUser();
+
+        const {
           data: { session: initialSession },
         } = await supabase.auth.getSession();
 
         if (!isMounted) return;
 
-        setSession(initialSession);
-        if (initialSession?.user?.id) {
-          await loadProfileData(initialSession.user.id, initialSession.user, isOnline);
+        if (!initialUser || !initialSession) {
+          setSession(null);
+        } else {
+          setSession(initialSession);
+          await loadProfileData(initialUser.id, initialUser, isOnlineRef.current);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -2036,7 +2051,7 @@ export default function App() {
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       if (nextSession?.user?.id) {
-        void loadProfileData(nextSession.user.id, nextSession.user, isOnline);
+        void loadProfileData(nextSession.user.id, nextSession.user, isOnlineRef.current);
       }
     });
 
@@ -2238,7 +2253,7 @@ export default function App() {
     return () => {
       clearInterval(interval);
     };
-  }, [session, isOnline]);
+  }, [session, isOnline, loadWeatherSnapshot]);
 
   useEffect(() => {
     if (!session) return;

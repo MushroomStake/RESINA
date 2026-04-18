@@ -227,9 +227,21 @@ function formatDateForRangeLabel(value: Date): string {
 }
 
 function formatDateForFileName(value: Date): string {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return value.toISOString().slice(0, 10);
+  }
+
   return `${year}-${month}-${day}`;
 }
 
@@ -251,8 +263,8 @@ export default function AdminHistoryPage() {
 
   useEffect(() => {
     const initialize = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
         router.replace("/admin");
         return;
       }

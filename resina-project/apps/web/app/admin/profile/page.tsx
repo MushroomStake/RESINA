@@ -226,17 +226,17 @@ export default function AdminProfilePage() {
 
   useEffect(() => {
     const initialize = async () => {
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
 
-      if (!session) {
+      if (!user) {
         router.replace("/admin");
         return;
       }
 
-      const currentUserId = session.user.id;
-      const currentEmail = session.user.email ?? "";
-      const currentPhoneNumber = String(session.user.user_metadata?.phone_number ?? "").trim();
+      const currentUserId = user.id;
+      const currentEmail = user.email ?? "";
+      const currentPhoneNumber = String(user.user_metadata?.phone_number ?? "").trim();
 
       setSessionUserId(currentUserId);
       setSessionEmail(currentEmail);
