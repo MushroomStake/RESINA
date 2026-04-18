@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
-          cache-dependency-path: "apps/api/package-lock.json"
+          cache-dependency-path: "package-lock.json"
 
       - name: Setup Java (required by PAGASA PDF parser)
         uses: actions/setup-java@v5
@@ -34,11 +34,9 @@ jobs:
           java-version: "21"
 
       - name: Install dependencies
-        working-directory: apps/api
         run: npm ci
 
       - name: Fetch and store weather in Supabase
-        working-directory: apps/api
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
