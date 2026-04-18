@@ -17,11 +17,14 @@
     "@pagasa-parser/source-pdf": "^1.1.9",
     "@supabase/supabase-js": "^2.39.0",
     "axios": "^1.6.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.0.0",
     "express": "^4.18.0",
+    "express-rate-limit": "^7.1.0",
     "pagasa-parser": "^2.2.4"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
     "@types/express": "^4.17.0",
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",

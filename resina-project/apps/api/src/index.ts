@@ -5,6 +5,8 @@
 
 import "dotenv/config";
 import express, { Request, Response } from "express";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { getTidePredictionFromDB, supabase } from "./services/tide.service.js";
 import { estimateTideHeight, getTideStatus, generateHourlyTideEstimates, InterpolationMethod } from "./services/tide-interpolation.js";
 
@@ -30,7 +32,50 @@ function getManilaDate(): string {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// CORS Configuration
+// Allow requests from specified origins
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000,http://localhost:3001").split(",").map(origin => origin.trim());
+const corsOptions: any = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "HEAD", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  maxAge: 3600,
+};
+
+app.use(cors(corsOptions));
+
+// Rate Limiting Configuration
+// General API rate limiter: 100 requests per 15 minutes per IP
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  message: "Too many requests from this IP, please try again later.",
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  skip: (req) => {
+    // Skip rate limiting for health check
+    return req.path === "/health";
+  },
+});
+
+// Strict rate limiter for tide estimation: 30 requests per 15 minutes per IP
+const tideEstimateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30,
+  message: "Too many tide estimates requested, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use(express.json());
+app.use(apiLimiter);
 
 // Health check
 app.get("/health", (req: Request, res: Response) => {
@@ -130,7 +175,7 @@ app.get("/api/tide/hourly", async (req: Request, res: Response) => {
  * Estimate tide height for a specific time
  * Query params: time (ISO string), date (YYYY-MM-DD), hour (0-23)
  */
-app.get("/api/tide/estimate", async (req: Request, res: Response) => {
+app.get("/api/tide/estimate", tideEstimateLimiter, async (req: Request, res: Response) => {
   try {
     let queryTime: Date;
 

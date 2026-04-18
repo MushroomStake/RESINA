@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 import { createClient as createServerSupabase } from "../../../../lib/supabase/server";
 import { createAdminClient } from "../../../../lib/supabase/admin";
 
@@ -15,6 +16,20 @@ type CreateUserBody = {
 
 function buildFullName(first: string, middle: string, last: string): string {
   return [first.trim(), middle.trim(), last.trim()].filter(Boolean).join(" ");
+}
+
+function generateStrongPassword(): string {
+  // Generate a cryptographically secure random password
+  // Format: 16 characters using base64 for better entropy and usability
+  const buffer = randomBytes(12); // 12 bytes = 96 bits of entropy
+  return buffer
+    .toString("base64")
+    .replace(/[+/=]/g, (char) => {
+      // Replace URL-unsafe characters with safe alternatives
+      const replacements: Record<string, string> = { "+": "0", "/": "1", "=": "2" };
+      return replacements[char] || char;
+    })
+    .slice(0, 16); // Ensure consistent length
 }
 
 export async function POST(request: NextRequest) {
@@ -72,7 +87,8 @@ export async function POST(request: NextRequest) {
     const normalizedFullName = fullName.trim() || buildFullName(firstName, middleName, lastName);
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedConfirmEmail = confirmEmail.trim().toLowerCase();
-    const defaultPassword = password.trim() || "admin123";
+    // Use provided password or generate a strong random one
+    const defaultPassword = password.trim() || generateStrongPassword();
     const adminLink = `${request.nextUrl.origin}/admin`;
 
     if (!normalizedConfirmEmail) {

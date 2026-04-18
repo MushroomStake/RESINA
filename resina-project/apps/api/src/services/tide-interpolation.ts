@@ -153,8 +153,22 @@ export function estimateTideHeight(
   }
 
   // Default: Rule of Twelfths
-  const hoursInto = (query.getTime() - new Date(low.time).getTime()) / (60 * 60 * 1000);
-  return ruleOfTwelfths(low.height, high.height, hoursInto);
+  // Determine if tide is rising or falling by comparing times
+  const lowTime = new Date(low.time).getTime();
+  const highTime = new Date(high.time).getTime();
+  const queryMs = query.getTime();
+
+  if (lowTime < highTime) {
+    // Rising tide: from low to high
+    const hoursInto = (queryMs - lowTime) / (60 * 60 * 1000);
+    return ruleOfTwelfths(low.height, high.height, hoursInto);
+  } else {
+    // Falling tide: from high to low
+    // Compute hours from high, then invert the result
+    const hoursInto = (queryMs - highTime) / (60 * 60 * 1000);
+    const riseHeight = ruleOfTwelfths(low.height, high.height, hoursInto);
+    return high.height - (riseHeight - low.height);
+  }
 }
 
 /**
@@ -218,6 +232,16 @@ export function getTideStatus(tideData: TideData, now: Date = new Date()) {
 
   const { low, high } = surrounding;
   const currentHeight = estimateTideHeight(tideData, now);
+  const nowMs = now.getTime();
+  const lowMs = new Date(low.time).getTime();
+  const highMs = new Date(high.time).getTime();
+
+  // Determine state by comparing current time to extreme times
+  // If we're closer to low time, we're rising towards high
+  // If we're closer to high time, we're falling towards low
+  const distToLow = Math.abs(nowMs - lowMs);
+  const distToHigh = Math.abs(nowMs - highMs);
+  const state = distToLow < distToHigh ? "rising" : "falling";
 
   return {
     currentHeight: currentHeight ? Math.round(currentHeight * 100) / 100 : null,
@@ -226,6 +250,6 @@ export function getTideStatus(tideData: TideData, now: Date = new Date()) {
       height: high.time > low.time ? high.height : low.height,
       time: high.time > low.time ? high.time : low.time,
     },
-    state: currentHeight && currentHeight > (low.height + high.height) / 2 ? "rising" : "falling",
+    state,
   };
 }
