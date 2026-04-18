@@ -1965,6 +1965,35 @@ export default function App() {
     setSelectedAnnouncementForComments(null);
   };
 
+  const getValidatedSessionHydration = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return {
+        user: null,
+        session: null,
+      };
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session || session.user.id !== user.id) {
+      return {
+        user,
+        session: null,
+      };
+    }
+
+    return {
+      user,
+      session,
+    };
+  }, []);
+
   const loadDashboard = async () => {
     const onlineNow = isOnlineRef.current;
     setIsDashboardLoading(true);
@@ -2012,13 +2041,7 @@ export default function App() {
 
     const boot = async () => {
       try {
-        const {
-          data: { user: initialUser },
-        } = await supabase.auth.getUser();
-
-        const {
-          data: { session: initialSession },
-        } = await supabase.auth.getSession();
+        const { user: initialUser, session: initialSession } = await getValidatedSessionHydration();
 
         if (!isMounted) return;
 
@@ -2059,7 +2082,7 @@ export default function App() {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [getValidatedSessionHydration]);
 
   useEffect(() => {
     if (!session) return;
@@ -2609,11 +2632,9 @@ export default function App() {
       }
 
       let refreshedUser = session.user;
-      const {
-        data: { session: activeSession },
-      } = await supabase.auth.getSession();
+      const { user: activeUser, session: activeSession } = await getValidatedSessionHydration();
 
-      if (activeSession) {
+      if (activeSession && activeUser) {
         const { data, error } = await supabase.auth.updateUser({
           data: {
             ...(session.user.user_metadata ?? {}),
@@ -2635,7 +2656,7 @@ export default function App() {
             return;
           }
         } else {
-          refreshedUser = data.user ?? session.user;
+          refreshedUser = data.user ?? activeUser;
         }
       }
 
@@ -2746,11 +2767,9 @@ export default function App() {
       }
 
       let refreshedUser = session.user;
-      const {
-        data: { session: activeSession },
-      } = await supabase.auth.getSession();
+      const { user: activeUser, session: activeSession } = await getValidatedSessionHydration();
 
-      if (activeSession) {
+      if (activeSession && activeUser) {
         const { data, error } = await supabase.auth.updateUser({
           data: {
             ...(session.user.user_metadata ?? {}),
@@ -2770,7 +2789,7 @@ export default function App() {
             return;
           }
         } else {
-          refreshedUser = data.user ?? session.user;
+          refreshedUser = data.user ?? activeUser;
         }
       }
 
@@ -2832,11 +2851,9 @@ export default function App() {
     setIsChangingPassword(true);
 
     try {
-      const {
-        data: { session: activeSession },
-      } = await supabase.auth.getSession();
+      const { user: activeUser, session: activeSession } = await getValidatedSessionHydration();
 
-      if (!activeSession) {
+      if (!activeSession || !activeUser) {
         setErrorMessage("Session expired. Please log in again before updating your password.");
         return;
       }
