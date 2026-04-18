@@ -3,6 +3,16 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
+import { getManilaDate } from "../../../lib/date";
+import {
+  WEATHER_ICON_MAP,
+  DRY_NORMAL_ICON_PATH,
+  inferWetSeverity,
+  computeHeatIndexC,
+  resolveHeatSeverity,
+  resolveIntensityLabel,
+  resolveDrySeasonPhaseIcon,
+} from "../../../lib/weather";
 import { CurrentSensorStatus } from "./components/current-sensor-status";
 import { WeatherUpdateSection } from "./components/weather-update-section";
 import { TideMonitorSection } from "./components/tide-monitor-section";
@@ -56,27 +66,6 @@ type TideHourlyRow = {
   hour_of_day: number;
   estimated_height: number;
   confidence: "high" | "medium" | "low" | null;
-};
-
-const SUNRISE_SUNSET_WINDOW_MS = 30 * 60 * 1000;
-
-type WetSeverity = "none" | "light" | "moderate" | "heavy" | "torrential";
-type HeatSeverity = "normal" | "caution" | "extreme-caution" | "danger" | "extreme-danger";
-
-const DRY_NORMAL_ICON_PATH = "/weather/dry-season/sun Normal.png";
-const DRY_SUNRISE_ICON_PATH = "/weather/dry-season/sunrise.png";
-const DRY_SUNSET_ICON_PATH = "/weather/dry-season/sunset.png";
-
-const WEATHER_ICON_MAP: Record<string, string> = {
-  Normal: DRY_NORMAL_ICON_PATH,
-  Caution: "/weather/dry-season/sun Caution.png",
-  "Extreme Caution": "/weather/dry-season/sun Extreme Caution.png",
-  Danger: "/weather/dry-season/sun Danger.png",
-  "Extreme Danger": "/weather/dry-season/sun Danger.png",
-  "Light Rain": "/weather/wet-season/Light Rain.png",
-  "Moderate Rain": "/weather/wet-season/Moderate Rain.png",
-  "Heavy Rain": "/weather/wet-season/Heavy Rain.png",
-  "Torrential Rain": "/weather/wet-season/Torrential Rain.png",
 };
 
 const ALERT_LEVELS: Record<
@@ -205,218 +194,6 @@ function formatWeatherDateForCard(date: Date): string {
     .toUpperCase();
 }
 
-function getManilaDate(): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  if (!year || !month || !day) {
-    return new Date().toISOString().split("T")[0];
-  }
-
-  return `${year}-${month}-${day}`;
-}
-
-function inferWetSeverity(main: string, description: string): WetSeverity {
-  const lowerMain = main.toLowerCase();
-  const lowerDescription = description.toLowerCase();
-
-  if (
-    lowerMain.includes("thunder") ||
-    lowerDescription.includes("thunder") ||
-    lowerMain.includes("squall") ||
-    lowerMain.includes("tornado")
-  ) {
-    return "torrential";
-  }
-
-  if (lowerMain.includes("rain")) {
-    if (
-      lowerDescription.includes("very heavy") ||
-      lowerDescription.includes("extreme") ||
-      lowerDescription.includes("violent")
-    ) {
-      return "torrential";
-    }
-    if (lowerDescription.includes("heavy")) {
-      return "heavy";
-    }
-    if (lowerDescription.includes("moderate")) {
-      return "moderate";
-    }
-    if (lowerDescription.includes("light") || lowerDescription.includes("shower")) {
-      return "light";
-    }
-    return "moderate";
-  }
-
-  if (lowerMain.includes("drizzle")) {
-    return "light";
-  }
-
-  return "none";
-}
-
-function computeHeatIndexC(temperatureC: number, humidity: number): number {
-  const tF = temperatureC * (9 / 5) + 32;
-
-  // For cooler/drier conditions, ambient temperature is a better approximation.
-  if (tF < 80 || humidity < 40) {
-    return Math.round(temperatureC * 10) / 10;
-  }
-
-  const hiF =
-    -42.379 +
-    2.04901523 * tF +
-    10.14333127 * humidity -
-    0.22475541 * tF * humidity -
-    0.00683783 * tF * tF -
-    0.05481717 * humidity * humidity +
-    0.00122874 * tF * tF * humidity +
-    0.00085282 * tF * humidity * humidity -
-    0.00000199 * tF * tF * humidity * humidity;
-
-  const hiC = (hiF - 32) * (5 / 9);
-  return Math.round(hiC * 10) / 10;
-}
-
-function resolveHeatSeverity(heatIndexC: number): HeatSeverity {
-  if (heatIndexC >= 52) {
-    return "extreme-danger";
-  }
-  if (heatIndexC >= 42) {
-    return "danger";
-  }
-  if (heatIndexC >= 33) {
-    return "extreme-caution";
-  }
-  if (heatIndexC >= 27) {
-    return "caution";
-  }
-
-  return "normal";
-}
-
-function resolveIntensityLabel(wet: WetSeverity, heat: HeatSeverity): string {
-  if (wet === "torrential") {
-    return "Torrential Rain";
-  }
-  if (wet === "heavy") {
-    return "Heavy Rain";
-  }
-  if (wet === "moderate") {
-    return "Moderate Rain";
-  }
-  if (wet === "light") {
-    return "Light Rain";
-  }
-
-  if (heat === "extreme-danger") {
-    return "Extreme Danger";
-  }
-  if (heat === "danger") {
-    return "Danger";
-  }
-  if (heat === "extreme-caution") {
-    return "Extreme Caution";
-  }
-  if (heat === "caution") {
-    return "Caution";
-  }
-
-  return "Normal";
-}
-
-function resolveDrySeasonNightIcon(main: string, description: string): string {
-  const lowerMain = main.toLowerCase();
-  const lowerDescription = description.toLowerCase();
-
-  if (lowerMain.includes("clear")) {
-    return "/weather/dry-season/clear sky moon.png";
-  }
-
-  if (lowerMain.includes("cloud") || lowerDescription.includes("cloud")) {
-    return "/weather/dry-season/few clouds moon.png";
-  }
-
-  if (
-    lowerMain.includes("mist") ||
-    lowerMain.includes("fog") ||
-    lowerMain.includes("haze") ||
-    lowerDescription.includes("mist") ||
-    lowerDescription.includes("fog") ||
-    lowerDescription.includes("haze")
-  ) {
-    return "/weather/dry-season/mist moon.png";
-  }
-
-  return "/weather/dry-season/few clouds moon.png";
-}
-
-function resolveDrySeasonPhaseIcon(
-  main: string,
-  description: string,
-  iconCode: string,
-  sunriseUnixSeconds?: number,
-  sunsetUnixSeconds?: number,
-): string {
-  if (typeof sunriseUnixSeconds !== "number" || typeof sunsetUnixSeconds !== "number") {
-    return iconCode.endsWith("n")
-      ? resolveDrySeasonNightIcon(main, description)
-      : DRY_NORMAL_ICON_PATH;
-  }
-
-  const now = Date.now();
-  const sunriseMs = sunriseUnixSeconds * 1000;
-  const sunsetMs = sunsetUnixSeconds * 1000;
-
-  if (Math.abs(now - sunriseMs) <= SUNRISE_SUNSET_WINDOW_MS) {
-    return DRY_SUNRISE_ICON_PATH;
-  }
-
-  if (Math.abs(now - sunsetMs) <= SUNRISE_SUNSET_WINDOW_MS) {
-    return DRY_SUNSET_ICON_PATH;
-  }
-
-  if (now < sunriseMs || now > sunsetMs) {
-    return resolveDrySeasonNightIcon(main, description);
-  }
-
-  return DRY_NORMAL_ICON_PATH;
-}
-
-function analyzeOpenWeather(
-  main: string,
-  description: string,
-  temperatureC: number,
-  humidity: number,
-  iconCode: string,
-  sunriseUnixSeconds?: number,
-  sunsetUnixSeconds?: number,
-) {
-  const wetSeverity = inferWetSeverity(main, description);
-  const heatIndex = computeHeatIndexC(temperatureC, humidity);
-  const heatSeverity = resolveHeatSeverity(heatIndex);
-  const intensityDescription = resolveIntensityLabel(wetSeverity, heatSeverity);
-
-  const iconPath =
-    wetSeverity === "none"
-      ? resolveDrySeasonPhaseIcon(main, description, iconCode, sunriseUnixSeconds, sunsetUnixSeconds)
-      : WEATHER_ICON_MAP[intensityDescription] ?? DRY_NORMAL_ICON_PATH;
-
-  return {
-    intensityDescription,
-    iconPath,
-    heatIndex,
-  };
-}
 
 function isRainyIntensity(intensity: string): boolean {
   return (

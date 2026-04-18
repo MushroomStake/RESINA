@@ -1,36 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "../../../../lib/supabase/admin";
+import { getManilaDate } from "../../../../lib/date";
+import { generateHourlyTideEstimates } from "../../../../../api/src/services/tide-interpolation";
 
 type TideExtreme = {
   type: "high" | "low";
   height: number;
   time: string;
 };
-
-type TideHourlyEstimate = {
-  hour: number;
-  estimatedHeight: number;
-  confidence: "high" | "medium" | "low";
-};
-
-function getManilaDate(): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  if (!year || !month || !day) {
-    throw new Error("Failed to resolve Manila date");
-  }
-
-  return `${year}-${month}-${day}`;
-}
 
 function toStormGlassWindow(predictionDate: string): { startIso: string; endIso: string } {
   const [yearRaw, monthRaw, dayRaw] = predictionDate.split("-");
@@ -55,104 +32,6 @@ function toStormGlassWindow(predictionDate: string): { startIso: string; endIso:
   };
 }
 
-function ruleOfTwelfths(lowPoint: number, highPoint: number, hoursIntoExtremes: number): number {
-  const range = highPoint - lowPoint;
-  const cycleHours = 6;
-  const h = Math.min(Math.max(hoursIntoExtremes, 0), cycleHours);
-  const ratios = [1 / 12, 2 / 12, 3 / 12, 3 / 12, 2 / 12, 1 / 12];
-
-  let accumulated = 0;
-  for (let i = 0; i < Math.floor(h); i += 1) {
-    if (i < ratios.length) {
-      accumulated += ratios[i];
-    }
-  }
-
-  const fraction = h - Math.floor(h);
-  if (Math.floor(h) < ratios.length) {
-    accumulated += ratios[Math.floor(h)] * fraction;
-  }
-
-  return lowPoint + range * accumulated;
-}
-
-function findSurroundingExtremes(tideData: TideExtreme[], queryTime: Date): { low: TideExtreme; high: TideExtreme } | null {
-  if (!tideData.length) {
-    return null;
-  }
-
-  const sorted = [...tideData].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-  const queryMs = queryTime.getTime();
-
-  let preceding = sorted[0];
-  let following = sorted.find((entry) => new Date(entry.time).getTime() >= queryMs) ?? sorted[sorted.length - 1];
-
-  for (const entry of sorted) {
-    const entryMs = new Date(entry.time).getTime();
-    if (entryMs <= queryMs) {
-      preceding = entry;
-    }
-  }
-
-  if (preceding.type === "low" && following.type === "high") {
-    return { low: preceding, high: following };
-  }
-
-  if (preceding.type === "high" && following.type === "low") {
-    return { low: following, high: preceding };
-  }
-
-  const low = sorted.filter((entry) => entry.type === "low")[0] ?? null;
-  const high = sorted.filter((entry) => entry.type === "high")[0] ?? null;
-  return low && high ? { low, high } : null;
-}
-
-function estimateTideHeight(tideData: TideExtreme[], queryTime: Date): number | null {
-  const surrounding = findSurroundingExtremes(tideData, queryTime);
-  if (!surrounding) {
-    return null;
-  }
-
-  const { low, high } = surrounding;
-  const hoursInto = (queryTime.getTime() - new Date(low.time).getTime()) / (60 * 60 * 1000);
-  return ruleOfTwelfths(low.height, high.height, hoursInto);
-}
-
-function generateHourlyTideEstimates(tideData: TideExtreme[], predictionDate: string): TideHourlyEstimate[] {
-  const estimates: TideHourlyEstimate[] = [];
-  const [yearRaw, monthRaw, dayRaw] = predictionDate.split("-");
-  const year = Number.parseInt(yearRaw ?? "", 10);
-  const month = Number.parseInt(monthRaw ?? "", 10);
-  const day = Number.parseInt(dayRaw ?? "", 10);
-
-  if ([year, month, day].some((value) => Number.isNaN(value))) {
-    return estimates;
-  }
-
-  const manilaOffsetHours = 8;
-  for (let hour = 0; hour < 24; hour += 1) {
-    const queryTimeUtcMs = Date.UTC(year, month - 1, day, hour, 0, 0) - manilaOffsetHours * 60 * 60 * 1000;
-    const queryTime = new Date(queryTimeUtcMs);
-    const height = estimateTideHeight(tideData, queryTime);
-
-    if (height === null) {
-      continue;
-    }
-
-    const distToNearest = Math.min(...tideData.map((e) => Math.abs(queryTime.getTime() - new Date(e.time).getTime()))) / (60 * 60 * 1000);
-    let confidence: "high" | "medium" | "low" = "medium";
-    if (distToNearest < 1) confidence = "high";
-    if (distToNearest > 3) confidence = "low";
-
-    estimates.push({
-      hour,
-      estimatedHeight: Math.round(height * 100) / 100,
-      confidence,
-    });
-  }
-
-  return estimates;
-}
 
 async function upsertHourlyRows(adminSupabase: ReturnType<typeof createAdminClient>, predictionDate: string, tideData: TideExtreme[]): Promise<number> {
   const hourly = generateHourlyTideEstimates(tideData, predictionDate);

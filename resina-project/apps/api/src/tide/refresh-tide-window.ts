@@ -8,26 +8,7 @@
 import "dotenv/config";
 import { getTidePredictionFromDB, smartFetchTideData, supabase } from "../services/tide.service.js";
 import { generateHourlyTideEstimates } from "../services/tide-interpolation.js";
-
-function getManilaDate(offsetDays: number): string {
-  const target = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(target);
-
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  if (!year || !month || !day) {
-    throw new Error("Failed to resolve Manila date");
-  }
-
-  return `${year}-${month}-${day}`;
-}
+import { getManilaDate } from "../utils/date.js";
 
 async function upsertHourlyForDate(predictionDate: string): Promise<number> {
   const tideData = await getTidePredictionFromDB(predictionDate);

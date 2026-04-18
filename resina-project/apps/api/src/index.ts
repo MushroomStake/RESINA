@@ -7,26 +7,59 @@ import "dotenv/config";
 import express, { Request, Response } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { getManilaDate } from "./utils/date.js";
 import { getTidePredictionFromDB, supabase } from "./services/tide.service.js";
 import { estimateTideHeight, getTideStatus, generateHourlyTideEstimates, InterpolationMethod } from "./services/tide-interpolation.js";
 
-function getManilaDate(): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
+const VALID_INTERPOLATION_METHODS: InterpolationMethod[] = ["rule-of-twelfths", "sine-wave"];
 
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  if (!year || !month || !day) {
-    throw new Error("Failed to resolve Manila date");
+function resolveInterpolationMethod(methodParam: unknown): InterpolationMethod {
+  if (typeof methodParam !== "string") {
+    return "rule-of-twelfths";
   }
 
-  return `${year}-${month}-${day}`;
+  return VALID_INTERPOLATION_METHODS.includes(methodParam as InterpolationMethod)
+    ? (methodParam as InterpolationMethod)
+    : "rule-of-twelfths";
+}
+
+function isValidIsoDate(date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return false;
+  }
+
+  const [yearRaw, monthRaw, dayRaw] = date.split("-");
+  const year = Number.parseInt(yearRaw ?? "", 10);
+  const month = Number.parseInt(monthRaw ?? "", 10);
+  const day = Number.parseInt(dayRaw ?? "", 10);
+
+  if ([year, month, day].some((value) => Number.isNaN(value))) {
+    return false;
+  }
+
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  return (
+    candidate.getUTCFullYear() === year &&
+    candidate.getUTCMonth() === month - 1 &&
+    candidate.getUTCDate() === day
+  );
+}
+
+function resolveDateQuery(dateParam: unknown): { date: string | null; error: string | null } {
+  if (dateParam === undefined) {
+    return { date: getManilaDate(), error: null };
+  }
+
+  if (typeof dateParam !== "string") {
+    return { date: null, error: "Invalid date parameter. Expected format: YYYY-MM-DD." };
+  }
+
+  const normalized = dateParam.trim();
+  if (!isValidIsoDate(normalized)) {
+    return { date: null, error: "Invalid date parameter. Expected format: YYYY-MM-DD." };
+  }
+
+  return { date: normalized, error: null };
 }
 
 const app = express();
@@ -122,8 +155,12 @@ app.get("/api/tide/current", async (req: Request, res: Response) => {
  */
 app.get("/api/tide/hourly", async (req: Request, res: Response) => {
   try {
-    const date = (req.query.date as string) || getManilaDate();
-    const method = (req.query.method as InterpolationMethod) || "rule-of-twelfths";
+    const { date, error: dateError } = resolveDateQuery(req.query.date);
+    if (dateError || !date) {
+      return res.status(400).json({ error: dateError });
+    }
+
+    const method = resolveInterpolationMethod(req.query.method);
 
     // Try to fetch pre-computed hourly data from tide_hourly table
     const { data: cachedHourly, error: fetchError } = await supabase
@@ -184,7 +221,11 @@ app.get("/api/tide/estimate", tideEstimateLimiter, async (req: Request, res: Res
       queryTime = new Date(req.query.time as string);
     } else {
       // Use date and hour parameters
-      const date = (req.query.date as string) || getManilaDate();
+      const { date, error: dateError } = resolveDateQuery(req.query.date);
+      if (dateError || !date) {
+        return res.status(400).json({ error: dateError });
+      }
+
       const hour = parseInt(req.query.hour as string) || new Date().getUTCHours();
       queryTime = new Date(`${date}T${String(hour).padStart(2, "0")}:00:00Z`);
     }
@@ -224,7 +265,11 @@ app.get("/api/tide/estimate", tideEstimateLimiter, async (req: Request, res: Res
  */
 app.get("/api/tide/extremes", async (req: Request, res: Response) => {
   try {
-    const date = (req.query.date as string) || getManilaDate();
+    const { date, error: dateError } = resolveDateQuery(req.query.date);
+    if (dateError || !date) {
+      return res.status(400).json({ error: dateError });
+    }
+
     const tideData = await getTidePredictionFromDB(date);
 
     if (!tideData) {
