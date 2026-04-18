@@ -159,6 +159,7 @@ export default function AdminAnnouncementsPage() {
   const [selectedImages, setSelectedImages] = useState<AnnouncementMedia[]>([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedHeadlineIds, setExpandedHeadlineIds] = useState<Set<string>>(new Set());
   const [expandedDescriptionIds, setExpandedDescriptionIds] = useState<Set<string>>(new Set());
@@ -290,6 +291,14 @@ export default function AdminAnnouncementsPage() {
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, [openMenuId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchQuery(searchInput);
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
 
   const filteredAnnouncements = announcements.filter((entry) => {
     const normalizedQuery = normalizeSearchText(searchQuery);
@@ -770,8 +779,8 @@ export default function AdminAnnouncementsPage() {
                 </span>
                 <input
                   type="search"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
                   placeholder="Search announcements..."
                   className="w-full rounded-xl border border-[#d8e4f1] bg-white py-2.5 pl-9 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#9bc2e8]"
                 />

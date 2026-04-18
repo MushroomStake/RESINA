@@ -22,6 +22,48 @@ type CacheAwareLoadResultLike = {
   cachedAt: number | null;
 };
 
+function getManilaDateKeyParts(value: Date): { year: string; month: string; day: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return {
+      year: value.getUTCFullYear().toString(),
+      month: String(value.getUTCMonth() + 1).padStart(2, "0"),
+      day: String(value.getUTCDate()).padStart(2, "0"),
+    };
+  }
+
+  return { year, month, day };
+}
+
+export function formatManilaDateKey(value: Date): string {
+  const { year, month, day } = getManilaDateKeyParts(value);
+  return `${year}-${month}-${day}`;
+}
+
+export function parseManilaDateKey(dateKey: string): Date {
+  const parsed = new Date(`${dateKey}T00:00:00Z`);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  const fallback = new Date(dateKey);
+  if (!Number.isNaN(fallback.getTime())) {
+    return fallback;
+  }
+
+  return new Date();
+}
+
 const HISTORY_LEVELS: Record<
   HistoryAlertLevel,
   {
@@ -96,13 +138,11 @@ export function getHistoryDateKey(record: Pick<HistoryRecordLike, "recordedAt" |
     return record.readingDate;
   }
 
-  return new Date(record.recordedAt).toLocaleDateString("en-CA", {
-    timeZone: "Asia/Manila",
-  });
+  return formatManilaDateKey(new Date(record.recordedAt));
 }
 
 export function formatHistoryGroupDateLabel(dateKey: string): string {
-  const parsed = new Date(`${dateKey}T00:00:00`);
+  const parsed = parseManilaDateKey(dateKey);
   if (Number.isNaN(parsed.getTime())) {
     return dateKey;
   }

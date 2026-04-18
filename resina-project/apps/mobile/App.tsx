@@ -512,6 +512,7 @@ export default function App() {
 
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [announcementFilter, setAnnouncementFilter] = useState<AnnouncementFilterKey>("all");
+  const [announcementSearchInput, setAnnouncementSearchInput] = useState("");
   const [announcementSearchQuery, setAnnouncementSearchQuery] = useState("");
   const [isAnnouncementsLoading, setIsAnnouncementsLoading] = useState(false);
   const [isLoadingMoreAnnouncements, setIsLoadingMoreAnnouncements] = useState(false);
@@ -521,8 +522,6 @@ export default function App() {
   const [selectedAnnouncementForComments, setSelectedAnnouncementForComments] = useState<AnnouncementItem | null>(null);
   const [historyRecords, setHistoryRecords] = useState<HistoryRecord[]>([]);
   const [historyStatusFilter, setHistoryStatusFilter] = useState<"all" | HistoryAlertLevel>("all");
-  const [selectedHistoryDateKey, setSelectedHistoryDateKey] = useState<string | null>(null);
-  const [showHistoryDatePicker, setShowHistoryDatePicker] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
   const [hasMoreHistoryRecords, setHasMoreHistoryRecords] = useState(true);
@@ -627,10 +626,9 @@ export default function App() {
   const filteredHistoryRecords = useMemo(() => {
     return historyRecords.filter((entry) => {
       const matchesStatus = historyStatusFilter === "all" || entry.alertLevel === historyStatusFilter;
-      const matchesDate = !selectedHistoryDateKey || getHistoryDateKey(entry) === selectedHistoryDateKey;
-      return matchesStatus && matchesDate;
+      return matchesStatus;
     });
-  }, [historyRecords, historyStatusFilter, selectedHistoryDateKey]);
+  }, [historyRecords, historyStatusFilter]);
 
   const groupedHistoryRecords = useMemo<HistoryDayGroup[]>(() => {
     const grouped = new Map<string, HistoryRecord[]>();
@@ -671,6 +669,14 @@ export default function App() {
   const residentStatusCaption = useMemo(() => {
     return profileState.residentStatus === "non_resident" ? "Outside Sta. Rita" : "Sta. Rita Resident";
   }, [profileState.residentStatus]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAnnouncementSearchQuery(announcementSearchInput);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [announcementSearchInput]);
 
   const statusVariant = errorMessage ? "error" : "success";
   const statusModalMessage = useMemo(
@@ -1675,48 +1681,6 @@ export default function App() {
     };
   }, [session, isOnline]);
 
-  const selectedHistoryDateValue = useMemo(() => {
-    if (!selectedHistoryDateKey) {
-      return new Date();
-    }
-
-    const parsed = new Date(`${selectedHistoryDateKey}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) {
-      return new Date();
-    }
-
-    return parsed;
-  }, [selectedHistoryDateKey]);
-
-  const selectedHistoryDateLabel = useMemo(() => {
-    if (!selectedHistoryDateKey) {
-      return "All Dates";
-    }
-
-    return formatHistoryGroupDateLabel(selectedHistoryDateKey);
-  }, [selectedHistoryDateKey]);
-
-  const handleHistoryDateChange = (event: DateTimePickerEvent, date?: Date) => {
-    if (event.type === "dismissed") {
-      setShowHistoryDatePicker(false);
-      return;
-    }
-
-    if (!date) {
-      return;
-    }
-
-    const nextDateKey = date.toLocaleDateString("en-CA", {
-      timeZone: "Asia/Manila",
-    });
-
-    setSelectedHistoryDateKey(nextDateKey);
-
-    if (Platform.OS === "android") {
-      setShowHistoryDatePicker(false);
-    }
-  };
-
   const handleLoadMoreAnnouncements = () => {
     if (isAnnouncementsLoading || isLoadingMoreAnnouncements || !hasMoreAnnouncements) {
       return;
@@ -2494,10 +2458,10 @@ export default function App() {
           isLoadingMore={isLoadingMoreAnnouncements}
           canLoadMore={hasMoreAnnouncements}
           filter={announcementFilter}
-          searchQuery={announcementSearchQuery}
+          searchQuery={announcementSearchInput}
           textVariant={dashboardAtmosphere.textVariant}
           onChangeFilter={setAnnouncementFilter}
-          onChangeSearchQuery={setAnnouncementSearchQuery}
+          onChangeSearchQuery={setAnnouncementSearchInput}
           onOpenComments={openCommentsForAnnouncement}
           onLoadMore={handleLoadMoreAnnouncements}
           statusLabel={getSectionSyncLabel(announcementsSyncState, isOnline)}
@@ -2513,12 +2477,6 @@ export default function App() {
           isLoading={isHistoryLoading}
           canLoadMore={hasMoreHistoryRecords}
           textVariant={dashboardAtmosphere.textVariant}
-          selectedDateLabel={selectedHistoryDateLabel}
-          selectedDateValue={selectedHistoryDateValue}
-          showDatePicker={showHistoryDatePicker}
-          onToggleDatePicker={() => setShowHistoryDatePicker((prev) => !prev)}
-          onDateChange={handleHistoryDateChange}
-          onClearDate={() => setSelectedHistoryDateKey(null)}
           onLoadMore={handleLoadMoreHistory}
           statusFilter={historyStatusFilter}
           onChangeStatusFilter={setHistoryStatusFilter}

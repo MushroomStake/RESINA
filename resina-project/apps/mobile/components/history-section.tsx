@@ -1,6 +1,4 @@
-import DateTimePicker from "@react-native-community/datetimepicker";
-import type { DateTimePickerEvent } from "@react-native-community/datetimepicker";
-import { Pressable, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MobileSectionHeader, SectionSyncBadge, type SectionSyncBadgeVariant } from "./mobile-section-header";
 
 export type HistoryAlertLevel = "normal" | "critical" | "evacuation" | "spilling";
@@ -27,12 +25,6 @@ type HistorySectionProps = {
   groups: HistoryDayGroup[];
   isLoading: boolean;
   canLoadMore: boolean;
-  selectedDateLabel: string;
-  selectedDateValue: Date;
-  showDatePicker: boolean;
-  onToggleDatePicker: () => void;
-  onDateChange: (event: DateTimePickerEvent, date?: Date) => void;
-  onClearDate: () => void;
   onLoadMore: () => void;
   statusFilter: "all" | HistoryAlertLevel;
   onChangeStatusFilter: (nextFilter: "all" | HistoryAlertLevel) => void;
@@ -85,12 +77,6 @@ export function HistorySection({
   groups,
   isLoading,
   canLoadMore,
-  selectedDateLabel,
-  selectedDateValue,
-  showDatePicker,
-  onToggleDatePicker,
-  onDateChange,
-  onClearDate,
   onLoadMore,
   statusFilter,
   onChangeStatusFilter,
@@ -125,26 +111,8 @@ export function HistorySection({
       </ScrollView>
 
       <View style={styles.toolbarRow}>
-        <Pressable style={styles.dateRangeBtn} onPress={onToggleDatePicker}>
-          <Text style={styles.dateRangeText}>{selectedDateLabel}</Text>
-        </Pressable>
         <Text style={styles.sortedText}>SORTED: NEWEST FIRST</Text>
       </View>
-
-      {showDatePicker ? (
-        <View style={styles.calendarWrap}>
-          <DateTimePicker
-            mode="date"
-            value={selectedDateValue}
-            display={Platform.OS === "ios" ? "inline" : "default"}
-            onChange={onDateChange}
-          />
-        </View>
-      ) : null}
-
-      <Pressable style={styles.clearDateBtn} onPress={onClearDate} disabled={!selectedDateLabel}>
-        <Text style={styles.clearDateText}>Show all dates</Text>
-      </Pressable>
 
       {isLoading ? <Text style={[styles.loaderText, isLightText ? styles.loaderTextLight : null]}>Loading history...</Text> : null}
 
@@ -250,40 +218,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
-  dateRangeBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#d8dde4",
-    borderRadius: 12,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  dateRangeText: {
-    color: "#374151",
-    fontSize: 13,
-    fontWeight: "700",
-  },
   sortedText: {
     color: "#6b7280",
     fontSize: 11,
-    fontWeight: "700",
-  },
-  calendarWrap: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#d9dde3",
-    backgroundColor: "#ffffff",
-    padding: 8,
-    marginBottom: 8,
-  },
-  clearDateBtn: {
-    alignSelf: "flex-start",
-    marginBottom: 10,
-  },
-  clearDateText: {
-    color: "#2f8d41",
-    fontSize: 12,
     fontWeight: "700",
   },
   loaderText: {
