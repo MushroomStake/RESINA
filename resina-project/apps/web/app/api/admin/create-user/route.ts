@@ -90,7 +90,6 @@ export async function POST(request: NextRequest) {
       data: {
         full_name: normalizedFullName,
         position: role,
-        default_password: defaultPassword,
         admin_link: adminLink,
       },
     });
@@ -184,7 +183,6 @@ export async function POST(request: NextRequest) {
       metadata: {
         fullName: normalizedFullName,
         position: role,
-        defaultPassword,
         link: adminLink,
       },
     });
