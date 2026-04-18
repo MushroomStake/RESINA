@@ -6,6 +6,7 @@
 import "dotenv/config";
 import express, { Request, Response } from "express";
 import cors from "cors";
+import type { CorsOptions } from "cors";
 import rateLimit from "express-rate-limit";
 import { getManilaDate } from "./utils/date.js";
 import { getTidePredictionFromDB, supabase } from "./services/tide.service.js";
@@ -68,7 +69,7 @@ const PORT = process.env.PORT || 3001;
 // CORS Configuration
 // Allow requests from specified origins
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000,http://localhost:3001").split(",").map(origin => origin.trim());
-const corsOptions: any = {
+const corsOptions: CorsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);

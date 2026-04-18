@@ -32,9 +32,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     const verifyAdminAccess = async () => {
       const supabase = createClient();
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: userData } = await supabase.auth.getUser();
 
-      if (!sessionData.session) {
+      if (!userData.user) {
         router.replace("/admin");
         return;
       }
@@ -42,7 +42,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
-        .eq("auth_user_id", sessionData.session.user.id)
+        .eq("auth_user_id", userData.user.id)
         .maybeSingle();
 
       if (!isMounted) {

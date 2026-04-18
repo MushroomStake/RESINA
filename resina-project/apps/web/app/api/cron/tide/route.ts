@@ -2,35 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "../../../../lib/supabase/admin";
 import { getManilaDate } from "../../../../lib/date";
 import { generateHourlyTideEstimates } from "../../../../../api/src/services/tide-interpolation";
+import { fetchTideForPredictionDate } from "../../../../../api/src/services/stormglass.service";
 
 type TideExtreme = {
   type: "high" | "low";
   height: number;
   time: string;
 };
-
-function toStormGlassWindow(predictionDate: string): { startIso: string; endIso: string } {
-  const [yearRaw, monthRaw, dayRaw] = predictionDate.split("-");
-  const year = Number.parseInt(yearRaw ?? "", 10);
-  const month = Number.parseInt(monthRaw ?? "", 10);
-  const day = Number.parseInt(dayRaw ?? "", 10);
-
-  if ([year, month, day].some((value) => Number.isNaN(value))) {
-    throw new Error(`Invalid prediction date: ${predictionDate}`);
-  }
-
-  const manilaOffsetHours = 8;
-  const startUtcMs = Date.UTC(year, month - 1, day, 0, 0, 0) - manilaOffsetHours * 60 * 60 * 1000;
-  const endUtcMs = startUtcMs + (24 * 60 * 60 * 1000 - 1000);
-
-  // Add buffer on both ends so events around midnight are not missed.
-  const bufferMs = 12 * 60 * 60 * 1000;
-
-  return {
-    startIso: new Date(startUtcMs - bufferMs).toISOString(),
-    endIso: new Date(endUtcMs + bufferMs).toISOString(),
-  };
-}
 
 
 async function upsertHourlyRows(adminSupabase: ReturnType<typeof createAdminClient>, predictionDate: string, tideData: TideExtreme[]): Promise<number> {
@@ -66,11 +44,6 @@ export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  const stormGlassApiKey = process.env.STORMGLASS_API_KEY;
-  if (!stormGlassApiKey) {
-    return NextResponse.json({ error: "STORMGLASS_API_KEY is not configured." }, { status: 500 });
   }
 
   try {
@@ -114,37 +87,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const { startIso, endIso } = toStormGlassWindow(predictionDate);
-    const params = new URLSearchParams({
-      lat: "14.356",
-      lng: "120.283",
-      start: startIso,
-      end: endIso,
-    });
-
-    const stormResponse = await fetch(`https://api.stormglass.io/v2/tide/extremes/point?${params}`, {
-      headers: { Authorization: stormGlassApiKey },
-      cache: "no-store",
-    });
-
-    if (!stormResponse.ok) {
-      const details = await stormResponse.text();
-      return NextResponse.json(
-        { error: `StormGlass request failed (${stormResponse.status}): ${details}` },
-        { status: 502 },
-      );
-    }
-
-    const stormData = (await stormResponse.json()) as { data?: Array<Partial<TideExtreme>> };
-    const tideData: TideExtreme[] = Array.isArray(stormData.data)
-      ? stormData.data
-          .map((event): TideExtreme => ({
-            type: event.type === "high" ? "high" : "low",
-            height: Number(event.height),
-            time: typeof event.time === "string" ? event.time : "",
-          }))
-          .filter((event): event is TideExtreme => Boolean(event.time) && Number.isFinite(event.height))
-      : [];
+    const tideData = (await fetchTideForPredictionDate(predictionDate)) ?? [];
 
     if (!tideData.length) {
       return NextResponse.json(

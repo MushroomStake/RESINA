@@ -81,42 +81,36 @@ function findSurroundingExtremes(
   tideData: TideData,
   queryTime: Date
 ): { low: TideExtreme; high: TideExtreme } | null {
+  if (!tideData.length) {
+    return null;
+  }
+
   const queryMs = queryTime.getTime();
 
   // Sort by time
   const sorted = [...tideData].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 
   let preceding = sorted[0];
-  let following = sorted[0];
+  // Default to last entry for queries after all known extremes.
+  let following = sorted[sorted.length - 1];
+  let foundFollowing = false;
 
   for (const extreme of sorted) {
     const extremeMs = new Date(extreme.time).getTime();
     if (extremeMs <= queryMs) {
       preceding = extreme;
     }
-    if (extremeMs >= queryMs && following.time === sorted[0].time) {
+    if (!foundFollowing && extremeMs >= queryMs) {
       following = extreme;
+      foundFollowing = true;
     }
   }
 
-  // Ensure we have a low and high in sequence
-  if (preceding.type === "high" && following.type === "low") {
-    // Swap so preceding is low
-    [preceding, following] = [following, preceding];
-  }
-
-  if (preceding.type === "low" && following.type === "high") {
-    return {
-      low: preceding,
-      high: following,
-    };
-  }
-
-  if (preceding.type === "high" && following.type === "low") {
-    return {
-      low: following,
-      high: preceding,
-    };
+  // Return normalized pair whenever types differ.
+  if (preceding.type !== following.type) {
+    return preceding.type === "low"
+      ? { low: preceding, high: following }
+      : { low: following, high: preceding };
   }
 
   // If both same type or insufficient data

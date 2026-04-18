@@ -27,29 +27,21 @@ export function getManilaDate(offsetDays: number = 0): string {
     throw new Error("Failed to resolve Manila date");
   }
 
-  let dateStr = `${year}-${month}-${day}`;
+  const yearNum = Number.parseInt(year, 10);
+  const monthNum = Number.parseInt(month, 10);
+  const dayNum = Number.parseInt(day, 10);
 
-  // Apply offset if provided
-  if (offsetDays !== 0) {
-    const date = new Date(dateStr);
-    date.setDate(date.getDate() + offsetDays);
-    const offsetFormatter = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Manila",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-    const offsetParts = offsetFormatter.formatToParts(date);
-    const offsetYear = offsetParts.find((part) => part.type === "year")?.value;
-    const offsetMonth = offsetParts.find((part) => part.type === "month")?.value;
-    const offsetDay = offsetParts.find((part) => part.type === "day")?.value;
-
-    if (!offsetYear || !offsetMonth || !offsetDay) {
-      throw new Error("Failed to resolve offset Manila date");
-    }
-
-    dateStr = `${offsetYear}-${offsetMonth}-${offsetDay}`;
+  if ([yearNum, monthNum, dayNum].some((value) => Number.isNaN(value))) {
+    throw new Error("Failed to parse Manila date parts");
   }
 
-  return dateStr;
+  // Apply offset using UTC date arithmetic to avoid server-local timezone effects.
+  const utcMs = Date.UTC(yearNum, monthNum - 1, dayNum) + offsetDays * 24 * 60 * 60 * 1000;
+  const normalized = new Date(utcMs);
+
+  const outYear = normalized.getUTCFullYear();
+  const outMonth = String(normalized.getUTCMonth() + 1).padStart(2, "0");
+  const outDay = String(normalized.getUTCDate()).padStart(2, "0");
+
+  return `${outYear}-${outMonth}-${outDay}`;
 }

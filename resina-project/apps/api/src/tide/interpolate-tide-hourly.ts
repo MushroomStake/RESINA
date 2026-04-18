@@ -6,7 +6,7 @@
  */
 
 import "dotenv/config";
-import { getTidePredictionFromDB, saveTidePredictionToDB, supabase } from "../services/tide.service.js";
+import { getTidePredictionFromDB, supabase } from "../services/tide.service.js";
 import { generateHourlyTideEstimates } from "../services/tide-interpolation.js";
 import { getManilaDate } from "../utils/date.js";
 
@@ -30,23 +30,20 @@ async function main() {
     const hourlyEstimates = generateHourlyTideEstimates(tideData, today, "rule-of-twelfths");
     console.log(`✓ Generated ${hourlyEstimates.length} hourly estimates using Rule of Twelfths\n`);
 
-    // Upsert hourly data into tide_hourly table
-    for (const { hour, estimatedHeight, confidence } of hourlyEstimates) {
-      const { error } = await supabase.from("tide_hourly").upsert(
-        {
-          prediction_date: today,
-          hour_of_day: hour,
-          estimated_height: estimatedHeight,
-          confidence,
-        },
-        {
-          onConflict: "prediction_date,hour_of_day",
-        }
-      );
+    // Batch upsert hourly data into tide_hourly table in a single round-trip.
+    const payload = hourlyEstimates.map(({ hour, estimatedHeight, confidence }) => ({
+      prediction_date: today,
+      hour_of_day: hour,
+      estimated_height: estimatedHeight,
+      confidence,
+    }));
 
-      if (error) {
-        console.warn(`⚠ Error upserting hour ${hour}:`, error.message);
-      }
+    const { error } = await supabase.from("tide_hourly").upsert(payload, {
+      onConflict: "prediction_date,hour_of_day",
+    });
+
+    if (error) {
+      throw new Error(`Failed to upsert hourly tide estimates: ${error.message}`);
     }
 
     console.log(`✅ Hourly tide estimates stored in tide_hourly table`);

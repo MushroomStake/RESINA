@@ -1,5 +1,6 @@
 // Supabase client for server-side operations
 import { createClient } from "@supabase/supabase-js";
+import { fetchTideForPredictionDate, fetchTideFromStormGlass as fetchFromStormGlassShared } from "./stormglass.service";
 
 const supabaseUrl = process.env.SUPABASE_URL || "";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || "";
@@ -80,59 +81,11 @@ export async function saveTidePredictionToDB(
   }
 }
 
-/**
- * Fetch tide predictions from StormGlass API
- * Coordinates: Sta. Rita Bridge, Olongapo (14.356, 120.283)
- */
 export async function fetchTideFromStormGlass(
   startDate: string,
   endDate: string
 ): Promise<TideData | null> {
-  const stormGlassApiKey = process.env.STORMGLASS_API_KEY;
-  if (!stormGlassApiKey) {
-    throw new Error("Missing STORMGLASS_API_KEY environment variable");
-  }
-
-  const lat = 14.356;
-  const lng = 120.283;
-
-  // ISO 8601 format required by StormGlass
-  const params = new URLSearchParams({
-    lat: String(lat),
-    lng: String(lng),
-    start: startDate,
-    end: endDate,
-  });
-
-  const url = `https://api.stormglass.io/v2/tide/extremes/point?${params}`;
-
-  const headers = {
-    Authorization: stormGlassApiKey,
-  };
-
-  try {
-    const response = await fetch(url, { headers });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`StormGlass API error: ${response.status} - ${errorData}`);
-    }
-
-    const data = await response.json() as { data: TideExtreme[] };
-
-    // Normalize response format
-    const tideEvents: TideData = data.data.map((event) => ({
-      type: event.type as "high" | "low",
-      height: event.height,
-      time: event.time,
-    }));
-
-    console.log(`✓ Fetched ${tideEvents.length} tide events from StormGlass`);
-    return tideEvents;
-  } catch (error) {
-    console.error("Error fetching from StormGlass:", error);
-    throw error;
-  }
+  return fetchFromStormGlassShared(startDate, endDate);
 }
 
 /**
@@ -147,27 +100,8 @@ export async function smartFetchTideData(predictionDate: string): Promise<{ succ
     return { success: true, apiUsed: false };
   }
 
-  // Step 2: If no cache, fetch from StormGlass using Manila-day boundaries.
-  // predictionDate is interpreted as Asia/Manila calendar day.
-  const [yearRaw, monthRaw, dayRaw] = predictionDate.split("-");
-  const year = Number.parseInt(yearRaw ?? "", 10);
-  const month = Number.parseInt(monthRaw ?? "", 10);
-  const day = Number.parseInt(dayRaw ?? "", 10);
-
-  if ([year, month, day].some((value) => Number.isNaN(value))) {
-    throw new Error(`Invalid predictionDate format: ${predictionDate}`);
-  }
-
-  const manilaOffsetHours = 8;
-  const startUtcMs = Date.UTC(year, month - 1, day, 0, 0, 0) - manilaOffsetHours * 60 * 60 * 1000;
-  const endUtcMs = startUtcMs + (24 * 60 * 60 * 1000 - 1000);
-
-  // Add boundary buffer so interpolation has surrounding extremes near midnight.
-  const bufferMs = 12 * 60 * 60 * 1000;
-  const startIso = new Date(startUtcMs - bufferMs).toISOString();
-  const endIso = new Date(endUtcMs + bufferMs).toISOString();
-
-  const tideData = await fetchTideFromStormGlass(startIso, endIso);
+  // Step 2: If no cache, fetch from StormGlass using shared Manila-day window utility.
+  const tideData = await fetchTideForPredictionDate(predictionDate);
   if (!tideData) {
     throw new Error("Failed to fetch tide data from StormGlass");
   }

@@ -159,10 +159,6 @@ function inlineStringCell(reference: string, value: string, styleId: number): st
   return `<c r="${reference}" t="inlineStr" s="${styleId}"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
 }
 
-function textCell(reference: string, value: string, styleId: number): string {
-  return `<c r="${reference}" t="inlineStr" s="${styleId}"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
-}
-
 function numberCell(reference: string, value: number, styleId: number): string {
   return `<c r="${reference}" s="${styleId}"><v>${value.toFixed(2)}</v></c>`;
 }
@@ -196,11 +192,11 @@ function createSheetXml(options: BuildAnalyticsWorkbookOptions): string {
             : 13;
 
     return rowXml(rowNumber, [
-      textCell(`A${rowNumber}`, formatExcelDate(entry), 7),
-      textCell(`B${rowNumber}`, formatExcelTime(entry), 7),
+      inlineStringCell(`A${rowNumber}`, formatExcelDate(entry), 7),
+      inlineStringCell(`B${rowNumber}`, formatExcelTime(entry), 7),
       inlineStringCell(`C${rowNumber}`, entry.statusLabel, statusStyle),
       numberCell(`D${rowNumber}`, entry.waterLevel, 8),
-      textCell(`E${rowNumber}`, entry.description, 9),
+      inlineStringCell(`E${rowNumber}`, entry.description, 9),
     ], 20);
   });
 

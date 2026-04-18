@@ -16,24 +16,25 @@ import {
 async function main() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
-  const openWeatherApiKey = process.env.OPENWEATHER_API_KEY ?? process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
+  const openWeatherApiKey = process.env.OPENWEATHER_API_KEY;
 
   if (!supabaseUrl || !supabaseServiceKey) {
     throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY");
   }
 
   if (!openWeatherApiKey) {
-    throw new Error("Missing OPENWEATHER_API_KEY (or NEXT_PUBLIC_OPENWEATHER_API_KEY)");
+    throw new Error("Missing OPENWEATHER_API_KEY");
   }
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const response = await fetch(
-    `https://api.openweathermap.org/data/2.5/weather?q=Olongapo,PH&units=metric&appid=${openWeatherApiKey}`,
-    {},
-  );
+  const response = await fetch("https://api.openweathermap.org/data/2.5/weather?q=Olongapo,PH&units=metric", {
+    headers: {
+      "x-api-key": openWeatherApiKey,
+    },
+  });
 
   if (!response.ok) {
     const text = await response.text();
@@ -88,7 +89,14 @@ async function main() {
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 60);
-  await supabase.from("weather_logs").delete().lt("recorded_at", cutoff.toISOString());
+  const { error: pruneError } = await supabase
+    .from("weather_logs")
+    .delete()
+    .lt("recorded_at", cutoff.toISOString());
+
+  if (pruneError) {
+    console.warn(`Weather log prune failed: ${pruneError.message}`);
+  }
 
   console.log(
     JSON.stringify(

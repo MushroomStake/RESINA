@@ -27,16 +27,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const openWeatherApiKey = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
+  const openWeatherApiKey = process.env.OPENWEATHER_API_KEY;
   if (!openWeatherApiKey) {
     return NextResponse.json({ error: "OpenWeather API key is not configured." }, { status: 500 });
   }
 
   // 1. Fetch current weather from OpenWeatherMap.
-  const owmResponse = await fetch(
-    `https://api.openweathermap.org/data/2.5/weather?q=Olongapo,PH&units=metric&appid=${openWeatherApiKey}`,
-    { cache: "no-store" },
-  );
+  const owmResponse = await fetch("https://api.openweathermap.org/data/2.5/weather?q=Olongapo,PH&units=metric", {
+    cache: "no-store",
+    headers: {
+      "x-api-key": openWeatherApiKey,
+    },
+  });
 
   if (!owmResponse.ok) {
     return NextResponse.json(

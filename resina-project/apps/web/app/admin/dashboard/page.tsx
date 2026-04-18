@@ -492,8 +492,8 @@ export default function AdminDashboardPage() {
     };
 
     const initialize = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
         router.replace("/admin");
         return;
       }
