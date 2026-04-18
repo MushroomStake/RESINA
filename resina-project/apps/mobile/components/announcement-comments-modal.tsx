@@ -55,10 +55,39 @@ const PROFILE_AVATAR_SOURCES: Record<ProfileAvatarKey, ImageSourcePropType> = {
   woman: require("../assets/Profile/woman.png"),
   woman2: require("../assets/Profile/woman 2.png"),
 };
+const STA_RITA_ICON_SOURCE = require("../assets/images/Sta Rita.png");
+const ADMIN_COMMENTER_NAME = "brgy. sta. rita";
+const COMMENTS_PAGE_SIZE = 12;
 
 function resolveAvatarSource(value: unknown): ImageSourcePropType {
   const key = String(value ?? "").trim().toLowerCase() as ProfileAvatarKey;
   return PROFILE_AVATAR_SOURCES[key] ?? PROFILE_AVATAR_SOURCES.user;
+}
+
+function resolveCommentAvatar(
+  commenterName: string,
+  commenterAuthUserId: string | null,
+  sessionUserId: string | null,
+  currentUserAvatarSource: ImageSourcePropType,
+  currentCommenterName: string,
+): ImageSourcePropType {
+  if (commenterName.trim().toLowerCase() === ADMIN_COMMENTER_NAME) {
+    return STA_RITA_ICON_SOURCE;
+  }
+
+  if (commenterAuthUserId) {
+    if (commenterAuthUserId === sessionUserId) {
+      return currentUserAvatarSource;
+    }
+
+    return PROFILE_AVATAR_SOURCES.user;
+  }
+
+  if (commenterName.trim().toLowerCase() === currentCommenterName.trim().toLowerCase()) {
+    return currentUserAvatarSource;
+  }
+
+  return PROFILE_AVATAR_SOURCES.user;
 }
 
 function formatCommentAge(value: string): string {
@@ -123,6 +152,12 @@ function normalizeLegacyComments(
   return normalized;
 }
 
+function shouldShowCommentSeeMore(body: string): boolean {
+  const normalized = body ?? "";
+  const lineCount = normalized.split(/\r?\n/).length;
+  return normalized.length > 180 || lineCount > 3;
+}
+
 export function AnnouncementCommentsModal({
   visible,
   announcement,
@@ -137,6 +172,10 @@ export function AnnouncementCommentsModal({
   const { height: windowHeight } = useWindowDimensions();
   const [announcementComments, setAnnouncementComments] = useState<AnnouncementCommentItem[]>([]);
   const [isCommentsLoading, setIsCommentsLoading] = useState(false);
+  const [isLoadingMoreComments, setIsLoadingMoreComments] = useState(false);
+  const [commentsPage, setCommentsPage] = useState(1);
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [commentsTotalCount, setCommentsTotalCount] = useState(0);
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [modalError, setModalError] = useState("");
   const [supportsThreadParentColumn, setSupportsThreadParentColumn] = useState(true);
@@ -144,10 +183,15 @@ export function AnnouncementCommentsModal({
   const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null);
   const [replyingToCommentName, setReplyingToCommentName] = useState<string | null>(null);
   const [collapsedCommentIds, setCollapsedCommentIds] = useState<Set<string>>(new Set());
+  const [expandedCommentIds, setExpandedCommentIds] = useState<Set<string>>(new Set());
   const [commenterAvatarByUserId, setCommenterAvatarByUserId] = useState<Record<string, ImageSourcePropType>>({});
+  const [activeOwnCommentTarget, setActiveOwnCommentTarget] = useState<AnnouncementCommentItem | null>(null);
+  const [editingCommentTarget, setEditingCommentTarget] = useState<AnnouncementCommentItem | null>(null);
+  const [editingCommentInput, setEditingCommentInput] = useState("");
+  const [isSavingCommentAction, setIsSavingCommentAction] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const keyboardOffset = Platform.OS === "ios" ? keyboardHeight : 0;
-  const composerInset = replyingToCommentName ? 108 : 70;
+  const composerInset = replyingToCommentName ? 150 : 118;
   const modalMaxHeight = Math.max(
     300,
     Math.min(windowHeight * 0.82, windowHeight - keyboardOffset - 96),
@@ -166,29 +210,81 @@ export function AnnouncementCommentsModal({
     return grouped;
   }, [announcementComments]);
 
-  const loadAnnouncementComments = useCallback(async () => {
+  const buildCollapsedParentIds = (rows: AnnouncementCommentItem[]) => {
+    const parentIds = new Set<string>();
+    const availableIds = new Set(rows.map((row) => row.id));
+
+    for (const row of rows) {
+      const parsed = parseReplyToken(row.comment_body ?? "");
+      const parentId = row.parent_comment_id ?? parsed.parentId;
+
+      if (parentId && availableIds.has(parentId)) {
+        parentIds.add(parentId);
+      }
+    }
+
+    return parentIds;
+  };
+
+  const mergeDedupComments = (prev: AnnouncementCommentItem[], incoming: AnnouncementCommentItem[]) => {
+    const merged = [...prev, ...incoming];
+    return merged.filter((entry, index, list) => list.findIndex((candidate) => candidate.id === entry.id) === index);
+  };
+
+  const loadAnnouncementComments = useCallback(async (page = 1, mode: "replace" | "append" = "replace") => {
     if (!announcement?.id) return;
 
-    setIsCommentsLoading(true);
-    setModalError("");
+    if (mode === "replace") {
+      setIsCommentsLoading(true);
+      setModalError("");
+    } else {
+      setIsLoadingMoreComments(true);
+    }
+
+    const start = (page - 1) * COMMENTS_PAGE_SIZE;
+    const end = start + COMMENTS_PAGE_SIZE - 1;
 
     const threadedResult = await supabase
       .from("announcement_comments")
-      .select("id, announcement_id, commenter_auth_user_id, parent_comment_id, commenter_name, comment_body, created_at")
+      .select("id, announcement_id, commenter_auth_user_id, parent_comment_id, commenter_name, comment_body, created_at", { count: "exact" })
       .eq("announcement_id", announcement.id)
-      .order("created_at", { ascending: true });
+      .range(start, end)
+      .order("created_at", { ascending: false });
 
     if (!threadedResult.error) {
       const nextComments = (threadedResult.data ?? []) as AnnouncementCommentItem[];
       setSupportsThreadParentColumn(true);
-      setAnnouncementComments(nextComments);
-      setCollapsedCommentIds(new Set());
+      setCommentsTotalCount(threadedResult.count ?? nextComments.length);
+      setCommentsHasMore((threadedResult.count ?? 0) > end + 1);
+      setCommentsPage(page);
+
+      if (mode === "append") {
+        let mergedComments: AnnouncementCommentItem[] = nextComments;
+        setAnnouncementComments((prev) => {
+          const merged = mergeDedupComments(prev, nextComments);
+          mergedComments = merged;
+          return merged;
+        });
+        setCollapsedCommentIds((prev) => {
+          const next = new Set(prev);
+          for (const id of buildCollapsedParentIds(mergedComments)) {
+            next.add(id);
+          }
+          return next;
+        });
+      } else {
+        setAnnouncementComments(nextComments);
+        setCollapsedCommentIds(buildCollapsedParentIds(nextComments));
+      }
+
       setIsCommentsLoading(false);
+      setIsLoadingMoreComments(false);
       return;
     }
 
     if (!threadedResult.error.message.toLowerCase().includes("parent_comment_id")) {
       setIsCommentsLoading(false);
+      setIsLoadingMoreComments(false);
       setModalError(threadedResult.error.message);
       onError?.(threadedResult.error.message);
       return;
@@ -196,12 +292,14 @@ export function AnnouncementCommentsModal({
 
     const fallbackResult = await supabase
       .from("announcement_comments")
-      .select("id, announcement_id, commenter_auth_user_id, commenter_name, comment_body, created_at")
+      .select("id, announcement_id, commenter_auth_user_id, commenter_name, comment_body, created_at", { count: "exact" })
       .eq("announcement_id", announcement.id)
-      .order("created_at", { ascending: true });
+      .range(start, end)
+      .order("created_at", { ascending: false });
 
     if (fallbackResult.error) {
       setIsCommentsLoading(false);
+      setIsLoadingMoreComments(false);
       setModalError(fallbackResult.error.message);
       onError?.(fallbackResult.error.message);
       return;
@@ -212,10 +310,40 @@ export function AnnouncementCommentsModal({
     );
 
     setSupportsThreadParentColumn(false);
-    setAnnouncementComments(nextComments);
-    setCollapsedCommentIds(new Set());
+    setCommentsTotalCount(fallbackResult.count ?? nextComments.length);
+    setCommentsHasMore((fallbackResult.count ?? 0) > end + 1);
+    setCommentsPage(page);
+
+    if (mode === "append") {
+      let mergedComments: AnnouncementCommentItem[] = nextComments;
+      setAnnouncementComments((prev) => {
+        const merged = mergeDedupComments(prev, nextComments);
+        mergedComments = merged;
+        return merged;
+      });
+      setCollapsedCommentIds((prev) => {
+        const next = new Set(prev);
+        for (const id of buildCollapsedParentIds(mergedComments)) {
+          next.add(id);
+        }
+        return next;
+      });
+    } else {
+      setAnnouncementComments(nextComments);
+      setCollapsedCommentIds(buildCollapsedParentIds(nextComments));
+    }
+
     setIsCommentsLoading(false);
+    setIsLoadingMoreComments(false);
   }, [announcement?.id]);
+
+  const handleLoadMoreComments = async () => {
+    if (!announcement?.id || isCommentsLoading || isLoadingMoreComments || !commentsHasMore) {
+      return;
+    }
+
+    await loadAnnouncementComments(commentsPage + 1, "append");
+  };
 
   useEffect(() => {
     if (!visible || !announcement?.id) return;
@@ -224,9 +352,16 @@ export function AnnouncementCommentsModal({
     setReplyingToCommentId(null);
     setReplyingToCommentName(null);
     setCollapsedCommentIds(new Set());
+    setExpandedCommentIds(new Set());
+    setCommentsPage(1);
+    setCommentsHasMore(false);
+    setCommentsTotalCount(0);
+    setActiveOwnCommentTarget(null);
+    setEditingCommentTarget(null);
+    setEditingCommentInput("");
     setModalError("");
     setKeyboardHeight(0);
-    void loadAnnouncementComments();
+    void loadAnnouncementComments(1, "replace");
   }, [announcement?.id, loadAnnouncementComments, visible]);
 
   useEffect(() => {
@@ -316,7 +451,7 @@ export function AnnouncementCommentsModal({
           filter: `announcement_id=eq.${announcement.id}`,
         },
         () => {
-          void loadAnnouncementComments();
+          void loadAnnouncementComments(1, "replace");
         },
       )
       .subscribe();
@@ -347,6 +482,152 @@ export function AnnouncementCommentsModal({
       }
       return next;
     });
+  };
+
+  const isOwnComment = (comment: AnnouncementCommentItem): boolean => {
+    if (sessionUserId && comment.commenter_auth_user_id) {
+      return comment.commenter_auth_user_id === sessionUserId;
+    }
+
+    return comment.commenter_name.trim().toLowerCase() === currentCommenterName.trim().toLowerCase();
+  };
+
+  const buildPersistedCommentBody = (body: string, parentCommentId: string | null) => {
+    if (!supportsThreadParentColumn && parentCommentId) {
+      return `[[reply:${parentCommentId}]] ${body}`;
+    }
+
+    return body;
+  };
+
+  const collectThreadCommentIds = (rootCommentId: string): string[] => {
+    const childIdsByParent = new Map<string, Set<string>>();
+
+    const linkChildToParent = (parentId: string | null, childId: string) => {
+      if (!parentId) {
+        return;
+      }
+
+      const next = childIdsByParent.get(parentId) ?? new Set<string>();
+      next.add(childId);
+      childIdsByParent.set(parentId, next);
+    };
+
+    for (const row of announcementComments) {
+      linkChildToParent(row.parent_comment_id, row.id);
+      const parsed = parseReplyToken(row.comment_body ?? "");
+      linkChildToParent(parsed.parentId, row.id);
+    }
+
+    const seen = new Set<string>();
+    const stack = [rootCommentId];
+
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current || seen.has(current)) {
+        continue;
+      }
+
+      seen.add(current);
+
+      const childIds = childIdsByParent.get(current);
+      if (!childIds) {
+        continue;
+      }
+
+      childIds.forEach((childId) => {
+        if (!seen.has(childId)) {
+          stack.push(childId);
+        }
+      });
+    }
+
+    return Array.from(seen);
+  };
+
+  const handleDeleteOwnComment = async (comment: AnnouncementCommentItem) => {
+    if (isSavingCommentAction) {
+      return;
+    }
+
+    if (!isOwnComment(comment)) {
+      const message = "You can only manage your own comments.";
+      setModalError(message);
+      onError?.(message);
+      return;
+    }
+
+    setIsSavingCommentAction(true);
+    setModalError("");
+
+    const idsToDelete = collectThreadCommentIds(comment.id);
+    if (idsToDelete.length === 0) {
+      setIsSavingCommentAction(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("announcement_comments")
+      .delete()
+      .in("id", idsToDelete);
+
+    setIsSavingCommentAction(false);
+
+    if (error) {
+      setModalError(error.message);
+      onError?.(error.message);
+      return;
+    }
+
+    setActiveOwnCommentTarget(null);
+    await loadAnnouncementComments(1, "replace");
+  };
+
+  const handleOpenEditOwnComment = (comment: AnnouncementCommentItem) => {
+    setActiveOwnCommentTarget(null);
+    setEditingCommentTarget(comment);
+    setEditingCommentInput(comment.comment_body ?? "");
+  };
+
+  const handleSaveEditedComment = async () => {
+    if (!editingCommentTarget || isSavingCommentAction) {
+      return;
+    }
+
+    const nextBody = editingCommentInput.trim();
+    if (!nextBody) {
+      const message = "Comment cannot be empty.";
+      setModalError(message);
+      onError?.(message);
+      return;
+    }
+
+    setIsSavingCommentAction(true);
+    setModalError("");
+
+    let updateQuery = supabase
+      .from("announcement_comments")
+      .update({
+        comment_body: buildPersistedCommentBody(nextBody, editingCommentTarget.parent_comment_id),
+      })
+      .eq("id", editingCommentTarget.id);
+
+    if (sessionUserId) {
+      updateQuery = updateQuery.eq("commenter_auth_user_id", sessionUserId);
+    }
+
+    const { error } = await updateQuery;
+    setIsSavingCommentAction(false);
+
+    if (error) {
+      setModalError(error.message);
+      onError?.(error.message);
+      return;
+    }
+
+    setEditingCommentTarget(null);
+    setEditingCommentInput("");
+    await loadAnnouncementComments(1, "replace");
   };
 
   const handlePostComment = async () => {
@@ -434,10 +715,13 @@ export function AnnouncementCommentsModal({
     setCommentInput("");
     setReplyingToCommentId(null);
     setReplyingToCommentName(null);
-    await loadAnnouncementComments();
+    await loadAnnouncementComments(1, "replace");
   };
 
   const handleModalClose = () => {
+    setActiveOwnCommentTarget(null);
+    setEditingCommentTarget(null);
+    setEditingCommentInput("");
     setKeyboardHeight(0);
     onRequestClose();
   };
@@ -451,31 +735,51 @@ export function AnnouncementCommentsModal({
         style={[styles.commentItem, depth > 0 && { marginLeft: Math.min(depth * 20, 44) }]}
       >
         <View style={styles.commentRowMain}>
-          {comment.commenter_auth_user_id ? (
-            <Image
-              source={
-                comment.commenter_auth_user_id === sessionUserId
-                  ? currentUserAvatarSource
-                  : commenterAvatarByUserId[comment.commenter_auth_user_id] ?? PROFILE_AVATAR_SOURCES.user
-              }
-              style={styles.commentAvatarImage}
-              resizeMode="cover"
-            />
-          ) : comment.commenter_name.trim().toLowerCase() === currentCommenterName.trim().toLowerCase() ? (
-            <Image source={currentUserAvatarSource} style={styles.commentAvatarImage} resizeMode="cover" />
-          ) : (
-            <Ionicons name="person-circle-outline" size={24} color="#4b5563" style={styles.commentAvatar} />
-          )}
+          <Image
+            source={resolveCommentAvatar(comment.commenter_name, comment.commenter_auth_user_id, sessionUserId, currentUserAvatarSource, currentCommenterName)}
+            style={styles.commentAvatarImage}
+            resizeMode="cover"
+          />
           <View style={styles.commentContentCol}>
-            <Text style={styles.commentBodyInline}>
-              <Text style={styles.commentAuthor}>{comment.commenter_name}</Text> {comment.comment_body}
+            <Text style={styles.commentAuthor}>{comment.commenter_name}</Text>
+            <Text style={styles.commentBodyText} textBreakStrategy="simple" numberOfLines={expandedCommentIds.has(comment.id) ? undefined : 3}>
+              {comment.comment_body || "(Empty comment)"}
             </Text>
+            {shouldShowCommentSeeMore(comment.comment_body ?? "") ? (
+              <Pressable
+                style={styles.commentSeeMoreBtn}
+                onPress={() => {
+                  setExpandedCommentIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(comment.id)) {
+                      next.delete(comment.id);
+                    } else {
+                      next.add(comment.id);
+                    }
+                    return next;
+                  });
+                }}
+              >
+                <Text style={styles.commentSeeMoreText}>{expandedCommentIds.has(comment.id) ? "See less" : "See more"}</Text>
+              </Pressable>
+            ) : null}
 
             <View style={styles.commentMetaRow}>
               <Text style={styles.commentAge}>{formatCommentAge(comment.created_at)}</Text>
               <Pressable onPress={() => handleReplyToComment(comment.id, comment.commenter_name)}>
                 <Text style={styles.commentReplyText}>Reply</Text>
               </Pressable>
+              {isOwnComment(comment) ? (
+                <Pressable
+                  style={styles.ownCommentMoreBtn}
+                  onPress={() => setActiveOwnCommentTarget(comment)}
+                  disabled={isSavingCommentAction}
+                  accessibilityRole="button"
+                  accessibilityLabel="Comment actions"
+                >
+                  <Ionicons name="ellipsis-vertical" size={16} color="#6b7280" />
+                </Pressable>
+              ) : null}
             </View>
 
             {(commentsByParent.get(comment.id)?.length ?? 0) > 0 ? (
@@ -498,7 +802,8 @@ export function AnnouncementCommentsModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleModalClose}>
+    <>
+      <Modal visible={visible} transparent animationType="slide" onRequestClose={handleModalClose}>
       <View style={[styles.commentsModalOverlay, { paddingBottom: 14 + keyboardOffset }]}> 
         <View style={[styles.commentsModalCard, { maxHeight: modalMaxHeight }]}> 
           <View style={styles.commentsModalHeader}>
@@ -512,9 +817,14 @@ export function AnnouncementCommentsModal({
 
           <ScrollView
             style={styles.commentsList}
-            contentContainerStyle={[styles.commentsListContent, { paddingBottom: composerInset }]}
+            contentContainerStyle={[styles.commentsListContent, { paddingBottom: composerInset + 20 }]}
             keyboardShouldPersistTaps="handled"
           >
+            <View style={styles.commentsSummaryCard}>
+              <Text style={styles.commentsSummaryText}>{commentsTotalCount} comment{commentsTotalCount === 1 ? "" : "s"}</Text>
+              <Text style={styles.commentsSummaryText}>{commentsHasMore ? "More comments available" : "All comments loaded"}</Text>
+            </View>
+
             {modalError ? <Text style={styles.commentsErrorText}>{modalError}</Text> : null}
             {isCommentsLoading ? <Text style={styles.loaderText}>Loading comments...</Text> : null}
 
@@ -523,6 +833,16 @@ export function AnnouncementCommentsModal({
             ) : null}
 
             {!isCommentsLoading ? renderCommentThread(null) : null}
+
+            {!isCommentsLoading && !modalError && commentsHasMore ? (
+              <Pressable
+                style={[styles.loadMoreBtn, isLoadingMoreComments && styles.buttonDisabled]}
+                onPress={() => void handleLoadMoreComments()}
+                disabled={isLoadingMoreComments}
+              >
+                <Text style={styles.loadMoreBtnText}>{isLoadingMoreComments ? "Loading more..." : "Load more comments"}</Text>
+              </Pressable>
+            ) : null}
           </ScrollView>
 
           <View style={styles.commentComposerWrap}>
@@ -549,6 +869,10 @@ export function AnnouncementCommentsModal({
                   // Some Android keyboards skip hide events; force reset as fallback.
                   setTimeout(() => setKeyboardHeight(0), 120);
                 }}
+                multiline
+                numberOfLines={3}
+                scrollEnabled
+                blurOnSubmit={false}
                 style={styles.commentInput}
                 placeholder="Write a comment..."
                 placeholderTextColor="#9ca3af"
@@ -568,7 +892,102 @@ export function AnnouncementCommentsModal({
           </View>
         </View>
       </View>
-    </Modal>
+      </Modal>
+
+      <Modal
+        visible={Boolean(activeOwnCommentTarget)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActiveOwnCommentTarget(null)}
+      >
+        <Pressable style={styles.actionModalOverlay} onPress={() => setActiveOwnCommentTarget(null)}>
+          <Pressable style={styles.actionModalCard} onPress={() => undefined}>
+            <Text style={styles.actionModalTitle}>Comment options</Text>
+
+            <Pressable
+              style={styles.actionModalBtn}
+              onPress={() => {
+                if (!activeOwnCommentTarget) {
+                  return;
+                }
+
+                handleOpenEditOwnComment(activeOwnCommentTarget);
+              }}
+            >
+              <Text style={styles.actionModalBtnText}>Edit</Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.actionModalBtn, styles.actionModalDeleteBtn]}
+              onPress={() => {
+                if (!activeOwnCommentTarget) {
+                  return;
+                }
+
+                void handleDeleteOwnComment(activeOwnCommentTarget);
+              }}
+              disabled={isSavingCommentAction}
+            >
+              <Text style={styles.actionModalDeleteText}>{isSavingCommentAction ? "Deleting..." : "Delete"}</Text>
+            </Pressable>
+
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={Boolean(editingCommentTarget)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setEditingCommentTarget(null);
+          setEditingCommentInput("");
+        }}
+      >
+        <Pressable
+          style={styles.actionModalOverlay}
+          onPress={() => {
+            setEditingCommentTarget(null);
+            setEditingCommentInput("");
+          }}
+        >
+          <Pressable style={styles.editModalCard} onPress={() => undefined}>
+            <Text style={styles.actionModalTitle}>Edit comment</Text>
+
+            <TextInput
+              value={editingCommentInput}
+              onChangeText={setEditingCommentInput}
+              multiline
+              numberOfLines={4}
+              style={styles.editModalInput}
+              placeholder="Update your comment..."
+              placeholderTextColor="#9ca3af"
+            />
+
+            <View style={styles.editModalActionsRow}>
+              <Pressable
+                style={styles.editModalCancelBtn}
+                onPress={() => {
+                  setEditingCommentTarget(null);
+                  setEditingCommentInput("");
+                }}
+                disabled={isSavingCommentAction}
+              >
+                <Text style={styles.editModalCancelText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.editModalSaveBtn, isSavingCommentAction && styles.buttonDisabled]}
+                onPress={() => void handleSaveEditedComment()}
+                disabled={isSavingCommentAction}
+              >
+                <Text style={styles.editModalSaveText}>{isSavingCommentAction ? "Saving..." : "Save"}</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -639,10 +1058,42 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     gap: 10,
   },
+  commentsSummaryCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#dbe7f2",
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 4,
+  },
+  commentsSummaryText: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   commentsErrorText: {
     color: "#b91c1c",
     fontSize: 12,
     fontWeight: "600",
+  },
+  loadMoreBtn: {
+    alignSelf: "center",
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  loadMoreBtnText: {
+    color: "#334155",
+    fontSize: 13,
+    fontWeight: "700",
   },
   commentItem: {
     paddingVertical: 8,
@@ -656,8 +1107,8 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   commentAvatarImage: {
-    width: 24,
-    height: 24,
+    width: 30,
+    height: 30,
     borderRadius: 999,
     marginRight: 8,
     marginTop: 1,
@@ -665,22 +1116,43 @@ const styles = StyleSheet.create({
   },
   commentContentCol: {
     flex: 1,
+    minWidth: 0,
   },
   commentAuthor: {
     color: "#111827",
     fontSize: 15,
     fontWeight: "700",
   },
-  commentBodyInline: {
+  commentBodyText: {
     color: "#2f343d",
     fontSize: 15,
     lineHeight: 24,
+    flexShrink: 1,
+    flexWrap: "wrap",
+    width: "100%",
   },
   commentMetaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     marginTop: 2,
+  },
+  commentSeeMoreBtn: {
+    alignSelf: "flex-start",
+    marginTop: 2,
+  },
+  commentSeeMoreText: {
+    color: "#4f84db",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  ownCommentMoreBtn: {
+    marginLeft: "auto",
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
   },
   commentAge: {
     color: "#9ca3af",
@@ -739,13 +1211,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     gap: 8,
     flexShrink: 0,
   },
   inputAvatarImage: {
-    width: 34,
-    height: 34,
+    width: 40,
+    height: 40,
     borderRadius: 999,
     backgroundColor: "#e5e7eb",
   },
@@ -755,12 +1227,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f4f6",
     paddingHorizontal: 12,
     paddingVertical: 10,
+    minWidth: 0,
+    minHeight: 44,
+    maxHeight: 96,
     color: "#111827",
     fontSize: 14,
+    textAlignVertical: "top",
   },
   commentSendBtn: {
-    width: 32,
-    height: 32,
+    width: 40,
+    height: 40,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
@@ -772,5 +1248,95 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+  actionModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  actionModalCard: {
+    width: "100%",
+    maxWidth: 320,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    padding: 14,
+    gap: 8,
+  },
+  actionModalTitle: {
+    color: "#111827",
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  actionModalBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#f3f4f6",
+  },
+  actionModalBtnText: {
+    color: "#374151",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  actionModalDeleteBtn: {
+    backgroundColor: "#fee2e2",
+  },
+  actionModalDeleteText: {
+    color: "#b91c1c",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  editModalCard: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    padding: 14,
+  },
+  editModalInput: {
+    marginTop: 8,
+    borderRadius: 10,
+    backgroundColor: "#f3f4f6",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 96,
+    maxHeight: 160,
+    color: "#111827",
+    fontSize: 14,
+    textAlignVertical: "top",
+  },
+  editModalActionsRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  editModalCancelBtn: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  editModalCancelText: {
+    color: "#4b5563",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  editModalSaveBtn: {
+    borderRadius: 10,
+    backgroundColor: "#2563eb",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  editModalSaveText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

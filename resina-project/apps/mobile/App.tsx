@@ -378,6 +378,24 @@ function normalizeStatusMessage(message: string, variant: "error" | "success"): 
   return trimmed;
 }
 
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function includesNormalized(haystack: string, query: string): boolean {
+  if (!query) {
+    return true;
+  }
+
+  return normalizeSearchText(haystack).includes(query);
+}
+
 function normalizeResidentStatus(value: unknown): ResidentStatus {
   return String(value).toLowerCase() === "non_resident" ? "non_resident" : "resident";
 }
@@ -494,6 +512,7 @@ export default function App() {
 
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [announcementFilter, setAnnouncementFilter] = useState<AnnouncementFilterKey>("all");
+  const [announcementSearchQuery, setAnnouncementSearchQuery] = useState("");
   const [isAnnouncementsLoading, setIsAnnouncementsLoading] = useState(false);
   const [isLoadingMoreAnnouncements, setIsLoadingMoreAnnouncements] = useState(false);
   const [hasMoreAnnouncements, setHasMoreAnnouncements] = useState(true);
@@ -591,9 +610,19 @@ export default function App() {
   );
 
   const filteredAnnouncements = useMemo(() => {
-    if (announcementFilter === "all") return announcements;
-    return announcements.filter((entry) => entry.alert_level === announcementFilter);
-  }, [announcementFilter, announcements]);
+    const normalizedQuery = normalizeSearchText(announcementSearchQuery);
+
+    return announcements.filter((entry) => {
+      const matchesFilter = announcementFilter === "all" || entry.alert_level === announcementFilter;
+      const matchesSearch =
+        !normalizedQuery ||
+        includesNormalized(entry.title, normalizedQuery) ||
+        includesNormalized(entry.description, normalizedQuery) ||
+        includesNormalized(entry.posted_by_name, normalizedQuery);
+
+      return matchesFilter && matchesSearch;
+    });
+  }, [announcementFilter, announcementSearchQuery, announcements]);
 
   const filteredHistoryRecords = useMemo(() => {
     return historyRecords.filter((entry) => {
@@ -2465,8 +2494,10 @@ export default function App() {
           isLoadingMore={isLoadingMoreAnnouncements}
           canLoadMore={hasMoreAnnouncements}
           filter={announcementFilter}
+          searchQuery={announcementSearchQuery}
           textVariant={dashboardAtmosphere.textVariant}
           onChangeFilter={setAnnouncementFilter}
+          onChangeSearchQuery={setAnnouncementSearchQuery}
           onOpenComments={openCommentsForAnnouncement}
           onLoadMore={handleLoadMoreAnnouncements}
           statusLabel={getSectionSyncLabel(announcementsSyncState, isOnline)}

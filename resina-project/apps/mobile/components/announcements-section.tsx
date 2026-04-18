@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AnnouncementCard } from "./announcement-card";
 import { MobileSectionHeader, SectionSyncBadge, type SectionSyncBadgeVariant } from "./mobile-section-header";
 
@@ -35,7 +35,9 @@ type AnnouncementsSectionProps = {
   isLoadingMore?: boolean;
   canLoadMore?: boolean;
   filter: AnnouncementFilterKey;
+  searchQuery: string;
   onChangeFilter: (nextFilter: AnnouncementFilterKey) => void;
+  onChangeSearchQuery: (value: string) => void;
   onOpenComments: (entry: AnnouncementItem) => void;
   onLoadMore?: () => void;
   title?: string;
@@ -64,7 +66,9 @@ export function AnnouncementsSection({
   isLoadingMore = false,
   canLoadMore = false,
   filter,
+  searchQuery,
   onChangeFilter,
+  onChangeSearchQuery,
   onOpenComments,
   onLoadMore,
   title = "ANNOUNCEMENT",
@@ -81,6 +85,17 @@ export function AnnouncementsSection({
       <MobileSectionHeader title={title} textVariant={textVariant} />
       <Text style={[styles.subtitle, isLightText ? styles.subtitleLight : null]}>{subtitle}</Text>
       {statusLabel ? <SectionSyncBadge label={statusLabel} variant={statusVariant} /> : null}
+
+      <View style={styles.searchWrap}>
+        <Ionicons name="search-outline" size={16} color="#64748b" style={styles.searchIcon} />
+        <TextInput
+          value={searchQuery}
+          onChangeText={onChangeSearchQuery}
+          placeholder="Search announcements..."
+          placeholderTextColor="#94a3b8"
+          style={styles.searchInput}
+        />
+      </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll} contentContainerStyle={styles.filtersRow}>
         {filterOptions.map((option) => {
@@ -159,6 +174,27 @@ const styles = StyleSheet.create({
   },
   filtersScroll: {
     marginBottom: 8,
+  },
+  searchWrap: {
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#d8dde4",
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  searchIcon: {
+    marginTop: 1,
+  },
+  searchInput: {
+    flex: 1,
+    minHeight: 20,
+    color: "#334155",
+    fontSize: 14,
   },
   filtersRow: {
     gap: 8,

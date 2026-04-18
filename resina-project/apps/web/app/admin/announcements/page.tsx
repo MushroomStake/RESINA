@@ -46,6 +46,15 @@ type CommentRow = {
   created_at: string;
 };
 
+type CommentsResponse = {
+  comments?: CommentRow[];
+  totalCount?: number;
+  hasMore?: boolean;
+  page?: number;
+  limit?: number;
+  error?: string;
+};
+
 type ProfileRow = {
   full_name: string | null;
   email: string | null;
@@ -53,6 +62,7 @@ type ProfileRow = {
 
 const BUCKET_NAME = "announcement-images";
 const ADMIN_COMMENTER_NAME = "BRGY. STA. RITA";
+const COMMENTS_PAGE_SIZE = 12;
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("en-PH", {
@@ -78,6 +88,24 @@ function cleanFileName(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9.\-_]/g, "-");
 }
 
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function includesNormalized(haystack: string, query: string): boolean {
+  if (!query) {
+    return true;
+  }
+
+  return normalizeSearchText(haystack).includes(query);
+}
+
 function alertPillClass(level: AlertLevel): string {
   if (level === "emergency") {
     return "bg-[#fff1f2] text-[#be123c] border-[#fecdd3]";
@@ -100,6 +128,10 @@ export default function AdminAnnouncementsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCommentsModalOpen, setIsCommentsModalOpen] = useState(false);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [isLoadingMoreComments, setIsLoadingMoreComments] = useState(false);
+  const [commentsPage, setCommentsPage] = useState(1);
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [commentsTotalCount, setCommentsTotalCount] = useState(0);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [postedByName, setPostedByName] = useState("Unknown Admin");
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<AnnouncementRow | null>(null);
@@ -128,6 +160,8 @@ export default function AdminAnnouncementsPage() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [expandedHeadlineIds, setExpandedHeadlineIds] = useState<Set<string>>(new Set());
+  const [expandedDescriptionIds, setExpandedDescriptionIds] = useState<Set<string>>(new Set());
   const [alertFilter, setAlertFilter] = useState<"all" | AlertLevel>("all");
   const [personnelCount, setPersonnelCount] = useState(0);
   const [statusVisible, setStatusVisible] = useState(false);
@@ -158,6 +192,49 @@ export default function AdminAnnouncementsPage() {
 
     setAnnouncements((data ?? []) as AnnouncementRow[]);
     setIsLoadingAnnouncements(false);
+  };
+
+  const loadCommentsPage = async (announcementId: string, page = 1, mode: "replace" | "append" = "replace") => {
+    if (mode === "replace") {
+      setIsLoadingComments(true);
+      setCommentsError(null);
+    } else {
+      setIsLoadingMoreComments(true);
+    }
+
+    const response = await fetch(
+      `/api/announcements/comments?announcementId=${encodeURIComponent(announcementId)}&page=${page}&limit=${COMMENTS_PAGE_SIZE}`,
+      { method: "GET", cache: "no-store" },
+    );
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as CommentsResponse;
+      const message = payload.error ?? "Failed to load comments.";
+      setCommentsError(message);
+      setIsLoadingComments(false);
+      setIsLoadingMoreComments(false);
+      return;
+    }
+
+    const payload = (await response.json()) as CommentsResponse;
+    const nextComments = payload.comments ?? [];
+
+    setCommentsTotalCount(payload.totalCount ?? nextComments.length);
+    setCommentsHasMore(Boolean(payload.hasMore));
+    setCommentsPage(page);
+
+    if (mode === "append") {
+      setSelectedComments((prev) => {
+        const merged = [...prev, ...nextComments];
+        const deduped = merged.filter((entry, index, list) => list.findIndex((candidate) => candidate.id === entry.id) === index);
+        return deduped;
+      });
+    } else {
+      setSelectedComments(nextComments);
+    }
+
+    setIsLoadingComments(false);
+    setIsLoadingMoreComments(false);
   };
 
   const loadPersonnelCount = async () => {
@@ -215,11 +292,12 @@ export default function AdminAnnouncementsPage() {
   }, [openMenuId]);
 
   const filteredAnnouncements = announcements.filter((entry) => {
+    const normalizedQuery = normalizeSearchText(searchQuery);
     const matchesSearch =
-      !searchQuery.trim() ||
-      entry.title.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-      entry.description.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-      entry.posted_by_name.toLowerCase().includes(searchQuery.trim().toLowerCase());
+      !normalizedQuery ||
+      includesNormalized(entry.title, normalizedQuery) ||
+      includesNormalized(entry.description, normalizedQuery) ||
+      includesNormalized(entry.posted_by_name, normalizedQuery);
 
     const matchesFilter = alertFilter === "all" || entry.alert_level === alertFilter;
 
@@ -469,25 +547,19 @@ export default function AdminAnnouncementsPage() {
     setSelectedAnnouncement(announcement);
     setSelectedComments([]);
     setCommentsError(null);
+    setCommentsHasMore(false);
+    setCommentsPage(1);
+    setCommentsTotalCount(0);
     setIsCommentsModalOpen(true);
-    setIsLoadingComments(true);
+    await loadCommentsPage(announcement.id, 1, "replace");
+  };
 
-    const response = await fetch(`/api/announcements/comments?announcementId=${encodeURIComponent(announcement.id)}`, {
-      method: "GET",
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      setCommentsError(payload.error ?? "Failed to load comments.");
-      setIsLoadingComments(false);
+  const handleLoadMoreComments = async () => {
+    if (!selectedAnnouncement || isLoadingComments || isLoadingMoreComments || !commentsHasMore) {
       return;
     }
 
-    const payload = (await response.json()) as { comments?: CommentRow[] };
-
-    setSelectedComments(payload.comments ?? []);
-    setIsLoadingComments(false);
+    await loadCommentsPage(selectedAnnouncement.id, commentsPage + 1, "append");
   };
 
   const handleDeleteComment = async (commentId: string, commenterName: string) => {
@@ -502,8 +574,9 @@ export default function AdminAnnouncementsPage() {
       body: JSON.stringify({ commentId, announcementId: selectedAnnouncement.id }),
     });
 
+    const payload = (await response.json().catch(() => ({}))) as { error?: string; deletedIds?: string[] };
+
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
       setCommentsError(payload.error ?? "Failed to delete comment.");
       setDeletingCommentId(null);
       return;
@@ -517,7 +590,8 @@ export default function AdminAnnouncementsPage() {
       reference_id: selectedAnnouncement.id,
     });
 
-    setSelectedComments((prev) => prev.filter((c) => c.id !== commentId));
+    const idsToRemove = new Set(payload.deletedIds?.length ? payload.deletedIds : [commentId]);
+    setSelectedComments((prev) => prev.filter((c) => !idsToRemove.has(c.id)));
     setDeletingCommentId(null);
   };
 
@@ -560,7 +634,7 @@ export default function AdminAnnouncementsPage() {
     });
 
     if (payload.comment) {
-      setSelectedComments((prev) => [...prev, payload.comment as CommentRow]);
+      setSelectedComments((prev) => [payload.comment as CommentRow, ...prev]);
     }
     setIsSubmittingComment(false);
   };
@@ -810,7 +884,31 @@ export default function AdminAnnouncementsPage() {
                   <div className="flex h-full flex-col p-4">
                     {/* Title + 3-dot menu */}
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="min-h-[52px] text-base font-semibold leading-snug text-[#111827]">{entry.title}</h3>
+                      <div className="min-h-[52px] min-w-0 flex-1">
+                        <h3 className={`text-base font-semibold leading-snug text-[#111827] ${expandedHeadlineIds.has(entry.id) ? "" : "line-clamp-2"}`}>
+                          {entry.title}
+                        </h3>
+                        {entry.title.length > 80 ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setExpandedHeadlineIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(entry.id)) {
+                                  next.delete(entry.id);
+                                } else {
+                                  next.add(entry.id);
+                                }
+                                return next;
+                              });
+                            }}
+                            className="mt-1 text-xs font-semibold text-[#4f84db] hover:text-[#2f6ed2]"
+                          >
+                            {expandedHeadlineIds.has(entry.id) ? "See less" : "See more"}
+                          </button>
+                        ) : null}
+                      </div>
                       <div className="relative shrink-0">
                         <button
                           type="button"
@@ -858,7 +956,31 @@ export default function AdminAnnouncementsPage() {
                     </div>
 
                     {/* Description */}
-                    <p className="mt-2 min-h-[72px] line-clamp-3 text-sm text-[#6b7280]">{entry.description}</p>
+                    <div className="mt-2 min-h-[72px]">
+                      <p className={`text-sm text-[#6b7280] ${expandedDescriptionIds.has(entry.id) ? "" : "line-clamp-3"}`}>
+                        {entry.description}
+                      </p>
+                      {entry.description.length > 140 ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setExpandedDescriptionIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(entry.id)) {
+                                next.delete(entry.id);
+                              } else {
+                                next.add(entry.id);
+                              }
+                              return next;
+                            });
+                          }}
+                          className="mt-1 text-xs font-semibold text-[#4f84db] hover:text-[#2f6ed2]"
+                        >
+                          {expandedDescriptionIds.has(entry.id) ? "See less" : "See more"}
+                        </button>
+                      ) : null}
+                    </div>
 
                     {/* Divider */}
                     <div className="my-3 mt-auto border-t border-[#f0f2f4]" />
@@ -914,9 +1036,12 @@ export default function AdminAnnouncementsPage() {
           isOpen={isCommentsModalOpen}
           title={selectedAnnouncement?.title ?? "Announcement"}
           isLoading={isLoadingComments}
+          isLoadingMore={isLoadingMoreComments}
           error={commentsError}
           deletingCommentId={deletingCommentId}
           isSubmittingComment={isSubmittingComment}
+          hasMoreComments={commentsHasMore}
+          totalCount={commentsTotalCount}
           comments={selectedComments.map((comment) => ({
             ...comment,
             parent_comment_id: comment.parent_comment_id ?? null,
@@ -924,6 +1049,7 @@ export default function AdminAnnouncementsPage() {
           onClose={() => setIsCommentsModalOpen(false)}
           onDeleteComment={handleDeleteComment}
           onAddComment={handleAddComment}
+          onLoadMoreComments={() => void handleLoadMoreComments()}
           formatDateTime={formatDateTime}
         />
 

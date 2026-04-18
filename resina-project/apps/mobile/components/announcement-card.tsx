@@ -45,6 +45,8 @@ export const AnnouncementCard = memo(function AnnouncementCard({
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [galleryViewportWidth, setGalleryViewportWidth] = useState(0);
+  const [isHeadlineExpanded, setIsHeadlineExpanded] = useState(false);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   const hasImages = (entry.announcement_media ?? []).length > 0;
   const imageCount = (entry.announcement_media ?? []).length;
@@ -64,12 +66,24 @@ export const AnnouncementCard = memo(function AnnouncementCard({
           <Text style={styles.newsDate}>{formattedDate}</Text>
         </View>
 
-        <Text style={styles.newsHeadline}>{entry.title}</Text>
+        <Text style={styles.newsHeadline} numberOfLines={isHeadlineExpanded ? undefined : 2}>{entry.title}</Text>
+        {entry.title.length > 80 ? (
+          <Pressable onPress={() => setIsHeadlineExpanded((prev) => !prev)}>
+            <Text style={styles.seeMoreText}>{isHeadlineExpanded ? "See less" : "See more"}</Text>
+          </Pressable>
+        ) : null}
         <View style={[styles.newsAlertBadge, { backgroundColor: tone.bg }]}>
           <Text style={[styles.newsAlertText, { color: tone.text }]}>{tone.label}</Text>
         </View>
 
-        <Text style={styles.newsDescription}>{entry.description}</Text>
+        <Text style={styles.newsDescription} numberOfLines={isDescriptionExpanded ? undefined : 3}>
+          {entry.description}
+        </Text>
+        {entry.description.length > 140 ? (
+          <Pressable onPress={() => setIsDescriptionExpanded((prev) => !prev)}>
+            <Text style={styles.seeMoreText}>{isDescriptionExpanded ? "See less" : "See more"}</Text>
+          </Pressable>
+        ) : null}
 
         {hasImages ? (
           <View
@@ -169,6 +183,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     lineHeight: 24,
+  },
+  seeMoreText: {
+    marginTop: 3,
+    color: "#4f84db",
+    fontSize: 12,
+    fontWeight: "700",
   },
   newsAlertBadge: {
     alignSelf: "flex-start",
