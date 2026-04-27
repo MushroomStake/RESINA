@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "realtime": "tsx src/realtime-listener.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "tide:fetch": "tsx src/tide/fetch-tide-data.ts",

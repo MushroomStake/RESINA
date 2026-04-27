@@ -6,6 +6,7 @@ type UnismsSendOptions = {
 type UnismsBlastOptions = {
   phoneNumbers: string[];
   message: string;
+  metadata?: Record<string, unknown>;
 };
 
 type UnismsMessage = {
@@ -66,17 +67,23 @@ export async function sendUnismsSms(options: UnismsSendOptions): Promise<{ messa
 }
 
 export async function sendUnismsBlast(options: UnismsBlastOptions): Promise<{ blastId: string | null }> {
+  const body: Record<string, unknown> = {
+    recipients: options.phoneNumbers,
+    content: options.message,
+    sender_id: process.env.UNISMS_SENDER_NAME ?? "RESINA",
+  };
+
+  if (options.metadata) {
+    body.metadata = options.metadata;
+  }
+
   const response = await fetch("https://unismsapi.com/api/blast", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: buildBasicAuthHeader(),
     },
-    body: JSON.stringify({
-      recipients: options.phoneNumbers,
-      content: options.message,
-      sender_id: process.env.UNISMS_SENDER_NAME ?? "RESINA",
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {

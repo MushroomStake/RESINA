@@ -223,6 +223,10 @@ export async function dispatchSensorAlertFromSnapshot(
     const result = await sendUnismsBlast({
       phoneNumbers,
       message,
+      metadata: {
+        source_table: snapshot.sourceTable ?? "sensor_readings",
+        source_record_id: snapshot.recordId,
+      },
     });
     blastId = result.blastId;
     delivered.push(...phoneNumbers.map((phoneNumber) => ({ phoneNumber, messageId: result.blastId })));
