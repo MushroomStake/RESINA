@@ -211,7 +211,7 @@ export function WeatherUpdateCard({
             <Text numberOfLines={1} style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>HUMIDITY</Text>
             <Text style={[styles.detailValue, isNightCard && styles.detailValueNight]}>{humidity}%</Text>
           </View>
-          <View style={styles.detailItem}>
+          <View style={[styles.detailItem, { width: "100%" }]}>
             <Text numberOfLines={1} style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>WIND</Text>
             <Text style={[styles.detailValue, isNightCard && styles.detailValueNight]}>{windSpeed} km/h</Text>
           </View>
