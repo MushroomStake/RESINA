@@ -1131,7 +1131,7 @@ export default function AdminAnnouncementsPage() {
               </button>
             </div>
 
-            <div className="sm:col-span-1" />
+            <div className="hidden sm:block sm:col-span-1" />
           </div>
         </div>
 
