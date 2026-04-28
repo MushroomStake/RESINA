@@ -150,8 +150,9 @@ function buildCombinedSmsMessage(
   const sep = "\n\n";
   const titleLine = title.toUpperCase();
   const levelLine = `Current Level: ${currentLevel}`;
+  const advisoryHeader = "RESINA ADVISORY:";
 
-  return `${locationLine}${sep}${titleLine}\n${levelLine}${sep}${tagalog}${sep}${english}`;
+  return `${titleLine}\n${levelLine}${sep}${locationLine}${sep}${advisoryHeader}\n${tagalog}${sep}${english}`;
 }
 
 export function buildSensorAlertMessage(
@@ -177,29 +178,13 @@ export function buildSensorAlertMessage(
   );
 }
 
-function buildSmsMessage(header: string, locationLine: string, description: string): string {
-  // Header + blank line + locationLine + newline + description
-  // Two newlines between header and location, one newline between location and description
-  const newlineOverhead = 3; // \n\n and \n
+function buildSmsMessage(title: string, currentLevel: string, locationLine: string, description: string): string {
+  const sep = "\n\n";
+  const titleLine = title.toUpperCase();
+  const levelLine = `Current Level: ${currentLevel}`;
+  const advisoryHeader = "RESINA ADVISORY:";
 
-  const overheadLen = header.length + locationLine.length + newlineOverhead;
-
-  if (overheadLen + description.length <= 160) {
-    return `${header}\n\n${locationLine}\n${description}`;
-  }
-
-  const allowedDescLen = 160 - overheadLen;
-  if (allowedDescLen <= 0) {
-    // Fallback: compact header and location into one line and trim to 160
-    const combined = `${header} | ${locationLine}`;
-    return combined.length <= 160 ? combined : combined.slice(0, 160);
-  }
-
-  const sliceLen = Math.max(0, allowedDescLen - 3);
-  const truncated = description.slice(0, sliceLen);
-  const finalDesc = truncated.length < description.length ? `${truncated}...` : truncated;
-
-  return `${header}\n\n${locationLine}\n${finalDesc}`;
+  return `${titleLine}\n${levelLine}${sep}${locationLine}${sep}${advisoryHeader}\n${description}`;
 }
 
 export function buildSensorAlertMessages(
@@ -216,8 +201,9 @@ export function buildSensorAlertMessages(
   const header = `${details.title.toUpperCase()} - ${currentLevel}`;
   const locationLine = `${location} | ${updatedAt}`;
 
-  const tagalog = buildSmsMessage(header, locationLine, details.smsTagalogDescription);
-  const english = buildSmsMessage(header, locationLine, details.smsEnglishDescription);
+  const title = details.title;
+  const tagalog = buildSmsMessage(title, currentLevel, locationLine, details.smsTagalogDescription);
+  const english = buildSmsMessage(title, currentLevel, locationLine, details.smsEnglishDescription);
 
   return { tagalog, english };
 }

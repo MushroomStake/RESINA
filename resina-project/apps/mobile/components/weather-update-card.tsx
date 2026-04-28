@@ -41,8 +41,7 @@ type WeatherUpdateCardProps = {
   dateLabel: string;
   temperature: number;
   humidity: number;
-  heatIndex: number;
-  signalNo: string;
+  windSpeed: number;
   advisoryText: string;
   backgroundColor: string;
 };
@@ -54,8 +53,7 @@ export function WeatherUpdateCard({
   dateLabel,
   temperature,
   humidity,
-  heatIndex,
-  signalNo,
+  windSpeed,
   advisoryText,
   backgroundColor,
 }: WeatherUpdateCardProps) {
@@ -214,13 +212,10 @@ export function WeatherUpdateCard({
             <Text style={[styles.detailValue, isNightCard && styles.detailValueNight]}>{humidity}%</Text>
           </View>
           <View style={styles.detailItem}>
-            <Text numberOfLines={1} style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>HEAT INDEX</Text>
-            <Text style={[styles.detailValue, isNightCard && styles.detailValueNight]}>{heatIndex}°C</Text>
+            <Text numberOfLines={1} style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>WIND</Text>
+            <Text style={[styles.detailValue, isNightCard && styles.detailValueNight]}>{windSpeed} km/h</Text>
           </View>
-          <View style={styles.detailItem}>
-            <Text numberOfLines={1} style={[styles.detailLabel, isNightCard && styles.detailLabelNight]}>SIGNAL</Text>
-            <Text style={[styles.detailValue, isNightCard && styles.detailValueNight]}>{signalNo}</Text>
-          </View>
+          {/* Signal number display removed (Pagasa parser not used) */}
         </View>
       </View>
 

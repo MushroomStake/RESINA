@@ -94,7 +94,7 @@ type WeatherSnapshot = {
   conditionDescription: string;
   humidity: number;
   heatIndex: number;
-  signalNo: string;
+  windSpeed: number;
   manualDescription: string;
 };
 
@@ -578,7 +578,7 @@ export default function App() {
     conditionDescription: "",
     humidity: 0,
     heatIndex: 24,
-    signalNo: "No Signal",
+    windSpeed: 0,
     manualDescription: DEFAULT_WEATHER_ADVISORY,
   });
 
@@ -1117,8 +1117,8 @@ export default function App() {
       const { data } = await supabase
         .from("weather_logs")
         .select(
-          "recorded_at, temperature, icon_path, humidity, heat_index, weather_description, intensity, signal_no, manual_description",
-        )
+          "recorded_at, temperature, icon_path, humidity, heat_index, wind_speed, weather_description, intensity, manual_description",
+            )
         .order("recorded_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -2690,7 +2690,7 @@ export default function App() {
   const renderHomeTab = () => {
     const weatherCardBackground = getWeatherBackground(
       weatherSnapshot.intensityDescription,
-      weatherSnapshot.heatIndex,
+        weatherSnapshot.heatIndex,
     );
 
     return (
@@ -2718,8 +2718,7 @@ export default function App() {
           dateLabel={weatherSnapshot.dateLabel}
           temperature={weatherSnapshot.temperature}
           humidity={weatherSnapshot.humidity}
-          heatIndex={weatherSnapshot.heatIndex}
-          signalNo={weatherSnapshot.signalNo}
+          windSpeed={weatherSnapshot.windSpeed}
           advisoryText={weatherSnapshot.manualDescription}
           backgroundColor={weatherCardBackground}
           statusLabel={getSectionSyncLabel(weatherSyncState, isOnline)}

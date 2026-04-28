@@ -34,10 +34,10 @@ type WeatherState = {
   temperature: number;
   humidity: number | null;
   heatIndex: number | null;
+  windSpeed: number | null;
   owmMain: string;
   owmDescription: string;
   intensityDescription: string;
-  signalNo: string;
   manualDescription: string;
   broadcastDate: string | null;
   broadcastTime: string | null;
@@ -251,10 +251,10 @@ export default function AdminDashboardPage() {
     temperature: 19,
     humidity: 60,
     heatIndex: 19,
+    windSpeed: 0,
     owmMain: "Clear",
     owmDescription: "clear sky",
     intensityDescription: "Normal",
-    signalNo: "No Signal",
     manualDescription: "",
     broadcastDate: null,
     broadcastTime: null,
@@ -339,7 +339,7 @@ export default function AdminDashboardPage() {
     const { data } = await supabase
       .from("weather_logs")
       .select(
-        "id, recorded_at, temperature, humidity, heat_index, weather_main, weather_description, intensity, signal_no, manual_description, icon_path, broadcast_date, broadcast_time",
+        "id, recorded_at, temperature, humidity, heat_index, wind_speed, weather_main, weather_description, intensity, manual_description, icon_path, broadcast_date, broadcast_time",
       )
       .order("recorded_at", { ascending: false })
       .limit(1)
@@ -353,10 +353,10 @@ export default function AdminDashboardPage() {
       temperature: number;
       humidity: number | null;
       heat_index: number | null;
+      wind_speed: number | null;
       weather_main: string | null;
       weather_description: string | null;
       intensity: string;
-      signal_no: string | null;
       manual_description: string | null;
       broadcast_date: string | null;
       broadcast_time: string | null;
@@ -371,10 +371,11 @@ export default function AdminDashboardPage() {
       temperature: row.temperature,
       humidity: row.humidity,
       heatIndex: row.heat_index ?? row.temperature,
+      windSpeed: row.wind_speed ?? null,
       owmMain: row.weather_main ?? "-",
       owmDescription: row.weather_description ?? "-",
       intensityDescription: row.intensity,
-      signalNo: row.signal_no ?? "No Signal",
+      // signal_no removed — Pagasa parser unused, keep manual_description instead
       manualDescription: row.manual_description ?? "",
       broadcastDate: row.broadcast_date,
       broadcastTime: row.broadcast_time,

@@ -9,8 +9,7 @@ export type WeatherSectionProps = {
   dateLabel: string;
   temperature: number;
   humidity: number;
-  heatIndex: number;
-  signalNo: string;
+  windSpeed: number;
   advisoryText: string;
   backgroundColor: string;
   statusLabel?: string | null;

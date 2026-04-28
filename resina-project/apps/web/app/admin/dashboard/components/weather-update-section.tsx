@@ -7,10 +7,10 @@ type WeatherView = {
   temperature: number;
   humidity: number | null;
   heatIndex: number | null;
+  windSpeed: number | null;
   owmMain: string;
   owmDescription: string;
   intensityDescription: string;
-  signalNo: string;
   manualDescription: string;
   iconPath: string;
 };
@@ -88,15 +88,14 @@ export function WeatherUpdateSection({
             <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-3.5 py-2.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Intensity</p>
               <p className="mt-1 text-base font-bold text-[#16375f]">{weatherState.intensityDescription}</p>
-              <p className="mt-1 text-sm text-[#5f7797]">Signal: {weatherState.signalNo}</p>
             </div>
             <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-3.5 py-2.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Humidity</p>
               <p className="mt-1 text-base font-bold text-[#16375f]">{weatherState.humidity === null ? "-" : `${weatherState.humidity}%`}</p>
             </div>
             <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-3.5 py-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Heat Index</p>
-              <p className="mt-1 text-base font-bold text-[#16375f]">{weatherState.heatIndex === null ? "-" : `${weatherState.heatIndex.toFixed(1)}°C`}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Wind</p>
+              <p className="mt-1 text-base font-bold text-[#16375f]">{weatherState.windSpeed === null ? "-" : `${weatherState.windSpeed} km/h`}</p>
             </div>
             <div className="rounded-xl border border-[#e6edf5] bg-[#f9fbff] px-3.5 py-2.5 md:col-span-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6883a7]">Advisory</p>

@@ -44,7 +44,7 @@ export type WeatherSnapshotLike = {
   conditionDescription: string;
   humidity: number;
   heatIndex: number;
-  signalNo: string;
+  windSpeed: number;
   manualDescription: string;
 };
 
@@ -59,6 +59,7 @@ export type WeatherRowLike = {
   icon_path?: string | null;
   humidity?: number | string | null;
   heat_index?: number | string | null;
+  wind_speed?: number | string | null;
   weather_description?: string | null;
   intensity?: string | null;
   signal_no?: string | null;
@@ -223,6 +224,7 @@ export function getWeatherShowcaseScenes(): WeatherShowcaseScene[] {
     intensityDescription: string,
     conditionDescription: string,
     heatIndex: number,
+    windSpeed = 8,
   ): WeatherSnapshotLike => ({
     recordedAt: null,
     dateLabel: "TODAY",
@@ -232,7 +234,7 @@ export function getWeatherShowcaseScenes(): WeatherShowcaseScene[] {
     conditionDescription,
     humidity: 0,
     heatIndex,
-    signalNo: "No Signal",
+    windSpeed,
     manualDescription: "",
   });
 
@@ -362,7 +364,7 @@ export function mapWeatherRowToSnapshot(
     conditionDescription: String(row.weather_description ?? "").trim(),
     humidity: Math.round(Number(row.humidity ?? 0)),
     heatIndex: Math.round(Number(row.heat_index ?? (Number.isNaN(temp) ? 24 : temp))),
-    signalNo: String(row.signal_no ?? "No Signal"),
+    windSpeed: Math.round(Number(row.wind_speed ?? 0)),
     manualDescription: String(row.manual_description ?? "").trim() || defaultWeatherAdvisory,
   };
 }

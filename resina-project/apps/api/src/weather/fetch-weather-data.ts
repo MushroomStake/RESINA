@@ -42,10 +42,13 @@ async function main() {
     main?: { temp?: number; humidity?: number };
     weather?: Array<{ main?: string; description?: string; icon?: string }>;
     sys?: { sunrise?: number; sunset?: number };
+    wind?: { speed?: number };
   };
 
   const temperature = Math.round(owmData.main?.temp ?? 25);
   const humidity = Math.round(owmData.main?.humidity ?? 60);
+  const windSpeedMs = Number(owmData.wind?.speed ?? 0);
+  const windSpeedKmh = Math.round(windSpeedMs * 3.6);
   const weatherMain = owmData.weather?.[0]?.main ?? "Clear";
   const weatherDescription = owmData.weather?.[0]?.description ?? "";
   const weatherIconCode = owmData.weather?.[0]?.icon ?? "01d";
@@ -55,7 +58,6 @@ async function main() {
   const heatIndex = computeHeatIndexC(temperature, humidity);
   const heatSeverity = isNight ? "normal" : resolveHeatSeverity(heatIndex);
   const intensity = resolveIntensityLabel(wetSeverity, heatSeverity);
-  const signalNo = "No Signal";
   const iconPath =
     wetSeverity === "none"
       ? resolveDrySeasonPhaseIcon(
@@ -72,13 +74,14 @@ async function main() {
     temperature,
     humidity,
     heat_index: Math.round(heatIndex),
+    wind_speed: windSpeedKmh,
     weather_main: weatherMain,
     weather_description: weatherDescription,
     intensity,
-    signal_no: signalNo,
+    // signal_no omitted since Pagasa parser is not used
     manual_description: manualDescription,
     icon_path: iconPath,
-  });
+  }, { returning: 'minimal' });
 
   if (error) {
     throw new Error(error.message);
@@ -103,7 +106,7 @@ async function main() {
         temperature,
         humidity,
         heatIndex: Math.round(heatIndex),
-        signalNo,
+        // signalNo removed from logs
       },
       null,
       2,

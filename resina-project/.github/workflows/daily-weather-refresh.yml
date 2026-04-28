@@ -27,11 +27,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: "package-lock.json"
 
-      - name: Setup Java (required by PAGASA PDF parser)
-        uses: actions/setup-java@v5
-        with:
-          distribution: "temurin"
-          java-version: "21"
+      # Java setup removed: PAGASA PDF parser not used anymore
 
       - name: Install dependencies
         run: npm ci
@@ -41,7 +37,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-          PAGASA_TCB_PDF_URL: ${{ secrets.PAGASA_TCB_PDF_URL }}
         run: |
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_KEY" ] || [ -z "$OPENWEATHER_API_KEY" ]; then
             echo "Missing one or more required secrets: SUPABASE_URL, SUPABASE_SERVICE_KEY, OPENWEATHER_API_KEY"
