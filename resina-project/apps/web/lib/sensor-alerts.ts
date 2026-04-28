@@ -53,7 +53,7 @@ export const ALERT_LEVELS: Record<AlertLevelKey, AlertLevelInfo> = {
     englishDescription: "Water is overflowing. The situation is dangerous; prioritize safety and follow responders.",
     tagalogDescription: "Umaapaw na ang tubig. Delikado na ang sitwasyon; unahin ang kaligtasan ng buhay at sumunod sa mga rescuer.",
     smsEnglishDescription: "Water is overflowing. Stay safe.",
-    smsTagalogDescription: "Umaapaw na ang tubig. Ligtas muna.",
+    smsTagalogDescription: "Umaapaw na ang tubig. Maging Ligtas.",
   },
 };
 
