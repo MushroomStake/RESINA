@@ -162,7 +162,6 @@ export default function AdminAnnouncementsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [isSmallScreen, setIsSmallScreen] = useState(false);
   const [expandedHeadlineIds, setExpandedHeadlineIds] = useState<Set<string>>(new Set());
   const [expandedDescriptionIds, setExpandedDescriptionIds] = useState<Set<string>>(new Set());
   const [alertFilter, setAlertFilter] = useState<"all" | AlertLevel>("all");
@@ -358,18 +357,6 @@ export default function AdminAnnouncementsPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, alertFilter]);
-
-  useEffect(() => {
-    const mql = window.matchMedia("(max-width: 640px)");
-    const onChange = (e: MediaQueryListEvent) => setIsSmallScreen(e.matches);
-    setIsSmallScreen(mql.matches);
-    if (mql.addEventListener) mql.addEventListener("change", onChange);
-    else mql.addListener(onChange as any);
-    return () => {
-      if (mql.removeEventListener) mql.removeEventListener("change", onChange);
-      else mql.removeListener(onChange as any);
-    };
-  }, []);
 
   const warningCount = useMemo(
     () => announcements.filter((entry) => entry.alert_level === "warning").length,
@@ -807,7 +794,17 @@ export default function AdminAnnouncementsPage() {
                 + Create New
               </button>
             </div>
-            
+            <div className="grid grid-cols-1 gap-3 border-t border-[#d9e5f2] bg-[#f8fbff] px-4 py-4 sm:grid-cols-3 sm:items-center mt-4">
+              <div className="flex items-center gap-4 sm:justify-start sm:col-span-1">
+                <p className="text-xs text-[#6b7280]">
+                  Showing {showingStart} to {showingEnd} of {filteredAnnouncements.length} entries
+                </p>
+              </div>
+
+              <div className="sm:col-span-1" />
+
+              <div className="sm:col-span-1" />
+            </div>
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <div className="rounded-2xl border border-[#d8e4f1] bg-white/85 p-4">
@@ -871,7 +868,7 @@ export default function AdminAnnouncementsPage() {
             <p className="text-sm text-[#6b7280]">{filteredAnnouncements.length} shown</p>
           </div>
 
-          {isLoadingAnnouncements ? (
+            {isLoadingAnnouncements ? (
             <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
                 <article key={`announcement-skeleton-${index}`} className="animate-pulse overflow-hidden rounded-3xl border border-[#d9e5f2] bg-white shadow-sm">
@@ -885,9 +882,10 @@ export default function AdminAnnouncementsPage() {
                 </article>
               ))}
             </div>
-          ) : filteredAnnouncements.length === 0 ? (
+            ) : filteredAnnouncements.length === 0 ? (
             <p className="text-sm text-[#6b7280]">No announcements match the current search or filter.</p>
           ) : (
+            <>
             <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
               {pagedAnnouncements.map((entry) => (
                 <article key={entry.id} className="group flex h-full flex-col overflow-hidden rounded-3xl border border-[#d9e5f2] bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-[0_14px_40px_rgba(15,23,42,0.1)]">
@@ -937,6 +935,8 @@ export default function AdminAnnouncementsPage() {
                             </button>
                           ))}
                         </div>
+
+                        
                       )}
                     </div>
                   ) : (
@@ -953,7 +953,7 @@ export default function AdminAnnouncementsPage() {
                     {/* Title + 3-dot menu */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-h-[52px] min-w-0 flex-1">
-                        <h3 className={`text-base font-semibold leading-snug text-[#111827] ${expandedHeadlineIds.has(entry.id) ? "" : "overflow-hidden line-clamp-2"}`}>
+                        <h3 className={`text-base font-semibold leading-snug text-[#111827] ${expandedHeadlineIds.has(entry.id) ? "" : "line-clamp-2"}`}>
                           {entry.title}
                         </h3>
                         {entry.title.length > 80 ? (
@@ -1025,7 +1025,7 @@ export default function AdminAnnouncementsPage() {
 
                     {/* Description */}
                     <div className="mt-2 min-h-[72px]">
-                      <p className={`text-sm text-[#6b7280] ${expandedDescriptionIds.has(entry.id) ? "" : "overflow-hidden line-clamp-3"}`}>
+                      <p className={`text-sm text-[#6b7280] ${expandedDescriptionIds.has(entry.id) ? "" : "line-clamp-3"}`}>
                         {entry.description}
                       </p>
                       {entry.description.length > 140 ? (
@@ -1077,28 +1077,18 @@ export default function AdminAnnouncementsPage() {
                 </article>
               ))}
             </div>
-          )}
-        </section>
 
-        <div className="mt-4">
-          <div className="grid grid-cols-1 gap-3 border-t border-[#d9e5f2] bg-[#f8fbff] px-4 py-4 sm:grid-cols-3 sm:items-center">
-            <div className="flex items-center gap-4 sm:justify-start sm:col-span-1">
-              <p className="text-xs text-[#6b7280]">
-                Showing {showingStart} to {showingEnd} of {filteredAnnouncements.length} entries
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 justify-center sm:col-span-1">
-              <button
-                type="button"
-                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                disabled={safePage === 1}
-                className="rounded-lg border border-[#d0dceb] bg-white px-3 py-1.5 text-sm text-[#52667b] transition hover:bg-[#f1f7ff] disabled:opacity-40"
-              >
-                Prev
-              </button>
-              {!isSmallScreen ? (
-                pageItems.map((item, idx) =>
+            {filteredAnnouncements.length > 0 && (
+              <div className="mt-6 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={safePage === 1}
+                  className="rounded-lg border border-[#d0dceb] bg-white px-3 py-1.5 text-sm text-[#52667b] transition hover:bg-[#f1f7ff] disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                {pageItems.map((item, idx) =>
                   item === "ellipsis" ? (
                     <span key={`e-${idx}`} className="mx-1 inline-block px-2 text-sm text-[#6b7280]">
                       …
@@ -1116,24 +1106,22 @@ export default function AdminAnnouncementsPage() {
                     >
                       {item}
                     </button>
-                  ),
-                )
-              ) : (
-                <span className="sr-only">Page {safePage} of {totalPages}</span>
-              )}
-              <button
-                type="button"
-                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                disabled={safePage === totalPages}
-                className="rounded-lg border border-[#d0dceb] bg-white px-3 py-1.5 text-sm text-[#52667b] transition hover:bg-[#f1f7ff] disabled:opacity-40"
-              >
-                Next
-              </button>
-            </div>
+                  )
+                )}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={safePage === totalPages}
+                  className="rounded-lg border border-[#d0dceb] bg-white px-3 py-1.5 text-sm text-[#52667b] transition hover:bg-[#f1f7ff] disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+            </>
 
-            <div className="hidden sm:block sm:col-span-1" />
-          </div>
-        </div>
+          )}
+        </section>
 
         <CreateAnnouncementModal
           isOpen={isCreateModalOpen}

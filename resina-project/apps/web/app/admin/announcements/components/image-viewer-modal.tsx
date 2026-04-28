@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import Portal from "../../../components/portal";
 
 type AnnouncementMedia = {
   id: string;
@@ -50,13 +51,14 @@ export function ImageViewerModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
-      onClick={handleBackdropClick}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="image-viewer-title"
-    >
+    <Portal>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+        onClick={handleBackdropClick}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="image-viewer-title"
+      >
       {/* Close button */}
       <button
         onClick={onClose}
@@ -169,6 +171,7 @@ export function ImageViewerModal({
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </Portal>
   );
 }

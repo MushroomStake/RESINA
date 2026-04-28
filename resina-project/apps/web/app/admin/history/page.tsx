@@ -260,7 +260,6 @@ export default function AdminHistoryPage() {
   const [selectedDate, setSelectedDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showDateFilterHelp, setShowDateFilterHelp] = useState(false);
-  const [isSmallScreen, setIsSmallScreen] = useState(false);
   const dateHelpButtonRef = useRef<HTMLButtonElement | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
   const tooltipElRef = useRef<HTMLDivElement | null>(null);
@@ -408,7 +407,7 @@ export default function AdminHistoryPage() {
 
   // Build a compact page list for the pagination control (with ellipses when there
   // are many pages). Returns an array of numbers and the string 'ellipsis'.
-  function buildPageItems(total: number, current: number, maxVisible = 9): Array<number | "ellipsis"> {
+  function buildPageItems(total: number, current: number, maxVisible = 7): Array<number | "ellipsis"> {
     if (total <= maxVisible) return Array.from({ length: total }, (_, i) => i + 1);
 
     const items: Array<number | "ellipsis"> = [];
@@ -448,18 +447,6 @@ export default function AdminHistoryPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, statusFilter, dateFilter, selectedDate]);
-
-  useEffect(() => {
-    const mql = window.matchMedia("(max-width: 640px)");
-    const onChange = (e: MediaQueryListEvent) => setIsSmallScreen(e.matches);
-    setIsSmallScreen(mql.matches);
-    if (mql.addEventListener) mql.addEventListener("change", onChange);
-    else mql.addListener(onChange as any);
-    return () => {
-      if (mql.removeEventListener) mql.removeEventListener("change", onChange);
-      else mql.removeListener(onChange as any);
-    };
-  }, []);
 
   useEffect(() => {
     function updatePos() {
@@ -743,34 +730,26 @@ export default function AdminHistoryPage() {
               >
                 Prev
               </button>
-              <nav role="navigation" aria-label="Analytics pagination" className="flex items-center gap-1">
-                {!isSmallScreen ? (
-                  pageItems.map((item, idx) =>
-                    item === "ellipsis" ? (
-                      <span key={`e-${idx}`} aria-hidden className="mx-1 inline-block px-2 text-sm text-[#6b7280]">
-                        …
-                      </span>
-                    ) : (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() => setCurrentPage(Number(item))}
-                        aria-current={item === safePage ? "page" : undefined}
-                        className={`h-8 w-8 rounded-full border text-sm transition ${
-                          item === safePage
-                            ? "border-[#86d57e] bg-[#f0fdf4] text-[#16a34a] shadow-sm"
-                            : "border-[#d0dceb] bg-white text-[#52667b] hover:bg-[#f1f7ff]"
-                        }`}
-                      >
-                        <span className="sr-only">Page </span>
-                        {item}
-                      </button>
-                    ),
-                  )
+              {pageItems.map((item, idx) =>
+                item === "ellipsis" ? (
+                  <span key={`e-${idx}`} className="mx-1 inline-block px-2 text-sm text-[#6b7280]">
+                    …
+                  </span>
                 ) : (
-                  <span className="sr-only">Page {safePage} of {totalPages}</span>
-                )}
-              </nav>
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setCurrentPage(Number(item))}
+                    className={`h-8 w-8 rounded-full border text-sm transition ${
+                      item === safePage
+                        ? "border-[#86d57e] bg-[#f0fdf4] text-[#16a34a] shadow-sm"
+                        : "border-[#d0dceb] bg-white text-[#52667b] hover:bg-[#f1f7ff]"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                ),
+              )}
               <button
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
@@ -781,7 +760,7 @@ export default function AdminHistoryPage() {
               </button>
             </div>
 
-            <div className="hidden sm:block sm:col-span-1" />
+            <div className="sm:col-span-1" />
           </div>
         </section>
 

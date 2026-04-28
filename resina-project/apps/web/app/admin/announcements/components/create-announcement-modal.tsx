@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Portal from "../../../components/portal";
 
 type AlertLevel = "normal" | "warning" | "emergency";
 
@@ -62,9 +63,10 @@ export function CreateAnnouncementModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button type="button" onClick={onClose} aria-label="Close modal" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" />
-      <div className="relative w-full max-w-3xl overflow-hidden rounded-[28px] border border-[#d7e4f2] bg-[#f8fbff] shadow-[0_26px_80px_rgba(15,23,42,0.25)]">
+    <Portal>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <button type="button" onClick={onClose} aria-label="Close modal" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" />
+        <div className="relative w-full max-w-3xl overflow-hidden rounded-[28px] border border-[#d7e4f2] bg-[#f8fbff] shadow-[0_26px_80px_rgba(15,23,42,0.25)]">
         <div className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18),transparent_65%)]" />
         <div className="relative z-10 flex items-center justify-between border-b border-[#d9e5f2] px-6 py-4">
           <div>
@@ -218,7 +220,8 @@ export function CreateAnnouncementModal({
             </button>
           </div>
         </form>
+        </div>
       </div>
-    </div>
+    </Portal>
   );
 }
