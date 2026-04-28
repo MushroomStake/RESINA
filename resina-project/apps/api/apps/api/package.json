@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "resina-api": "file:../.."
+  }
+}

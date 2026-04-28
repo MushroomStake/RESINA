@@ -647,6 +647,7 @@ export default function App() {
   const rainFall = useRef(new Animated.Value(0)).current;
   const rainFallSoft = useRef(new Animated.Value(0)).current;
   const isOnlineRef = useRef(isOnline);
+  const liveChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const [loginForm, setLoginForm] = useState<LoginForm>({
     email: "",
@@ -1667,8 +1668,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session || !isOnline) return;
-    let liveChannel: ReturnType<typeof supabase.channel> | null = null;
     let sensorReloadTimer: ReturnType<typeof setTimeout> | null = null;
     let historyReloadTimer: ReturnType<typeof setTimeout> | null = null;
     let tideReloadTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1677,6 +1676,7 @@ export default function App() {
       if (sensorReloadTimer) {
         return;
       }
+      console.log("scheduleSensorReload queued");
 
       sensorReloadTimer = setTimeout(() => {
         sensorReloadTimer = null;
@@ -1688,6 +1688,7 @@ export default function App() {
       if (historyReloadTimer) {
         return;
       }
+      console.log("scheduleHistoryReload queued");
 
       historyReloadTimer = setTimeout(() => {
         historyReloadTimer = null;
@@ -1707,12 +1708,43 @@ export default function App() {
       }, 500);
     };
 
-    liveChannel = supabase
+    // If offline, ensure channel removed and skip creating.
+    if (!isOnline) {
+      if (liveChannelRef.current) {
+        console.log("Removing mobile realtime channel (offline)");
+        void supabase.removeChannel(liveChannelRef.current);
+        liveChannelRef.current = null;
+      }
+
+      return () => {
+        if (sensorReloadTimer) clearTimeout(sensorReloadTimer);
+        if (historyReloadTimer) clearTimeout(historyReloadTimer);
+        if (tideReloadTimer) clearTimeout(tideReloadTimer);
+      };
+    }
+
+    // Avoid recreating the channel if it already exists.
+    if (liveChannelRef.current) {
+      console.log("Mobile realtime channel already active");
+      return () => {
+        if (sensorReloadTimer) clearTimeout(sensorReloadTimer);
+        if (historyReloadTimer) clearTimeout(historyReloadTimer);
+        if (tideReloadTimer) clearTimeout(tideReloadTimer);
+      };
+    }
+
+    liveChannelRef.current = supabase
       .channel("resina-mobile-dashboard-live")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sensor_readings" },
-        () => {
+        (payload) => {
+          try {
+            console.log("realtime event: sensor_readings", payload);
+          } catch (e) {
+            console.log("realtime sensor_readings log failed", e);
+          }
+
           scheduleSensorReload();
           scheduleHistoryReload();
         },
@@ -1720,22 +1752,37 @@ export default function App() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sensor_status" },
-        scheduleSensorReload,
+        (payload) => {
+          console.log("realtime event: sensor_status", payload);
+          scheduleSensorReload();
+        },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "water_levels" },
-        scheduleSensorReload,
+        (payload) => {
+          console.log("realtime event: water_levels", payload);
+          scheduleSensorReload();
+        },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sensor_logs" },
-        scheduleSensorReload,
+        (payload) => {
+          console.log("realtime event: sensor_logs", payload);
+          scheduleSensorReload();
+        },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "weather_logs" },
         (payload) => {
+          try {
+            console.log("realtime event: weather_logs", payload);
+          } catch (e) {
+            console.log("realtime weather_logs log failed", e);
+          }
+
           const row = (payload.new ?? null) as WeatherRow | null;
 
           if (row && Object.keys(row).length > 0) {
@@ -1752,24 +1799,37 @@ export default function App() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tide_predictions" },
-        scheduleTideReload,
+        (payload) => {
+          console.log("realtime event: tide_predictions", payload);
+          scheduleTideReload();
+        },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tide_hourly" },
-        scheduleTideReload,
+        (payload) => {
+          console.log("realtime event: tide_hourly", payload);
+          scheduleTideReload();
+        },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "announcements" },
-        () => void loadAnnouncements(0, "replace", true),
+        (payload) => {
+          console.log("realtime event: announcements", payload);
+          void loadAnnouncements(0, "replace", true);
+        },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "announcement_media" },
-        () => void loadAnnouncements(0, "replace", true),
+        (payload) => {
+          console.log("realtime event: announcement_media", payload);
+          void loadAnnouncements(0, "replace", true);
+        },
       )
       .subscribe((status) => {
+        console.log("Mobile realtime subscription status:", status);
         if (status === "SUBSCRIBED") {
           console.log("Mobile realtime subscriptions active");
         }
@@ -1788,11 +1848,13 @@ export default function App() {
         clearTimeout(tideReloadTimer);
       }
 
-      if (liveChannel) {
-        void supabase.removeChannel(liveChannel);
+      if (liveChannelRef.current) {
+        console.log("Removing mobile realtime channel");
+        void supabase.removeChannel(liveChannelRef.current);
+        liveChannelRef.current = null;
       }
     };
-  }, [session, isOnline]);
+  }, [isOnline]);
 
   const handleLoadMoreAnnouncements = () => {
     if (isAnnouncementsLoading || isLoadingMoreAnnouncements || !hasMoreAnnouncements) {
