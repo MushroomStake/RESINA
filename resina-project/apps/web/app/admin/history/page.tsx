@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import { downloadAnalyticsReportXlsx } from "./xlsx-report";
@@ -258,6 +259,10 @@ export default function AdminHistoryPage() {
   const [dateFilter, setDateFilter] = useState<"7d" | "30d" | "90d" | "all" | "date">("30d");
   const [selectedDate, setSelectedDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showDateFilterHelp, setShowDateFilterHelp] = useState(false);
+  const dateHelpButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
+  const tooltipElRef = useRef<HTMLDivElement | null>(null);
 
   const pageSize = 5;
 
@@ -400,9 +405,86 @@ export default function AdminHistoryPage() {
   const showingStart = filteredRecords.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const showingEnd = Math.min(safePage * pageSize, filteredRecords.length);
 
+  // Build a compact page list for the pagination control (with ellipses when there
+  // are many pages). Returns an array of numbers and the string 'ellipsis'.
+  function buildPageItems(total: number, current: number, maxVisible = 7): Array<number | "ellipsis"> {
+    if (total <= maxVisible) return Array.from({ length: total }, (_, i) => i + 1);
+
+    const items: Array<number | "ellipsis"> = [];
+    const middleSize = Math.max(1, maxVisible - 2); // reserve slots for first and last
+
+    let start = current - Math.floor(middleSize / 2);
+    let end = current + Math.floor(middleSize / 2);
+
+    if (start < 2) {
+      start = 2;
+      end = start + middleSize - 1;
+    }
+
+    if (end > total - 1) {
+      end = total - 1;
+      start = end - middleSize + 1;
+    }
+
+    items.push(1);
+
+    if (start > 2) {
+      items.push("ellipsis");
+    }
+
+    for (let p = start; p <= end; p++) items.push(p);
+
+    if (end < total - 1) {
+      items.push("ellipsis");
+    }
+
+    items.push(total);
+    return items;
+  }
+
+  const pageItems = buildPageItems(totalPages, safePage, 9);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, statusFilter, dateFilter, selectedDate]);
+
+  useEffect(() => {
+    function updatePos() {
+      if (!dateHelpButtonRef.current) {
+        setTooltipPos(null);
+        return;
+      }
+
+      const rect = dateHelpButtonRef.current.getBoundingClientRect();
+      setTooltipPos({ left: rect.left + rect.width / 2, top: rect.bottom + 8 });
+    }
+
+    if (showDateFilterHelp) {
+      updatePos();
+      window.addEventListener("resize", updatePos);
+      window.addEventListener("scroll", updatePos, true);
+      return () => {
+        window.removeEventListener("resize", updatePos);
+        window.removeEventListener("scroll", updatePos, true);
+      };
+    }
+
+    setTooltipPos(null);
+  }, [showDateFilterHelp]);
+
+  useEffect(() => {
+    if (!tooltipElRef.current) return;
+    if (!tooltipPos) {
+      tooltipElRef.current.style.left = "";
+      tooltipElRef.current.style.top = "";
+      tooltipElRef.current.style.transform = "";
+      return;
+    }
+
+    tooltipElRef.current.style.left = `${tooltipPos.left}px`;
+    tooltipElRef.current.style.top = `${tooltipPos.top}px`;
+    tooltipElRef.current.style.transform = "translateX(-50%)";
+  }, [tooltipPos]);
 
   const handleDownloadXlsx = async () => {
     const generatedAt = new Date().toLocaleString("en-PH", {
@@ -455,24 +537,47 @@ export default function AdminHistoryPage() {
             </label>
 
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <label className="flex items-center gap-2 rounded-xl border border-[#d0dceb] bg-white px-3 py-2.5 text-[#374151] shadow-sm">
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#6b7280]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                  <rect x="3" y="4" width="18" height="18" rx="2" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 2v4M8 2v4M3 10h18" />
-                </svg>
-                <select
-                  value={dateFilter}
-                  onChange={(event) => setDateFilter(event.target.value as "7d" | "30d" | "90d" | "all" | "date")}
-                  aria-label="Filter history by date range"
-                  className="bg-transparent outline-none"
-                >
-                  <option value="7d">Last 7 Days</option>
-                  <option value="30d">Last 30 Days</option>
-                  <option value="90d">Last 90 Days</option>
-                  <option value="all">All Records</option>
-                  <option value="date">Specific Date</option>
-                </select>
-              </label>
+              <div className="relative flex items-center gap-2">
+                <div className="flex items-center gap-2 rounded-xl border border-[#d0dceb] bg-white px-3 py-2.5 text-[#374151] shadow-sm">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#6b7280]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 2v4M8 2v4M3 10h18" />
+                  </svg>
+                  <select
+                    value={dateFilter}
+                    onChange={(event) => setDateFilter(event.target.value as "7d" | "30d" | "90d" | "all" | "date")}
+                    aria-label="Filter history by date range"
+                    className="bg-transparent outline-none"
+                  >
+                    <option value="7d">Last 7 Days</option>
+                    <option value="30d">Last 30 Days</option>
+                    <option value="90d">Last 90 Days</option>
+                    <option value="all">All Records</option>
+                    <option value="date">Specific Date</option>
+                  </select>
+                </div>
+
+                <div className="relative flex-shrink-0">
+                  <button
+                    ref={dateHelpButtonRef}
+                    type="button"
+                    aria-describedby="date-filter-help"
+                    onMouseEnter={() => setShowDateFilterHelp(true)}
+                    onMouseLeave={() => setShowDateFilterHelp(false)}
+                    onFocus={() => setShowDateFilterHelp(true)}
+                    onBlur={() => setShowDateFilterHelp(false)}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#eef2ff] text-[#123b63] hover:bg-[#e6f0ff] focus-visible:ring-2 focus-visible:ring-[#c7ddff]
+                      text-xs font-semibold"
+                  >
+                    <span className="sr-only">Date filter help</span>
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5" />
+                      <path d="M12 16h.01" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
 
               {dateFilter === "date" ? (
                 <label className="flex items-center gap-2 rounded-xl border border-[#d0dceb] bg-white px-3 py-2.5 text-[#374151] shadow-sm">
@@ -609,14 +714,14 @@ export default function AdminHistoryPage() {
             </table>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-[#d9e5f2] bg-[#f8fbff] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
+          <div className="grid grid-cols-1 gap-3 border-t border-[#d9e5f2] bg-[#f8fbff] px-4 py-4 sm:grid-cols-3 sm:items-center">
+            <div className="flex items-center gap-4 sm:justify-start sm:col-span-1">
               <p className="text-xs text-[#6b7280]">
                 Showing {showingStart} to {showingEnd} of {filteredRecords.length} entries
               </p>
             </div>
 
-            <div className="flex items-center gap-2 self-end sm:self-auto">
+            <div className="flex items-center gap-2 justify-center sm:col-span-1">
               <button
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
@@ -625,20 +730,26 @@ export default function AdminHistoryPage() {
               >
                 Prev
               </button>
-              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => setCurrentPage(page)}
-                  className={`h-8 w-8 rounded-full border text-sm transition ${
-                    page === safePage
-                      ? "border-[#86d57e] bg-[#f0fdf4] text-[#16a34a] shadow-sm"
-                      : "border-[#d0dceb] bg-white text-[#52667b] hover:bg-[#f1f7ff]"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
+              {pageItems.map((item, idx) =>
+                item === "ellipsis" ? (
+                  <span key={`e-${idx}`} className="mx-1 inline-block px-2 text-sm text-[#6b7280]">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setCurrentPage(Number(item))}
+                    className={`h-8 w-8 rounded-full border text-sm transition ${
+                      item === safePage
+                        ? "border-[#86d57e] bg-[#f0fdf4] text-[#16a34a] shadow-sm"
+                        : "border-[#d0dceb] bg-white text-[#52667b] hover:bg-[#f1f7ff]"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                ),
+              )}
               <button
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
@@ -648,10 +759,30 @@ export default function AdminHistoryPage() {
                 Next
               </button>
             </div>
+
+            <div className="sm:col-span-1" />
           </div>
         </section>
 
         <ActivityLogSection />
+
+        {typeof window !== "undefined" && tooltipPos && showDateFilterHelp
+          ? createPortal(
+              <div
+                ref={tooltipElRef}
+                id="date-filter-help"
+                role="tooltip"
+                className="pointer-events-none fixed z-50 w-72 rounded-lg border border-[#d1d5db] bg-white p-3 text-xs text-[#374151] shadow-lg"
+              >
+                <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-[#111827]">Date Filter</span>
+                <p className="text-xs text-[#374151]">
+                  Use this filter to pick a range (7/30/90 days) or choose "Specific Date" to select a single
+                  date using the date picker that appears.
+                </p>
+              </div>,
+              document.body,
+            )
+          : null}
 
       </div>
     </section>
