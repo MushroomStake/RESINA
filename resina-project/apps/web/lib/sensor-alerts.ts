@@ -94,7 +94,9 @@ export function inferAlertLevel(snapshot: Pick<SensorSnapshot, "waterLevel" | "s
 }
 
 export function isAlertLevelCriticalOrAbove(level: AlertLevelKey): boolean {
-  return level !== "normal";
+  // Include all alert levels for SMS dispatches (send for `normal` as well).
+  // Previously this returned `level !== "normal"` to only send for critical+.
+  return true;
 }
 
 export function formatWaterLevel(level: number | null): string {
