@@ -25,8 +25,8 @@ export const ALERT_LEVELS: Record<AlertLevelKey, AlertLevelInfo> = {
     rangeLabel: "1.5 - 2.49m",
     englishDescription: "Water level is normal. Conditions are safe for now.",
     tagalogDescription: "Normal ang antas ng tubig. Ligtas ang sitwasyon at walang inaasahang banta sa ngayon.",
-    smsEnglishDescription: "Water level is normal.",
-    smsTagalogDescription: "Normal ang antas ng tubig.",
+    smsEnglishDescription: "Water level is normal. Conditions are safe for now.",
+    smsTagalogDescription: "Normal ang antas ng tubig. Ligtas ang sitwasyon at walang inaasahang banta sa ngayon.",
   },
   critical: {
     title: "Critical Level",
@@ -34,8 +34,8 @@ export const ALERT_LEVELS: Record<AlertLevelKey, AlertLevelInfo> = {
     rangeLabel: "2.5 - 2.9m",
     englishDescription: "Water level is high. Stay alert, prepare supplies, and keep monitoring advisories.",
     tagalogDescription: "Mataas ang tubig. Maging alerto, ihanda ang mga gamit, at patuloy na magmonitor sa mga balita.",
-    smsEnglishDescription: "Water level is high. Prepare now.",
-    smsTagalogDescription: "Mataas ang tubig. Maghanda na.",
+    smsEnglishDescription: "Water level is high. Stay alert, prepare supplies, and keep monitoring advisories.",
+    smsTagalogDescription: "Mataas ang tubig. Maging alerto, ihanda ang mga gamit, at patuloy na magmonitor sa mga balita.",
   },
   evacuation: {
     title: "Evacuation Level",
@@ -43,8 +43,8 @@ export const ALERT_LEVELS: Record<AlertLevelKey, AlertLevelInfo> = {
     rangeLabel: "3.0 - 3.9m",
     englishDescription: "Water level is dangerous. Evacuate immediately to higher ground or an evacuation center.",
     tagalogDescription: "Mapanganib ang antas ng tubig. Lumikas na agad patungo sa mas mataas na lugar o evacuation center.",
-    smsEnglishDescription: "Dangerous water level. Evacuate now.",
-    smsTagalogDescription: "Delikado ang tubig. Lumikas na agad.",
+    smsEnglishDescription: "Water level is dangerous. Evacuate immediately to higher ground or an evacuation center.",
+    smsTagalogDescription: "Mapanganib ang antas ng tubig. Lumikas na agad patungo sa mas mataas na lugar o evacuation center.",
   },
   spilling: {
     title: "Spilling Level",
@@ -52,8 +52,8 @@ export const ALERT_LEVELS: Record<AlertLevelKey, AlertLevelInfo> = {
     rangeLabel: "4.0+m",
     englishDescription: "Water is overflowing. The situation is dangerous; prioritize safety and follow responders.",
     tagalogDescription: "Umaapaw na ang tubig. Delikado na ang sitwasyon; unahin ang kaligtasan ng buhay at sumunod sa mga rescuer.",
-    smsEnglishDescription: "Water is overflowing. Stay safe.",
-    smsTagalogDescription: "Umaapaw na ang tubig. Maging Ligtas.",
+    smsEnglishDescription: "Water is overflowing. The situation is dangerous; prioritize safety and follow responders.",
+    smsTagalogDescription: "Umaapaw na ang tubig. Delikado na ang sitwasyon; unahin ang kaligtasan ng buhay at sumunod sa mga rescuer.",
   },
 };
 
@@ -138,17 +138,86 @@ function formatManilaTimestamp(value: string): string {
   return `${month} ${day}, ${year} - ${hour}:${minute}${dayPeriod}`;
 }
 
-export function buildSensorAlertMessage(snapshot: SensorSnapshot): string {
+
+
+function buildCombinedSmsMessage(
+  locationLine: string,
+  title: string,
+  currentLevel: string,
+  tagalog: string,
+  english: string
+): string {
+  const sep = "\n\n";
+  const titleLine = title.toUpperCase();
+  const levelLine = `Current Level: ${currentLevel}`;
+
+  return `${locationLine}${sep}${titleLine}\n${levelLine}${sep}${tagalog}${sep}${english}`;
+}
+
+export function buildSensorAlertMessage(
+  snapshot: SensorSnapshot,
+  opts?: { location?: string }
+): string {
   const alertLevel = inferAlertLevel(snapshot);
   const details = ALERT_LEVELS[alertLevel];
   const currentLevel = formatWaterLevel(snapshot.waterLevel);
 
   const updatedAt = snapshot.updatedAt ? formatManilaTimestamp(snapshot.updatedAt) : "Unknown";
+  const location = opts?.location ?? "Sta. Rita Bridge";
 
-  return [
-    `${details.badge} ${details.title}`,
-    `${currentLevel} | ${updatedAt}`,
+  const title = details.title;
+  const locationLine = `${location} | ${updatedAt}`;
+
+  return buildCombinedSmsMessage(
+    locationLine,
+    title,
+    currentLevel,
     details.smsTagalogDescription,
-    details.smsEnglishDescription,
-  ].join("\n");
+    details.smsEnglishDescription
+  );
+}
+
+function buildSmsMessage(header: string, locationLine: string, description: string): string {
+  // Header + blank line + locationLine + newline + description
+  // Two newlines between header and location, one newline between location and description
+  const newlineOverhead = 3; // \n\n and \n
+
+  const overheadLen = header.length + locationLine.length + newlineOverhead;
+
+  if (overheadLen + description.length <= 160) {
+    return `${header}\n\n${locationLine}\n${description}`;
+  }
+
+  const allowedDescLen = 160 - overheadLen;
+  if (allowedDescLen <= 0) {
+    // Fallback: compact header and location into one line and trim to 160
+    const combined = `${header} | ${locationLine}`;
+    return combined.length <= 160 ? combined : combined.slice(0, 160);
+  }
+
+  const sliceLen = Math.max(0, allowedDescLen - 3);
+  const truncated = description.slice(0, sliceLen);
+  const finalDesc = truncated.length < description.length ? `${truncated}...` : truncated;
+
+  return `${header}\n\n${locationLine}\n${finalDesc}`;
+}
+
+export function buildSensorAlertMessages(
+  snapshot: SensorSnapshot,
+  opts?: { location?: string }
+): { tagalog: string; english: string } {
+  const alertLevel = inferAlertLevel(snapshot);
+  const details = ALERT_LEVELS[alertLevel];
+  const currentLevel = formatWaterLevel(snapshot.waterLevel);
+
+  const updatedAt = snapshot.updatedAt ? formatManilaTimestamp(snapshot.updatedAt) : "Unknown";
+  const location = opts?.location ?? "Sta. Rita Bridge";
+
+  const header = `${details.title.toUpperCase()} - ${currentLevel}`;
+  const locationLine = `${location} | ${updatedAt}`;
+
+  const tagalog = buildSmsMessage(header, locationLine, details.smsTagalogDescription);
+  const english = buildSmsMessage(header, locationLine, details.smsEnglishDescription);
+
+  return { tagalog, english };
 }
