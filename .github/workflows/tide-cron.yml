@@ -6,6 +6,9 @@ on:
     - cron: "10 16 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   refresh-tide-window:
     runs-on: ubuntu-latest
