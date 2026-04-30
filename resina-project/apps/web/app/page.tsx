@@ -14,13 +14,7 @@ export default function HomePage() {
             <span className="font-[family-name:var(--font-display)] text-2xl leading-none sm:text-[30px]">RESINA</span>
           </a>
 
-          <nav className="hidden items-center gap-8 text-sm text-[#4f5963] md:flex">
-            <a className="text-[#2e9d5a]" href="#about">
-              About
-            </a>
-            <a href="#download">Download</a>
-            <a href="#features">Features</a>
-          </nav>
+          {/* Removed About / Download / Features links from landing navbar */}
 
           <a
             href={apkDownloadUrl}
