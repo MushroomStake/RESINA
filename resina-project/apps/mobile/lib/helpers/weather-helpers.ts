@@ -184,7 +184,9 @@ export function getWeatherVisualMode(snapshot: WeatherSnapshotLike): WeatherVisu
     return "cloudy";
   }
 
-  return "sunny";
+  // Prefer a cloudy-looking background instead of the bright sunny theme
+  // when no other condition matched (clear sky will use cloudy now).
+  return "cloudy";
 }
 
 function buildShowcaseThemeFromWeatherColor(baseColor: string): HomeAtmosphereTheme {
