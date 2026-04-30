@@ -164,6 +164,34 @@ export async function POST(request: NextRequest) {
       recordId: String(insertedRow.id),
     };
 
+    // Prevent dispatch for zero readings reported as Normal to avoid noisy SMS.
+    const wl = typeof sensorSnapshot.waterLevel === "number" ? sensorSnapshot.waterLevel : Number(sensorSnapshot.waterLevel ?? NaN);
+    if (!Number.isNaN(wl) && Math.abs(wl) < 0.001 && String(sensorSnapshot.statusText ?? "").toLowerCase().includes("normal")) {
+      const skippedResult = {
+        ok: true,
+        alertLevel: "normal",
+        alertLevelName: "Normal Level",
+        alertLevelBadge: "Alert Level 1",
+        sent: 0,
+        failed: 0,
+        skipped: true,
+        reason: "Reading is 0.00m and status is Normal; skipping SMS.",
+        sourceTable: sensorSnapshot.sourceTable,
+        recordId: sensorSnapshot.recordId,
+      };
+
+      return NextResponse.json(
+        {
+          ok: true,
+          reading: insertedRow,
+          alert: skippedResult,
+          sourceDeviceId: body.sourceDeviceId ?? body.source_device_id ?? null,
+          metadata: body.metadata ?? null,
+        },
+        { status: 201 },
+      );
+    }
+
     const alertResult = await dispatchSensorAlertFromSnapshot(adminSupabase, sensorSnapshot);
 
     return NextResponse.json(

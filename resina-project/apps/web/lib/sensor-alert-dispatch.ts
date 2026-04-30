@@ -152,22 +152,24 @@ export async function dispatchSensorAlertFromSnapshot(
   const alertLevelName = formatAlertLevelName(alertLevel);
   const alertLevelBadge = formatAlertLevelBadge(alertLevel);
 
-  // Skip sending SMS for readings that are exactly 0.00m and reported as Normal.
-  // This avoids sending noisy/empty alerts when the sensor reports zero water level.
-  const statusLower = String(snapshot.statusText ?? "").toLowerCase();
-  if ((snapshot.waterLevel === 0 || snapshot.waterLevel === 0.0) && statusLower.includes("normal")) {
-    return {
-      ok: true,
-      alertLevel,
-      alertLevelName,
-      alertLevelBadge,
-      sent: 0,
-      failed: 0,
-      skipped: true,
-      reason: "Reading is 0.00m and status is Normal; skipping SMS.",
-      sourceTable: snapshot.sourceTable,
-      recordId: snapshot.recordId,
-    };
+  // Skip sending SMS for readings that are zero AND the inferred alert level is `normal`.
+  // This covers cases where `statusText` may be empty but the level was inferred as normal.
+  if (alertLevel === "normal") {
+    const wl = typeof snapshot.waterLevel === "number" ? snapshot.waterLevel : Number(snapshot.waterLevel ?? NaN);
+    if (!Number.isNaN(wl) && Math.abs(wl) < 0.001) {
+      return {
+        ok: true,
+        alertLevel,
+        alertLevelName,
+        alertLevelBadge,
+        sent: 0,
+        failed: 0,
+        skipped: true,
+        reason: "Reading is 0.00m (or effectively zero) and inferred level is Normal; skipping SMS.",
+        sourceTable: snapshot.sourceTable,
+        recordId: snapshot.recordId,
+      };
+    }
   }
 
   if (!isAlertLevelCriticalOrAbove(alertLevel)) {

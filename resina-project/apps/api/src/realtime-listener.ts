@@ -57,6 +57,14 @@ async function handleRowEvent(payload: any) {
     // small delay to avoid racing with other writers (e.g., the ingest endpoint)
     await sleep(1500);
 
+    // Early skip: if the inferred status is Normal and the water level is effectively zero,
+    // avoid dispatching SMS to prevent noisy/empty alerts.
+    const wl = typeof snapshot.waterLevel === "number" ? snapshot.waterLevel : Number(snapshot.waterLevel ?? NaN);
+    if (!Number.isNaN(wl) && Math.abs(wl) < 0.001 && String(snapshot.statusText ?? "").toLowerCase().includes("normal")) {
+      console.log(new Date().toISOString(), "Skipping SMS dispatch for zero normal reading", snapshot.recordId);
+      return;
+    }
+
     const result = await dispatchSensorAlertFromSnapshot(adminSupabase, snapshot);
     console.log(new Date().toISOString(), "dispatch result for", snapshot.recordId, result);
   } catch (err) {
