@@ -49,7 +49,7 @@ export const ALERT_LEVELS: Record<AlertLevelKey, AlertLevelInfo> = {
   spilling: {
     title: "Spilling Level",
     badge: "Alert Level 4",
-    rangeLabel: "4.0+m",
+    rangeLabel: "4.0m",
     englishDescription: "Water is overflowing. The situation is dangerous; prioritize safety and follow responders.",
     tagalogDescription: "Umaapaw na ang tubig. Delikado na ang sitwasyon; unahin ang kaligtasan ng buhay at sumunod sa mga rescuer.",
     smsEnglishDescription: "Water is overflowing. The situation is dangerous; prioritize safety and follow responders.",

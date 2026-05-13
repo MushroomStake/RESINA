@@ -295,7 +295,7 @@ const ALERT_LEVELS: Record<
   spilling: {
     title: "Spilling Level",
     badge: "Alert Level 4",
-    rangeLabel: "4.0m onwards",
+    rangeLabel: "4.0m",
     cardColor: "#a43737",
     description: "Umaapaw na ang tubig. Delikado na ang sitwasyon; unahin ang kaligtasan ng buhay at sumunod sa mga rescuer.",
   },

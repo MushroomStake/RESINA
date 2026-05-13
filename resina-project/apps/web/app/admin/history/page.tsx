@@ -55,7 +55,7 @@ const ALERT_LEVELS: Record<
   },
   spilling: {
     statusLabel: "Spilling",
-    rangeLabel: "4.0+m",
+    rangeLabel: "4.0m",
     description: "Extreme hazard; overflow risk is active once readings reach the spilling threshold.",
     chipClass: "border-[#E54C4C] bg-[#F7C8C8] text-[#E54C4C]",
     activeFilterClass: "border-[#E54C4C] bg-[#F7C8C8] text-[#E54C4C]",
@@ -109,7 +109,7 @@ function buildHistoryDescription(level: AlertLevelKey): string {
 
 function resolveRangeLabel(level: AlertLevelKey, fallback: string): string {
   if (level === "spilling") {
-    return "4.0+m";
+    return "4.0m";
   }
 
   return fallback;

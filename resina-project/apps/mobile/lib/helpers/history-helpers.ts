@@ -89,7 +89,7 @@ const HISTORY_LEVELS: Record<
   },
   spilling: {
     statusLabel: "Spilling",
-    rangeLabel: "4.0m onwards",
+    rangeLabel: "4.0m",
     description: "Water is overflowing and conditions are extremely dangerous. Prioritize safety.",
   },
 };

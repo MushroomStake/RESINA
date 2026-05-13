@@ -110,7 +110,7 @@ const ALERT_LEVELS: Record<
   spilling: {
     title: "Spilling Level",
     badge: "Alert Level 4",
-    rangeLabel: "4.0+m",
+    rangeLabel: "4.0m",
     leftPanelClass: "bg-[#A82A2A]",
     sensorGradientClass: "bg-[linear-gradient(135deg,#A82A2A_0%,#8f2323_48%,#6f1f1f_100%)]",
     noticeClass: "border-[#efc4c6] bg-[#fff0f1] text-[#6a2830]",
@@ -155,11 +155,22 @@ function resolveRangeLabel(level: number | null, fallback: string): string {
   }
 
   if (level >= 4) {
-    return "4.0+m";
+    return "4.0m";
   }
 
-  const upper = level >= 3 ? 3.9 : level >= 2.5 ? 2.9 : 2.49;
-  return `${level.toFixed(1)} - ${upper.toFixed(2)}m`;
+  if (level >= 3) {
+    return "3.0 - 3.9m";
+  }
+
+  if (level >= 2.5) {
+    return "2.5 - 2.9m";
+  }
+
+  if (level >= 1.5) {
+    return "1.5 - 2.49m";
+  }
+
+  return fallback;
 }
 
 function formatLastUpdate(updatedAt: string | null): string {

@@ -28,10 +28,12 @@ export function inferAlertLevel(snapshot: SensorSnapshotLike): AlertLevelKey {
 export function formatRangeLabel(level: number | null, fallback: string): string {
   if (level === null || Number.isNaN(level)) return fallback;
 
-  if (level >= 4) return "4.0+m";
+  if (level >= 4) return "4.0m";
+  if (level >= 3) return "3.0 - 3.9m";
+  if (level >= 2.5) return "2.5 - 2.9m";
+  if (level >= 1.5) return "1.5 - 2.49m";
 
-  const upper = level >= 3 ? 3.9 : level >= 2.5 ? 2.9 : 2.49;
-  return `${level.toFixed(1)} - ${upper.toFixed(2)}m`;
+  return fallback;
 }
 
 export function formatSensorUpdatedAt(updatedAt: string | null): string {
