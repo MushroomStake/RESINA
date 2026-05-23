@@ -70,8 +70,8 @@ export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }
   const content = HEADER_CONTENT[activePage];
 
   return (
-    <header className="sticky top-0 z-30 flex flex-col items-start gap-3 border-b border-[#d5deea] bg-[rgba(243,245,245,0.94)] px-4 py-4 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-5 md:px-8">
-      <div className="flex w-full items-start gap-3 sm:w-auto sm:items-center">
+    <header className="sticky top-0 z-50 flex flex-col items-start gap-4 border-b border-[#d5deea] bg-[rgba(243,245,245,0.98)] px-4 py-4 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:px-5 sm:py-5 md:px-8">
+      <div className="flex w-full flex-1 min-w-0 items-start gap-3 sm:items-center">
         <button
           type="button"
           onClick={onMenuToggle}
@@ -87,12 +87,12 @@ export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }
           </svg>
         </button>
 
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
         <p className="text-xs uppercase tracking-wide text-[#6b7280]">{content.eyebrow}</p>
-        <h1 className="text-lg font-bold leading-tight text-[#111827] sm:text-xl md:text-[2.125rem] md:leading-none">{content.title}</h1>
+        <h1 className="max-w-full break-words text-[1.55rem] font-bold leading-tight text-[#111827] sm:text-xl md:text-[2.125rem] md:leading-none">{content.title}</h1>
         </div>
       </div>
-      <div className="flex w-full items-center justify-center gap-3 rounded-2xl border border-[#b7cde6] bg-[linear-gradient(135deg,#f7fbff_0%,#eaf3ff_100%)] px-4 py-2.5 text-[#2f4a67] shadow-[0_8px_20px_rgba(29,78,216,0.10)] sm:w-auto sm:justify-start sm:gap-4 sm:px-5 sm:py-3">
+      <div className="flex w-full shrink-0 items-center justify-center gap-3 rounded-2xl border border-[#b7cde6] bg-[linear-gradient(135deg,#f7fbff_0%,#eaf3ff_100%)] px-4 py-2.5 text-[#2f4a67] shadow-[0_8px_20px_rgba(29,78,216,0.10)] sm:w-auto sm:justify-start sm:gap-4 sm:px-5 sm:py-3">
         <svg className="h-5 w-5 text-[#244e7a] sm:h-7 sm:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z" />
         </svg>
