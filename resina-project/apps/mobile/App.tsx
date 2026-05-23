@@ -175,6 +175,7 @@ type AnnouncementItem = {
   posted_by_name: string;
   created_at: string;
   announcement_media: AnnouncementMedia[];
+  comment_count?: number;
 };
 
 type ProfileAvatarKey = "boy" | "man" | "user" | "woman" | "woman2";
@@ -1350,20 +1351,47 @@ export default function App() {
         announcement_media: [...(entry.announcement_media ?? [])].sort((a, b) => a.display_order - b.display_order),
       }));
 
-      setHasMoreAnnouncements(pageRows.length === ANNOUNCEMENTS_PAGE_SIZE);
+      const announcementIds = pageRows.map((entry) => entry.id);
+      const commentCountsByAnnouncementId = new Map<string, number>();
+
+      if (announcementIds.length > 0) {
+        const { data: commentRows } = await supabase
+          .from("announcement_comments")
+          .select("announcement_id")
+          .in("announcement_id", announcementIds);
+
+        for (const row of commentRows ?? []) {
+          const announcementId = String((row as { announcement_id?: string }).announcement_id ?? "").trim();
+          if (!announcementId) {
+            continue;
+          }
+
+          commentCountsByAnnouncementId.set(
+            announcementId,
+            (commentCountsByAnnouncementId.get(announcementId) ?? 0) + 1,
+          );
+        }
+      }
+
+      const pageRowsWithCounts = pageRows.map((entry) => ({
+        ...entry,
+        comment_count: commentCountsByAnnouncementId.get(entry.id) ?? 0,
+      }));
+
+      setHasMoreAnnouncements(pageRowsWithCounts.length === ANNOUNCEMENTS_PAGE_SIZE);
       setAnnouncementPage(nextPage);
 
       if (mode === "append") {
         setAnnouncements((prev) => {
-          const merged = [...prev, ...pageRows].filter(
+          const merged = [...prev, ...pageRowsWithCounts].filter(
             (entry, index, list) => list.findIndex((candidate) => candidate.id === entry.id) === index,
           );
           void writeCache(CACHE_KEYS.announcements, merged.slice(0, ANNOUNCEMENTS_CACHE_MAX_ITEMS));
           return merged;
         });
       } else {
-        setAnnouncements(pageRows);
-        await writeCache(CACHE_KEYS.announcements, pageRows.slice(0, ANNOUNCEMENTS_CACHE_MAX_ITEMS));
+        setAnnouncements(pageRowsWithCounts);
+        await writeCache(CACHE_KEYS.announcements, pageRowsWithCounts.slice(0, ANNOUNCEMENTS_CACHE_MAX_ITEMS));
       }
 
       setAnnouncementsSyncState({ source: "live", cachedAt: null });
@@ -1491,6 +1519,13 @@ export default function App() {
   };
 
   const openCommentsForAnnouncement = (entry: AnnouncementItem) => {
+    if (!isOnlineRef.current) {
+      setErrorMessage("Comments are unavailable while offline.");
+      setIsCommentsModalOpen(false);
+      setSelectedAnnouncementForComments(null);
+      return;
+    }
+
     setSelectedAnnouncementForComments(entry);
     setIsCommentsModalOpen(true);
   };
@@ -2839,6 +2874,7 @@ export default function App() {
           isLoading={isAnnouncementsLoading}
           isLoadingMore={isLoadingMoreAnnouncements}
           canLoadMore={hasMoreAnnouncements}
+          isOnline={isOnline}
           filter={announcementFilter}
           searchQuery={announcementSearchInput}
           textVariant={dashboardAtmosphere.textVariant}

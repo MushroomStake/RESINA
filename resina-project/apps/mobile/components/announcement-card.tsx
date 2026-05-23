@@ -20,6 +20,7 @@ type AnnouncementItem = {
   posted_by_name: string;
   created_at: string;
   announcement_media: AnnouncementMedia[];
+  comment_count?: number;
 };
 
 type ToneStyle = {
@@ -33,6 +34,7 @@ type AnnouncementCardProps = {
   tone: ToneStyle;
   formattedDate: string;
   onOpenComments: (entry: AnnouncementItem) => void;
+  isOnline?: boolean;
 };
 
 export const AnnouncementCard = memo(function AnnouncementCard({
@@ -40,6 +42,7 @@ export const AnnouncementCard = memo(function AnnouncementCard({
   tone,
   formattedDate,
   onOpenComments,
+  isOnline = true,
 }: AnnouncementCardProps) {
   const { width } = useWindowDimensions();
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
@@ -135,9 +138,19 @@ export const AnnouncementCard = memo(function AnnouncementCard({
         ) : null}
 
         <View style={styles.newsCardFooter}>
-          <Pressable style={styles.newsCommentBtn} onPress={() => onOpenComments(entry)}>
-            <Ionicons name="chatbubble-outline" size={19} color="#7d8693" style={styles.newsCommentIcon} />
-            <Text style={styles.newsCommentBtnText}>View Comment</Text>
+          <Pressable
+            style={[styles.newsCommentBtn, !isOnline && styles.newsCommentBtnDisabled]}
+            onPress={() => onOpenComments(entry)}
+            disabled={!isOnline}
+          >
+            <View style={styles.newsCommentCountGroup}>
+              <Ionicons name="chatbubble-outline" size={19} color="#7d8693" style={styles.newsCommentIcon} />
+              <Text style={styles.newsCommentCountText}>{entry.comment_count ?? 0}</Text>
+            </View>
+            <View style={styles.newsCommentSeparator} />
+            <Text style={[styles.newsCommentBtnText, !isOnline && styles.newsCommentBtnTextOffline]}>
+              {isOnline ? "View Comment" : "Offline"}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -252,7 +265,7 @@ const styles = StyleSheet.create({
     borderTopColor: "#e5e7eb",
     marginTop: 12,
     paddingTop: 10,
-    alignItems: "flex-end",
+    alignItems: "flex-start",
   },
   newsCommentBtn: {
     flexDirection: "row",
@@ -260,13 +273,40 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 4,
     paddingVertical: 2,
+    alignSelf: "flex-start",
+    minWidth: 0,
+  },
+  newsCommentBtnDisabled: {
+    opacity: 0.45,
   },
   newsCommentIcon: {
     marginTop: 1,
+  },
+  newsCommentCountGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  newsCommentSeparator: {
+    width: 1,
+    height: 14,
+    backgroundColor: "#e2e8f0",
   },
   newsCommentBtnText: {
     color: "#6b7280",
     fontSize: 14,
     fontWeight: "600",
+    flexShrink: 1,
+  },
+  newsCommentBtnTextOffline: {
+    color: "#94a3b8",
+  },
+  newsCommentCountText: {
+    color: "#94a3b8",
+    fontSize: 12,
+    fontWeight: "700",
+    minWidth: 18,
+    textAlign: "center",
+    fontVariantNumeric: ["tabular-nums"],
   },
 });

@@ -1,19 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
+  Animated,
   Image,
   Keyboard,
   Platform,
   type ImageSourcePropType,
   Modal,
   KeyboardAvoidingView,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { supabase } from "../lib/supabase";
 import { queueAnnouncementComment } from "../lib/offline-write-queue";
@@ -193,10 +195,52 @@ export function AnnouncementCommentsModal({
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const keyboardOffset = keyboardHeight;
   const composerInset = replyingToCommentName ? 150 : 118;
-  const modalMaxHeight = Math.max(
-    300,
-    Math.min(windowHeight * 0.82, windowHeight - keyboardOffset - 96),
-  );
+  const sheetTranslateY = useRef(new Animated.Value(0)).current;
+  const handleDragClose = useCallback(() => {
+    sheetTranslateY.setValue(0);
+    handleModalClose();
+  }, [sheetTranslateY]);
+
+  const sheetPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const isVerticalDrag = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        return gestureState.dy > 6 && isVerticalDrag;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          sheetTranslateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const shouldClose = gestureState.dy > 120 || gestureState.vy > 1.2;
+
+        if (shouldClose) {
+          Animated.timing(sheetTranslateY, {
+            toValue: windowHeight,
+            duration: 180,
+            useNativeDriver: true,
+          }).start(() => {
+            handleDragClose();
+          });
+          return;
+        }
+
+        Animated.spring(sheetTranslateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 0,
+        }).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(sheetTranslateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 0,
+        }).start();
+      },
+    }),
+  ).current;
 
   const commentsByParent = useMemo(() => {
     const grouped = new Map<string | null, AnnouncementCommentItem[]>();
@@ -743,12 +787,8 @@ export function AnnouncementCommentsModal({
           />
           <View style={styles.commentContentCol}>
             <Text style={styles.commentAuthor}>{comment.commenter_name}</Text>
-            <Text style={styles.commentBodyText} textBreakStrategy="simple" numberOfLines={expandedCommentIds.has(comment.id) ? undefined : 3}>
-              {comment.comment_body || "(Empty comment)"}
-            </Text>
             {shouldShowCommentSeeMore(comment.comment_body ?? "") ? (
               <Pressable
-                style={styles.commentSeeMoreBtn}
                 onPress={() => {
                   setExpandedCommentIds((prev) => {
                     const next = new Set(prev);
@@ -760,9 +800,22 @@ export function AnnouncementCommentsModal({
                     return next;
                   });
                 }}
+                accessibilityRole="button"
+                accessibilityLabel={expandedCommentIds.has(comment.id) ? "See less comment" : "See more comment"}
               >
-                <Text style={styles.commentSeeMoreText}>{expandedCommentIds.has(comment.id) ? "See less" : "See more"}</Text>
+                <Text style={styles.commentBodyText} textBreakStrategy="simple" numberOfLines={expandedCommentIds.has(comment.id) ? undefined : 3}>
+                  {comment.comment_body || "(Empty comment)"}
+                </Text>
+                <Text style={styles.commentSeeMoreText}>
+                  {expandedCommentIds.has(comment.id) ? "See less" : "See more"}
+                </Text>
               </Pressable>
+            ) : null}
+
+            {!shouldShowCommentSeeMore(comment.comment_body ?? "") ? (
+              <Text style={styles.commentBodyText} textBreakStrategy="simple">
+                {comment.comment_body || "(Empty comment)"}
+              </Text>
             ) : null}
 
             <View style={styles.commentMetaRow}>
@@ -810,7 +863,21 @@ export function AnnouncementCommentsModal({
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={Platform.OS === "ios" ? 56 : 0}
         >
-          <View style={[styles.commentsModalCard, { maxHeight: modalMaxHeight, paddingBottom: 14 + keyboardOffset }]}> 
+          <Animated.View
+            style={[
+              styles.commentsModalCard,
+              {
+                paddingBottom: 14 + keyboardOffset,
+                transform: [{ translateY: sheetTranslateY }],
+              },
+            ]}
+            {...sheetPanResponder.panHandlers}
+          >
+            <Pressable style={styles.commentsTopAffordance} onPress={handleModalClose} accessibilityRole="button" accessibilityLabel="Close comments">
+              <View style={styles.commentsDragHandle} />
+              <Text style={styles.commentsTopAffordanceText}>Tap to close or swipe down</Text>
+            </Pressable>
+
             <View style={styles.commentsModalHeader}>
               <Text style={styles.commentsModalTitle}>Comments</Text>
               <Pressable style={styles.commentsCloseBtn} onPress={handleModalClose}>
@@ -895,7 +962,7 @@ export function AnnouncementCommentsModal({
                 </Pressable>
               </View>
             </View>
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -1008,16 +1075,39 @@ const styles = StyleSheet.create({
   commentsModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "flex-end",
-    padding: 14,
+    justifyContent: "flex-start",
+    padding: 0,
   },
   commentsModalCard: {
-    minHeight: 320,
-    flexShrink: 1,
-    borderRadius: 18,
+    flex: 1,
+    minHeight: 0,
+    borderRadius: 0,
     backgroundColor: "#ffffff",
     overflow: "hidden",
     position: "relative",
+  },
+  commentsTopAffordance: {
+    paddingTop: 12,
+    paddingBottom: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eef2f7",
+  },
+  commentsDragHandle: {
+    width: 42,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "#cbd5e1",
+    marginBottom: 8,
+  },
+  commentsTopAffordanceText: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
   },
   commentsModalHeader: {
     paddingHorizontal: 16,
@@ -1028,6 +1118,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    zIndex: 1,
   },
   commentsModalTitle: {
     color: "#1f2937",
@@ -1142,14 +1234,12 @@ const styles = StyleSheet.create({
     gap: 14,
     marginTop: 2,
   },
-  commentSeeMoreBtn: {
-    alignSelf: "flex-start",
-    marginTop: 2,
-  },
   commentSeeMoreText: {
     color: "#4f84db",
     fontSize: 12,
     fontWeight: "700",
+    marginTop: 2,
+    alignSelf: "flex-start",
   },
   ownCommentMoreBtn: {
     marginLeft: "auto",

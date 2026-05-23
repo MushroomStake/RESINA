@@ -34,6 +34,7 @@ type AnnouncementsSectionProps = {
   isLoading: boolean;
   isLoadingMore?: boolean;
   canLoadMore?: boolean;
+  isOnline?: boolean;
   filter: AnnouncementFilterKey;
   searchQuery: string;
   onChangeFilter: (nextFilter: AnnouncementFilterKey) => void;
@@ -65,6 +66,7 @@ export function AnnouncementsSection({
   isLoading,
   isLoadingMore = false,
   canLoadMore = false,
+  isOnline = true,
   filter,
   searchQuery,
   onChangeFilter,
@@ -133,6 +135,7 @@ export function AnnouncementsSection({
             tone={tone}
             formattedDate={formatAnnouncementDate(entry.created_at)}
             onOpenComments={onOpenComments}
+            isOnline={isOnline}
           />
         );
       })}
