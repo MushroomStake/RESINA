@@ -6,8 +6,6 @@ import { createClient } from "../../../lib/supabase/client";
 import { getManilaDate } from "../../../lib/date";
 import {
   WEATHER_ICON_MAP,
-  DRY_NORMAL_ICON_PATH,
-  inferWetSeverity,
   computeHeatIndexC,
   resolveHeatSeverity,
   resolveIntensityLabel,
@@ -205,13 +203,12 @@ function formatWeatherDateForCard(date: Date): string {
     .toUpperCase();
 }
 
-
 function isRainyIntensity(intensity: string): boolean {
   return (
     intensity === "Light Rain" ||
     intensity === "Moderate Rain" ||
     intensity === "Heavy Rain" ||
-    intensity === "Torrential Rain"
+    intensity === "Heavy Rain Thunder"
   );
 }
 
@@ -236,6 +233,33 @@ function resolveWeatherCardClass(intensity: string, heatIndex: number | null): s
   }
 
   return "bg-[#E74C4C]";
+}
+
+function isLegacyOwmIconPath(iconPath: string): boolean {
+  return /^\/weather\/owm\/\d{2}[dn]\.png$/i.test(iconPath.trim());
+}
+
+function normalizeSeasonalIconPath(iconPath: string | null, intensity: string): string {
+  const fallback = WEATHER_ICON_MAP[intensity] ?? WEATHER_ICON_MAP.Normal;
+  const raw = (iconPath ?? "").trim();
+
+  if (!raw) {
+    return fallback;
+  }
+
+  if (raw.startsWith("/weather/dry-season/") || raw.startsWith("/weather/wet-season/")) {
+    return raw;
+  }
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return fallback;
+  }
+
+  if (isLegacyOwmIconPath(raw)) {
+    return fallback;
+  }
+
+  return raw.startsWith("/") ? raw : `/${raw}`;
 }
 
 export default function AdminDashboardPage() {
@@ -270,7 +294,7 @@ export default function AdminDashboardPage() {
     broadcastDate: null,
     broadcastTime: null,
     recordedAt: null,
-    iconPath: DRY_NORMAL_ICON_PATH,
+    iconPath: WEATHER_ICON_MAP.Normal,
   });
   const [snapshot, setSnapshot] = useState<SensorSnapshot>({
     waterLevel: null,
@@ -374,7 +398,7 @@ export default function AdminDashboardPage() {
       icon_path: string | null;
     };
 
-    const resolvedIconPath = row.icon_path ?? WEATHER_ICON_MAP[row.intensity] ?? DRY_NORMAL_ICON_PATH;
+    const resolvedIconPath = normalizeSeasonalIconPath(row.icon_path, row.intensity);
 
     const loadedState: WeatherState = {
       id: row.id,

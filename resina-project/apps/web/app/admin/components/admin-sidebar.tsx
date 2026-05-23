@@ -27,7 +27,7 @@ function AdminSidebar({ activePage }: AdminSidebarProps) {
   return (
     <aside className="flex h-full flex-col border-r border-[#e5e7eb] bg-[#f7f8f9] px-4 py-4 md:px-5 md:py-6">
       <div className="flex items-center gap-3">
-        <Image src="/images/resina%20logo.png" alt="Resina logo" width={48} height={48} className="md:h-14 md:w-14" />
+        <Image src="/images/resina%20logo.png" alt="Resina logo" width={48} height={48} className="h-auto w-auto md:h-14 md:w-14" />
         <div>
           <p className="font-semibold text-[#111827]">RESINA</p>
           <p className="text-xs text-[#6b7280]">Sta. Rita, Olongapo</p>

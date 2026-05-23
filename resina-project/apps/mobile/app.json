@@ -28,6 +28,12 @@
         "backgroundColor": "#ffffff"
       }
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/66ce1dbc-cb55-4f56-aa90-71f106cd95a4"
+    },
     "web": {
       "bundler": "metro"
     },

@@ -26,7 +26,8 @@
     "start:mobile": "npm run start --workspace mobile",
     "android:mobile": "npm run android --workspace mobile",
     "ios:mobile": "npm run ios --workspace mobile",
-    "web:mobile": "npm run web --workspace mobile"
+    "web:mobile": "npm run web --workspace mobile",
+    "weather:icons": "node scripts/fetch-owm-icons.js"
   },
   "engines": {
     "node": ">=18"

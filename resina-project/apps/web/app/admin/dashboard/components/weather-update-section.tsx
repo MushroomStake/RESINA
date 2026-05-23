@@ -24,7 +24,14 @@ export function WeatherUpdateSection({
   weatherState,
   weatherCardClass,
 }: WeatherUpdateSectionProps) {
-  const isNightCard = weatherState.iconPath.toLowerCase().includes("moon");
+  const rawIconPath = (weatherState.iconPath || "").trim();
+  const normalizedIconPath =
+    rawIconPath.length === 0
+      ? "/weather/dry-season/sun Normal.png"
+      : rawIconPath.startsWith("http://") || rawIconPath.startsWith("https://") || rawIconPath.startsWith("/")
+        ? rawIconPath
+        : `/${rawIconPath}`;
+  const isNightCard = normalizedIconPath.toLowerCase().includes("moon");
   const isRainyCard = weatherState.intensityDescription.toLowerCase().includes("rain");
 
   return (
@@ -58,7 +65,7 @@ export function WeatherUpdateSection({
             ) : null}
 
             <div
-              className={`relative z-20 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[12px] font-extrabold uppercase tracking-wide ${isNightCard ? "bg-[#142541]/70 text-[#d7e6ff]" : "bg-white/60 text-[#273247]"}`}
+              className={`relative z-30 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[12px] font-extrabold uppercase tracking-wide ${isNightCard ? "bg-[#142541]/70 text-[#d7e6ff]" : "bg-white/60 text-[#273247]"}`}
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z" />
@@ -66,16 +73,17 @@ export function WeatherUpdateSection({
               <span>{weatherState.dateLabel}</span>
             </div>
 
-            <p className={`weather-temp-readability absolute left-5 top-1/2 z-20 -translate-y-1/2 text-6xl font-extrabold leading-none md:text-7xl ${isNightCard ? "text-[#f3f8ff]" : "text-[#f7fbff]"}`}>
+            <p className={`weather-temp-readability absolute left-5 top-1/2 z-30 -translate-y-1/2 text-6xl font-extrabold leading-none md:text-7xl ${isNightCard ? "text-[#f3f8ff]" : "text-[#f7fbff]"}`}>
               {weatherState.temperature}°C
             </p>
 
             <Image
-              src={weatherState.iconPath}
+              src={normalizedIconPath}
               alt={weatherState.intensityDescription}
               width={140}
               height={140}
-              className={`weather-icon-float absolute right-1 top-1/2 h-[124px] w-[124px] -translate-y-1/2 object-contain ${isNightCard ? "opacity-95" : "opacity-88"}`}
+              className={`weather-icon-float absolute right-0 top-[56%] z-10 h-[122px] w-[122px] -translate-y-1/2 object-contain ${isNightCard ? "opacity-95" : "opacity-88"}`}
+              style={{ width: "auto", height: "auto" }}
             />
           </div>
 

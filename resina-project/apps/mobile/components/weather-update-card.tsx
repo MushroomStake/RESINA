@@ -3,24 +3,21 @@ import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
 
 // Static require map — all paths are literals so the bundler can resolve them.
 const WEATHER_ICONS: Record<string, ReturnType<typeof require>> = {
-  "/weather/dry-season/clear sky moon.png": require("../assets/Dry Season/clear sky moon.png"),
-  "/weather/dry-season/few clouds moon.png": require("../assets/Dry Season/few clouds moon.png"),
-  "/weather/dry-season/mist moon.png": require("../assets/Dry Season/mist moon.png"),
-  "/weather/dry-season/sunrise.png": require("../assets/Dry Season/sunrise.png"),
-  "/weather/dry-season/sunset.png": require("../assets/Dry Season/sunset.png"),
   "/weather/dry-season/sun Normal.png": require("../assets/Dry Season/sun Normal.png"),
   "/weather/dry-season/sun Caution.png": require("../assets/Dry Season/sun Caution.png"),
   "/weather/dry-season/sun Extreme Caution.png": require("../assets/Dry Season/sun Extreme Caution.png"),
   "/weather/dry-season/sun Danger.png": require("../assets/Dry Season/sun Danger.png"),
-  Normal: require("../assets/Dry Season/sun Normal.png"),
-  Caution: require("../assets/Dry Season/sun Caution.png"),
-  "Extreme Caution": require("../assets/Dry Season/sun Extreme Caution.png"),
-  Danger: require("../assets/Dry Season/sun Danger.png"),
-  "Extreme Danger": require("../assets/Dry Season/sun Danger.png"),
-  "Light Rain": require("../assets/Wet-Season/Light Rain.png"),
-  "Moderate Rain": require("../assets/Wet-Season/Moderate Rain.png"),
-  "Heavy Rain": require("../assets/Wet-Season/Heavy Rain.png"),
-  "Torrential Rain": require("../assets/Wet-Season/Torrential Rain.png"),
+  "/weather/dry-season/sunset.png": require("../assets/Dry Season/sunset.png"),
+  "/weather/dry-season/sunrise.png": require("../assets/Dry Season/sunrise.png"),
+  "/weather/dry-season/mist moon.png": require("../assets/Dry Season/mist moon.png"),
+  "/weather/dry-season/few clouds moon.png": require("../assets/Dry Season/few clouds moon.png"),
+  "/weather/dry-season/clear sky moon.png": require("../assets/Dry Season/clear sky moon.png"),
+  "/weather/wet-season/Drizzle.png": require("../assets/Wet-Season/Drizzle.png"),
+  "/weather/wet-season/Light Rain.png": require("../assets/Wet-Season/Light Rain.png"),
+  "/weather/wet-season/Moderate Rain.png": require("../assets/Wet-Season/Moderate Rain.png"),
+  "/weather/wet-season/Heavy Rain.png": require("../assets/Wet-Season/Heavy Rain.png"),
+  "/weather/wet-season/Heavy Rain Thunder.png": require("../assets/Wet-Season/Heavy Rain Thunder.png"),
+  "/weather/wet-season/Thunder Only.png": require("../assets/Wet-Season/Thunder Only.png"),
 };
 
 const STAR_DOTS = [
@@ -57,8 +54,8 @@ export function WeatherUpdateCard({
   advisoryText,
   backgroundColor,
 }: WeatherUpdateCardProps) {
-  const iconSource = WEATHER_ICONS[iconPath] ?? WEATHER_ICONS[intensityLabel] ?? WEATHER_ICONS["Normal"];
-  const isNightCard = iconPath.toLowerCase().includes("moon");
+  const iconSource: any = WEATHER_ICONS[iconPath] ?? WEATHER_ICONS["/weather/dry-season/sun Normal.png"];
+  const isNightCard = /\/owm\/\d{2}n\.png$/i.test(iconPath) || iconPath.toLowerCase().includes("moon");
   const isRainyCard = intensityLabel.toLowerCase().includes("rain");
 
   const iconFloat = useRef(new Animated.Value(0)).current;

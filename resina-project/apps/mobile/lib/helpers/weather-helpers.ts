@@ -9,11 +9,17 @@ const MOBILE_WEATHER_ICON_MAP: Record<string, string> = {
   "Extreme Caution": "/weather/dry-season/sun Extreme Caution.png",
   Danger: "/weather/dry-season/sun Danger.png",
   "Extreme Danger": "/weather/dry-season/sun Danger.png",
+  Drizzle: "/weather/wet-season/Drizzle.png",
   "Light Rain": "/weather/wet-season/Light Rain.png",
   "Moderate Rain": "/weather/wet-season/Moderate Rain.png",
   "Heavy Rain": "/weather/wet-season/Heavy Rain.png",
-  "Torrential Rain": "/weather/wet-season/Torrential Rain.png",
+  "Heavy Rain Thunder": "/weather/wet-season/Heavy Rain Thunder.png",
+  "Thunder Only": "/weather/wet-season/Thunder Only.png",
 };
+
+function isLegacyOwmIconPath(iconPath: string): boolean {
+  return /^\/weather\/owm\/\d{2}[dn]\.png$/i.test(iconPath.trim());
+}
 
 export type HomeAtmosphereTheme = {
   base: string;
@@ -90,7 +96,7 @@ export function formatWeatherDate(dateISO: string | null): string {
 }
 
 export function getWeatherBackground(intensity: string, heatIndex: number): string {
-  const rainyLabels = ["light rain", "moderate rain", "heavy rain", "torrential rain"];
+  const rainyLabels = ["light rain", "moderate rain", "heavy rain", "heavy rain thunder"];
   if (rainyLabels.includes(intensity.toLowerCase())) return "#B3B7C0";
 
   if (heatIndex < 27) return "#ECE8D2";
@@ -354,8 +360,7 @@ export function mapWeatherRowToSnapshot(
   const intensityDescription = String(row.intensity ?? "Normal");
   const storedIconPath = String(row.icon_path ?? "").trim();
   const mappedIconPath = MOBILE_WEATHER_ICON_MAP[intensityDescription] ?? MOBILE_DRY_NORMAL_ICON_PATH;
-  const isDaytime = getManilaHourNow() >= 6 && getManilaHourNow() < 18;
-  const iconPath = isDaytime ? mappedIconPath : storedIconPath || mappedIconPath;
+  const iconPath = storedIconPath && !isLegacyOwmIconPath(storedIconPath) ? storedIconPath : mappedIconPath;
 
   return {
     recordedAt: row.recorded_at ?? null,

@@ -9,7 +9,9 @@ export {
   resolveHeatSeverity,
   resolveIntensityLabel,
   resolveIsNight,
+  resolveThunderFlag,
   resolveDrySeasonNightIcon,
   resolveDrySeasonPhaseIcon,
+  resolveWetSeasonIconPath,
   buildAutoDescription,
 } from "../../api/src/utils/weather";

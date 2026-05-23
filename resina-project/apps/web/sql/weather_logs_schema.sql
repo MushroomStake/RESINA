@@ -8,6 +8,9 @@ create table if not exists public.weather_logs (
   wind_speed numeric(4,1),
   weather_main text,
   weather_description text,
+  rain_1h_mm numeric(4,1),
+  rain_3h_mm numeric(4,1),
+  thunder boolean not null default false,
   intensity text not null,
   manual_description text not null default '',
   broadcast_date date not null default ((now() at time zone 'Asia/Manila')::date),
@@ -25,6 +28,9 @@ alter table public.weather_logs add column if not exists heat_index numeric(4,1)
 alter table public.weather_logs add column if not exists wind_speed numeric(4,1);
 alter table public.weather_logs add column if not exists weather_main text;
 alter table public.weather_logs add column if not exists weather_description text;
+alter table public.weather_logs add column if not exists rain_1h_mm numeric(4,1);
+alter table public.weather_logs add column if not exists rain_3h_mm numeric(4,1);
+alter table public.weather_logs add column if not exists thunder boolean not null default false;
 alter table public.weather_logs drop column if exists color_coded_warning;
 
 create index if not exists idx_weather_logs_recorded_at on public.weather_logs(recorded_at desc);

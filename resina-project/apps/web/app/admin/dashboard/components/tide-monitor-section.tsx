@@ -190,7 +190,7 @@ export function TideMonitorSection({
             <div className="rounded-3xl border border-[#d9e5f2] bg-white/95 p-4 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="rounded-2xl bg-[#edf6ff] p-2">
-                  <Image src="/Tides/high-tide.png" alt="High tide" width={54} height={54} className="h-[54px] w-[54px] object-contain" />
+                  <Image src="/Tides/high-tide.png" alt="High tide" width={54} height={54} className="object-contain" />
                 </div>
                 <p className="text-[19px] font-semibold leading-tight text-[#1f3657] md:text-[21px]">Next high tide</p>
               </div>
@@ -204,7 +204,7 @@ export function TideMonitorSection({
             <div className="rounded-3xl border border-[#d9e5f2] bg-white/95 p-4 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="rounded-2xl bg-[#edf6ff] p-2">
-                  <Image src="/Tides/low-tide.png" alt="Low tide" width={54} height={54} className="h-[54px] w-[54px] object-contain" />
+                  <Image src="/Tides/low-tide.png" alt="Low tide" width={54} height={54} className="object-contain" />
                 </div>
                 <p className="text-[19px] font-semibold leading-tight text-[#1f3657] md:text-[21px]">Next low tide</p>
               </div>

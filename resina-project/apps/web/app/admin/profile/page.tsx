@@ -169,7 +169,7 @@ export default function AdminProfilePage() {
     email: "",
     confirmEmail: "",
     role: "member",
-    password: "admin123",
+    password: "",
   });
 
   const [updateUserForm, setUpdateUserForm] = useState<UpdateUserForm>({
@@ -588,7 +588,7 @@ export default function AdminProfilePage() {
         email: "",
         confirmEmail: "",
         role: "member",
-        password: "admin123",
+        password: "",
       });
       await loadProfiles(sessionUserId, sessionEmail);
       showStatus("success", "Invite sent successfully.");
@@ -884,7 +884,7 @@ export default function AdminProfilePage() {
                   type="text"
                   value={addUserForm.password}
                   onChange={(e) => setAddUserForm((prev) => ({ ...prev, password: e.target.value }))}
-                  placeholder="admin123"
+                    placeholder="Temporary password"
                   className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm"
                 />
                 <p className="mt-1 text-xs italic text-[#6b7280]">This temporary password is set on the invited account.</p>

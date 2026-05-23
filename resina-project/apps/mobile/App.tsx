@@ -1156,7 +1156,6 @@ export default function App() {
   }, []);
 
   const loadTideStatus = async (allowLiveFetch = true): Promise<CacheAwareLoadResult> => {
-    setIsTideLoading(true);
     const cached = await readCache<TideStatus>(CACHE_KEYS.tide, CACHE_TTL_MS.tide);
     const cachedExtremes = await readCache<TideExtreme[]>(CACHE_KEYS.tideExtremes, CACHE_TTL_MS.tideExtremes);
     if (cached) {
@@ -1168,12 +1167,15 @@ export default function App() {
       setTideExtremes(cachedExtremes.value);
     }
 
-    if (!allowLiveFetch) {
+    const canFetchLive = allowLiveFetch && isOnlineRef.current;
+    if (!canFetchLive) {
       setIsTideLoading(false);
       const result = cached ? { source: "cache" as const, cachedAt: cached.updatedAt } : { source: "none" as const, cachedAt: null };
       setTideSyncState(result);
       return result;
     }
+
+    setIsTideLoading(!cached);
 
     try {
       const today = getManilaDate();
@@ -1307,12 +1309,6 @@ export default function App() {
     mode: "replace" | "append" = "replace",
     allowLiveFetch = true,
   ): Promise<CacheAwareLoadResult> => {
-    if (mode === "replace") {
-      setIsAnnouncementsLoading(true);
-    } else {
-      setIsLoadingMoreAnnouncements(true);
-    }
-
     const cached = mode === "replace"
       ? await readCache<AnnouncementItem[]>(CACHE_KEYS.announcements, CACHE_TTL_MS.announcements)
       : null;
@@ -1321,16 +1317,20 @@ export default function App() {
       setAnnouncementsSyncState({ source: "cache", cachedAt: cached.updatedAt });
     }
 
-    if (!allowLiveFetch) {
-      if (mode === "replace") {
-        setIsAnnouncementsLoading(false);
-      } else {
-        setIsLoadingMoreAnnouncements(false);
-      }
+    const canFetchLive = allowLiveFetch && isOnlineRef.current;
+    if (!canFetchLive) {
+      setIsAnnouncementsLoading(false);
+      setIsLoadingMoreAnnouncements(false);
 
       const result = cached ? { source: "cache" as const, cachedAt: cached.updatedAt } : { source: "none" as const, cachedAt: null };
       setAnnouncementsSyncState(result);
       return result;
+    }
+
+    if (mode === "replace") {
+      setIsAnnouncementsLoading(!cached);
+    } else {
+      setIsLoadingMoreAnnouncements(true);
     }
 
     const start = nextPage * ANNOUNCEMENTS_PAGE_SIZE;
@@ -1403,28 +1403,26 @@ export default function App() {
     mode: "replace" | "append" = "replace",
     allowLiveFetch = true,
   ): Promise<CacheAwareLoadResult> => {
-    if (mode === "replace") {
-      setIsHistoryLoading(true);
-    } else {
-      setIsLoadingMoreHistory(true);
-    }
-
     const cached = mode === "replace" ? await readCache<HistoryRecord[]>(CACHE_KEYS.history, CACHE_TTL_MS.history) : null;
     if (cached) {
       setHistoryRecords(cached.value);
       setHistorySyncState({ source: "cache", cachedAt: cached.updatedAt });
     }
 
-    if (!allowLiveFetch) {
-      if (mode === "replace") {
-        setIsHistoryLoading(false);
-      } else {
-        setIsLoadingMoreHistory(false);
-      }
+    const canFetchLive = allowLiveFetch && isOnlineRef.current;
+    if (!canFetchLive) {
+      setIsHistoryLoading(false);
+      setIsLoadingMoreHistory(false);
 
       const result = cached ? { source: "cache" as const, cachedAt: cached.updatedAt } : { source: "none" as const, cachedAt: null };
       setHistorySyncState(result);
       return result;
+    }
+
+    if (mode === "replace") {
+      setIsHistoryLoading(!cached);
+    } else {
+      setIsLoadingMoreHistory(true);
     }
 
     const start = nextPage * HISTORY_PAGE_SIZE;
@@ -1504,36 +1502,51 @@ export default function App() {
 
   const getValidatedSessionHydration = useCallback(async () => {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    if (!user) {
+    if (!session) {
       return {
         user: null,
         session: null,
       };
     }
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session || session.user.id !== user.id) {
+    if (!isOnlineRef.current) {
       return {
-        user,
-        session: null,
+        user: session.user,
+        session,
       };
     }
 
-    return {
-      user,
-      session,
-    };
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user || user.id !== session.user.id) {
+        return {
+          user: session.user,
+          session: null,
+        };
+      }
+
+      return {
+        user,
+        session,
+      };
+    } catch {
+      return {
+        user: session.user,
+        session,
+      };
+    }
+
   }, []);
 
   const loadDashboard = async () => {
     const onlineNow = isOnlineRef.current;
-    setIsDashboardLoading(true);
+    setIsDashboardLoading(onlineNow);
     const results = await Promise.all([
       loadSensorSnapshot(onlineNow),
       loadWeatherSnapshot(onlineNow),
@@ -1586,7 +1599,10 @@ export default function App() {
           setSession(null);
         } else {
           setSession(initialSession);
-          await loadProfileData(initialUser.id, initialUser, isOnlineRef.current);
+          await loadProfileData(initialUser.id, initialUser, false);
+          if (isOnlineRef.current) {
+            void loadProfileData(initialUser.id, initialUser, true);
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1611,7 +1627,10 @@ export default function App() {
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       if (nextSession?.user?.id) {
-        void loadProfileData(nextSession.user.id, nextSession.user, isOnlineRef.current);
+        void loadProfileData(nextSession.user.id, nextSession.user, false);
+        if (isOnlineRef.current) {
+          void loadProfileData(nextSession.user.id, nextSession.user, true);
+        }
       }
     });
 
@@ -3498,7 +3517,7 @@ export default function App() {
               }
             >
               <Animated.View style={[styles.dashboardBodyWrap, sectionAnimatedStyle]}>
-                {isDashboardLoading ? renderDashboardSkeleton() : renderDashboardBody()}
+                {isDashboardLoading && isOnline ? renderDashboardSkeleton() : renderDashboardBody()}
               </Animated.View>
             </ScrollView>
             <BottomNav

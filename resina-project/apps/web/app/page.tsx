@@ -10,7 +10,7 @@ export default function HomePage() {
       <div className="mx-auto flex min-h-dvh w-full max-w-[1440px] flex-col">
         <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-5 md:px-10 md:py-5">
           <a className="flex items-center gap-3" href="#">
-            <Image src="/images/resina%20logo.png" alt="Resina logo" width={48} height={48} priority className="sm:h-14 sm:w-14" />
+            <Image src="/images/resina%20logo.png" alt="Resina logo" width={48} height={48} priority className="h-auto w-auto sm:h-14 sm:w-14" />
             <span className="font-[family-name:var(--font-display)] text-2xl leading-none sm:text-[30px]">RESINA</span>
           </a>
 
@@ -80,7 +80,7 @@ export default function HomePage() {
           <div className="grid grid-cols-1 gap-10 md:grid-cols-[1.1fr_1fr_1fr]">
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-4">
-                <Image src="/images/resina%20logo.png" alt="Resina logo" width={76} height={76} />
+                <Image src="/images/resina%20logo.png" alt="Resina logo" width={76} height={76} className="h-auto w-auto" />
                 <span className="font-[family-name:var(--font-display)] text-[40px] leading-none text-[#334155]">
                   RESINA
                 </span>

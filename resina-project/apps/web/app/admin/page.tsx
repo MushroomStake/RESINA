@@ -188,6 +188,7 @@ export default function AdminLoginPage() {
             width={72}
             height={72}
             priority
+            className="h-auto w-auto"
           />
           <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-wide text-[#0f2744]">
             RESINA

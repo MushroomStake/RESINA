@@ -4,6 +4,9 @@ const nextConfig = {
   experimental: {
     externalDir: true,
   },
+  images: {
+    domains: ["openweathermap.org"],
+  },
 };
 
 export default nextConfig;

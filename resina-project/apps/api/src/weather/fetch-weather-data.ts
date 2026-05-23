@@ -2,7 +2,6 @@
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
 import {
-  WEATHER_ICON_MAP,
   DRY_NORMAL_ICON_PATH,
   inferWetSeverity,
   computeHeatIndexC,
@@ -10,6 +9,7 @@ import {
   resolveIntensityLabel,
   resolveIsNight,
   resolveDrySeasonPhaseIcon,
+  resolveWetSeasonIconPath,
   buildAutoDescription,
 } from "../utils/weather.js";
 
@@ -43,6 +43,7 @@ async function main() {
     weather?: Array<{ main?: string; description?: string; icon?: string }>;
     sys?: { sunrise?: number; sunset?: number };
     wind?: { speed?: number };
+    rain?: { [key: string]: number };
   };
 
   const temperature = Math.round(owmData.main?.temp ?? 25);
@@ -52,8 +53,10 @@ async function main() {
   const weatherMain = owmData.weather?.[0]?.main ?? "Clear";
   const weatherDescription = owmData.weather?.[0]?.description ?? "";
   const weatherIconCode = owmData.weather?.[0]?.icon ?? "01d";
+  const rain1hMm = typeof owmData.rain?.["1h"] === "number" ? owmData.rain?.["1h"] : null;
+  const rain3hMm = typeof owmData.rain?.["3h"] === "number" ? owmData.rain?.["3h"] : null;
 
-  const wetSeverity = inferWetSeverity(weatherMain, weatherDescription);
+  const wetSeverity = inferWetSeverity(weatherMain, weatherDescription, rain1hMm ?? undefined, rain3hMm ?? undefined);
   const isNight = resolveIsNight(weatherIconCode, owmData.sys?.sunrise, owmData.sys?.sunset);
   const heatIndex = computeHeatIndexC(temperature, humidity);
   const heatSeverity = isNight ? "normal" : resolveHeatSeverity(heatIndex);
@@ -67,7 +70,7 @@ async function main() {
           owmData.sys?.sunrise,
           owmData.sys?.sunset,
         )
-      : WEATHER_ICON_MAP[intensity] ?? DRY_NORMAL_ICON_PATH;
+      : resolveWetSeasonIconPath(weatherMain, weatherDescription, rain1hMm, rain3hMm);
   const manualDescription = buildAutoDescription(intensity, weatherDescription, isNight, wetSeverity);
 
   const { error } = await supabase.from("weather_logs").insert({

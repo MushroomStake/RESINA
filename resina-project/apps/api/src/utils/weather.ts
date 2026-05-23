@@ -10,32 +10,82 @@ export const DRY_SUNRISE_ICON_PATH = "/weather/dry-season/sunrise.png";
 export const DRY_SUNSET_ICON_PATH = "/weather/dry-season/sunset.png";
 export const SUNRISE_SUNSET_WINDOW_MS = 30 * 60 * 1000;
 
+export const WET_DRIZZLE_ICON_PATH = "/weather/wet-season/Drizzle.png";
+export const WET_LIGHT_RAIN_ICON_PATH = "/weather/wet-season/Light Rain.png";
+export const WET_MODERATE_RAIN_ICON_PATH = "/weather/wet-season/Moderate Rain.png";
+export const WET_HEAVY_RAIN_ICON_PATH = "/weather/wet-season/Heavy Rain.png";
+export const WET_HEAVY_RAIN_THUNDER_ICON_PATH = "/weather/wet-season/Heavy Rain Thunder.png";
+export const WET_THUNDER_ONLY_ICON_PATH = "/weather/wet-season/Thunder Only.png";
+
 export const WEATHER_ICON_MAP: Record<string, string> = {
   Normal: DRY_NORMAL_ICON_PATH,
   Caution: "/weather/dry-season/sun Caution.png",
   "Extreme Caution": "/weather/dry-season/sun Extreme Caution.png",
   Danger: "/weather/dry-season/sun Danger.png",
   "Extreme Danger": "/weather/dry-season/sun Danger.png",
+  Drizzle: WET_DRIZZLE_ICON_PATH,
   "Light Rain": "/weather/wet-season/Light Rain.png",
   "Moderate Rain": "/weather/wet-season/Moderate Rain.png",
   "Heavy Rain": "/weather/wet-season/Heavy Rain.png",
-  "Torrential Rain": "/weather/wet-season/Torrential Rain.png",
+  "Heavy Rain Thunder": WET_HEAVY_RAIN_THUNDER_ICON_PATH,
+  "Thunder Only": WET_THUNDER_ONLY_ICON_PATH,
 };
+
+function toFiniteNumber(value: number | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function hasThunderSignal(main: string, description: string): boolean {
+  const lowerMain = main.toLowerCase();
+  const lowerDescription = description.toLowerCase();
+
+  return (
+    lowerMain.includes("thunder") ||
+    lowerMain.includes("squall") ||
+    lowerMain.includes("tornado") ||
+    lowerDescription.includes("thunder") ||
+    lowerDescription.includes("squall") ||
+    lowerDescription.includes("tornado")
+  );
+}
+
+export function resolveThunderFlag(main: string, description: string): boolean {
+  return hasThunderSignal(main, description);
+}
 
 /**
  * Infer wet severity from OpenWeather API main and description fields
  */
-export function inferWetSeverity(main: string, description: string): WetSeverity {
+export function inferWetSeverity(
+  main: string,
+  description: string,
+  rain1hMm?: number,
+  rain3hMm?: number,
+): WetSeverity {
   const lowerMain = main.toLowerCase();
   const lowerDescription = description.toLowerCase();
+  const thunderSignal = hasThunderSignal(main, description);
+  const oneHourRain = toFiniteNumber(rain1hMm);
+  const threeHourRain = toFiniteNumber(rain3hMm);
+  const effectiveRainMm = Math.max(oneHourRain ?? 0, threeHourRain ? threeHourRain / 3 : 0);
 
-  if (
-    lowerMain.includes("thunder") ||
-    lowerDescription.includes("thunder") ||
-    lowerMain.includes("squall") ||
-    lowerMain.includes("tornado")
-  ) {
-    return "torrential";
+  if (thunderSignal) {
+    if (effectiveRainMm >= 50) return "torrential";
+    if (effectiveRainMm >= 7.6) return "heavy";
+    if (effectiveRainMm > 0) return effectiveRainMm <= 2.5 ? "light" : "moderate";
+    if (lowerDescription.includes("very heavy") || lowerDescription.includes("violent")) return "torrential";
+    return "moderate";
+  }
+
+  if (effectiveRainMm > 0) {
+    if (effectiveRainMm >= 50) return "torrential";
+    if (effectiveRainMm >= 7.6) return "heavy";
+    if (effectiveRainMm >= 2.5) return "moderate";
+    return "light";
   }
 
   if (lowerMain.includes("rain")) {
@@ -54,6 +104,69 @@ export function inferWetSeverity(main: string, description: string): WetSeverity
 
   if (lowerMain.includes("drizzle")) return "light";
   return "none";
+}
+
+/**
+ * Resolve the wet-season icon path for an OpenWeather condition.
+ */
+export function resolveWetSeasonIconPath(
+  main: string,
+  description: string,
+  rain1hMm?: number,
+  rain3hMm?: number,
+): string {
+  const lowerMain = main.toLowerCase();
+  const lowerDescription = description.toLowerCase();
+  const thunderSignal = hasThunderSignal(main, description);
+  const oneHourRain = toFiniteNumber(rain1hMm);
+  const threeHourRain = toFiniteNumber(rain3hMm);
+  const effectiveRainMm = Math.max(oneHourRain ?? 0, threeHourRain ? threeHourRain / 3 : 0);
+
+  if (lowerMain.includes("drizzle") || lowerDescription.includes("drizzle")) {
+    return WET_DRIZZLE_ICON_PATH;
+  }
+
+  if (thunderSignal) {
+    if (effectiveRainMm <= 7.6) {
+      return WET_THUNDER_ONLY_ICON_PATH;
+    }
+
+    return WET_HEAVY_RAIN_THUNDER_ICON_PATH;
+  }
+
+  if (effectiveRainMm >= 50) {
+    return WET_HEAVY_RAIN_THUNDER_ICON_PATH;
+  }
+
+  if (effectiveRainMm >= 7.6) {
+    return WET_HEAVY_RAIN_ICON_PATH;
+  }
+
+  if (effectiveRainMm >= 2.5) {
+    return WET_MODERATE_RAIN_ICON_PATH;
+  }
+
+  if (effectiveRainMm > 0) {
+    return WET_LIGHT_RAIN_ICON_PATH;
+  }
+
+  if (lowerMain.includes("rain")) {
+    if (lowerDescription.includes("very heavy") || lowerDescription.includes("extreme") || lowerDescription.includes("violent")) {
+      return WET_HEAVY_RAIN_THUNDER_ICON_PATH;
+    }
+
+    if (lowerDescription.includes("heavy")) {
+      return WET_HEAVY_RAIN_ICON_PATH;
+    }
+
+    if (lowerDescription.includes("moderate")) {
+      return WET_MODERATE_RAIN_ICON_PATH;
+    }
+
+    return WET_LIGHT_RAIN_ICON_PATH;
+  }
+
+  return thunderSignal ? WET_THUNDER_ONLY_ICON_PATH : WET_LIGHT_RAIN_ICON_PATH;
 }
 
 /**
@@ -96,7 +209,7 @@ export function resolveHeatSeverity(heatIndexC: number): HeatSeverity {
  * Resolve weather intensity label for display
  */
 export function resolveIntensityLabel(wet: WetSeverity, heat: HeatSeverity): string {
-  if (wet === "torrential") return "Torrential Rain";
+  if (wet === "torrential") return "Heavy Rain Thunder";
   if (wet === "heavy") return "Heavy Rain";
   if (wet === "moderate") return "Moderate Rain";
   if (wet === "light") return "Light Rain";
@@ -196,14 +309,14 @@ export function buildAutoDescription(intensity: string, description: string, isN
       light: "Light rain tonight. Roads may be slippery and visibility may be reduced.",
       moderate: "Moderate rain tonight. Be extra careful in low-lying and flood-prone areas.",
       heavy: "Heavy rain tonight. Avoid unnecessary travel and monitor local flood advisories.",
-      torrential: "Torrential rain tonight. Stay indoors and keep emergency channels open for updates.",
+      torrential: "Heavy rain with thunder tonight. Stay indoors and keep emergency channels open for updates.",
     };
 
     return wetNightAdvisories[wet as Exclude<WetSeverity, "none">] ?? `${base}. Stay updated with official barangay advisories.`;
   }
 
   const advisories: Record<string, string> = {
-    "Torrential Rain": "Torrential rain is occurring. Stay indoors, avoid flooded areas, and monitor barangay advisories.",
+    "Heavy Rain Thunder": "Heavy rain with thunder is occurring. Stay indoors, avoid flooded areas, and monitor barangay advisories.",
     "Heavy Rain": "Heavy rainfall is expected. Prepare for possible flooding and stay alert for barangay updates.",
     "Moderate Rain": "Moderate rain is present. Exercise caution especially near low-lying areas.",
     "Light Rain": "Light rain is falling. Carry an umbrella and drive carefully.",
