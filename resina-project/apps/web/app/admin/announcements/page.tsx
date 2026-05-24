@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "../../../lib/supabase/client";
 import { AnnouncementCommentsModal } from "./components/announcement-comments-modal";
 import { CreateAnnouncementModal } from "./components/create-announcement-modal";
@@ -58,6 +58,7 @@ type CommentsResponse = {
 type ProfileRow = {
   full_name: string | null;
   email: string | null;
+  role: string | null;
 };
 
 const BUCKET_NAME = "announcement-images";
@@ -118,8 +119,17 @@ function alertPillClass(level: AlertLevel): string {
   return "bg-[#ecfdf3] text-[#15803d] border-[#bbf7d0]";
 }
 
+function getAnnouncementPreviewItems(media: AnnouncementMedia[]): AnnouncementMedia[] {
+  return media.slice(0, 2);
+}
+
+function getOverflowCount(media: AnnouncementMedia[]): number {
+  return Math.max(0, media.length - 2);
+}
+
 export default function AdminAnnouncementsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
 
   const [isChecking, setIsChecking] = useState(true);
@@ -134,7 +144,9 @@ export default function AdminAnnouncementsPage() {
   const [commentsTotalCount, setCommentsTotalCount] = useState(0);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [postedByName, setPostedByName] = useState("Unknown Admin");
+  const [actorRole, setActorRole] = useState<"admin" | "member">("admin");
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<AnnouncementRow | null>(null);
+  const hasHandledOpenCommentsParamRef = useRef(false);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -174,6 +186,37 @@ export default function AdminAnnouncementsPage() {
     setStatusVariant(variant);
     setStatusMessage(message);
     setStatusVisible(true);
+  };
+
+  const insertActivityLog = async ({
+    actionType,
+    detail,
+    referenceId,
+  }: {
+    actionType: string;
+    detail: string;
+    referenceId: string;
+  }) => {
+    const payloadWithRole = {
+      action_type: actionType,
+      actor_name: postedByName,
+      actor_auth_user_id: sessionUserId,
+      actor_role: actorRole,
+      detail,
+      reference_id: referenceId,
+    };
+
+    const firstAttempt = await supabase.from("activity_logs").insert(payloadWithRole);
+    if (!firstAttempt.error) {
+      return;
+    }
+
+    await supabase.from("activity_logs").insert({
+      action_type: actionType,
+      actor_name: postedByName,
+      detail,
+      reference_id: referenceId,
+    });
   };
 
   const loadAnnouncements = async () => {
@@ -266,7 +309,7 @@ export default function AdminAnnouncementsPage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name, email")
+        .select("full_name, email, role")
         .eq("auth_user_id", user.id)
         .maybeSingle();
 
@@ -274,6 +317,7 @@ export default function AdminAnnouncementsPage() {
       const fallbackName = user.email?.split("@")[0] ?? "Unknown Admin";
       const finalName = profileRow?.full_name?.trim() || profileRow?.email?.trim() || fallbackName;
       setPostedByName(finalName);
+      setActorRole(String(profileRow?.role ?? "admin").toLowerCase() === "member" ? "member" : "admin");
 
       await loadPersonnelCount();
       await loadAnnouncements();
@@ -303,6 +347,29 @@ export default function AdminAnnouncementsPage() {
 
     return () => window.clearTimeout(timer);
   }, [searchInput]);
+
+  useEffect(() => {
+    if (hasHandledOpenCommentsParamRef.current || isChecking || isLoadingAnnouncements) {
+      return;
+    }
+
+    const announcementId = searchParams.get("announcementId")?.trim() ?? "";
+    const shouldOpenComments = searchParams.get("openComments") === "1";
+
+    if (!shouldOpenComments || !announcementId) {
+      hasHandledOpenCommentsParamRef.current = true;
+      return;
+    }
+
+    const target = announcements.find((entry) => entry.id === announcementId);
+    if (!target) {
+      return;
+    }
+
+    hasHandledOpenCommentsParamRef.current = true;
+    void openCommentsModal(target);
+    router.replace("/admin/announcements");
+  }, [announcements, isChecking, isLoadingAnnouncements, router, searchParams]);
 
   const filteredAnnouncements = announcements.filter((entry) => {
     const normalizedQuery = normalizeSearchText(searchQuery);
@@ -475,6 +542,11 @@ export default function AdminAnnouncementsPage() {
         setTitle("");
         setDescription("");
         setAlertLevel("normal");
+        await insertActivityLog({
+          actionType: "announcement_updated",
+          detail: `Updated announcement "${title.trim()}"`,
+          referenceId: editingAnnouncement.id,
+        });
         setEditingAnnouncement(null);
         setIsCreateModalOpen(false);
         setFormMessage("Announcement updated.");
@@ -547,6 +619,12 @@ export default function AdminAnnouncementsPage() {
       setIsCreateModalOpen(false);
       setFormMessage("Announcement published.");
       showStatus("success", "Announcement published.");
+
+      await insertActivityLog({
+        actionType: "announcement_created",
+        detail: `Created announcement "${title.trim()}"`,
+        referenceId: announcementId,
+      });
 
       await loadAnnouncements();
     } catch (error) {
@@ -636,12 +714,10 @@ export default function AdminAnnouncementsPage() {
       return;
     }
 
-    // Write activity log entry
-    await supabase.from("activity_logs").insert({
-      action_type: "comment_deleted",
-      actor_name: postedByName,
+    await insertActivityLog({
+      actionType: "comment_deleted",
       detail: `Removed comment by "${commenterName}" on "${selectedAnnouncement.title}"`,
-      reference_id: selectedAnnouncement.id,
+      referenceId: selectedAnnouncement.id,
     });
 
     const idsToRemove = new Set(payload.deletedIds?.length ? payload.deletedIds : [commentId]);
@@ -680,11 +756,10 @@ export default function AdminAnnouncementsPage() {
 
     const payload = (await response.json()) as { comment?: CommentRow };
 
-    await supabase.from("activity_logs").insert({
-      action_type: "comment_added",
-      actor_name: postedByName,
+    await insertActivityLog({
+      actionType: "comment_added",
       detail: `Added admin comment on "${selectedAnnouncement.title}"`,
-      reference_id: selectedAnnouncement.id,
+      referenceId: selectedAnnouncement.id,
     });
 
     if (payload.comment) {
@@ -724,12 +799,10 @@ export default function AdminAnnouncementsPage() {
       return;
     }
 
-    // Write activity log entry
-    await supabase.from("activity_logs").insert({
-      action_type: "announcement_deleted",
-      actor_name: postedByName,
+    await insertActivityLog({
+      actionType: "announcement_deleted",
       detail: `Deleted announcement "${entry.title}" (${media.length} image${media.length !== 1 ? "s" : ""})`,
-      reference_id: entry.id,
+      referenceId: entry.id,
     });
 
     // Close comments modal if it was open for this announcement
@@ -913,27 +986,42 @@ export default function AdminAnnouncementsPage() {
                         </button>
                       ) : (
                         <div className="grid h-full grid-cols-2 gap-2 p-2">
-                          {(entry.announcement_media ?? []).map((media, index) => (
-                            <button
-                              key={media.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedImages(entry.announcement_media ?? []);
-                                setSelectedImageIndex(index);
-                                setImageViewerOpen(true);
-                              }}
-                              className="relative h-full w-full overflow-hidden rounded-lg"
-                              aria-label={`View image ${index + 1}`}
-                            >
-                              <Image
-                                src={media.public_url}
-                                alt={media.file_name}
-                                fill
-                                className="object-cover"
-                                unoptimized
-                              />
-                            </button>
-                          ))}
+                          {getAnnouncementPreviewItems(entry.announcement_media ?? []).map((media, index, previewItems) => {
+                            const isLastPreviewTile = index === previewItems.length - 1;
+                            const overflowCount = isLastPreviewTile ? getOverflowCount(entry.announcement_media ?? []) : 0;
+
+                            return (
+                              <button
+                                key={media.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedImages(entry.announcement_media ?? []);
+                                  setSelectedImageIndex(index);
+                                  setImageViewerOpen(true);
+                                }}
+                                className="relative h-full w-full overflow-hidden rounded-lg"
+                                aria-label={`View image ${index + 1}`}
+                              >
+                                <Image
+                                  src={media.public_url}
+                                  alt={media.file_name}
+                                  fill
+                                  className={`object-cover ${isLastPreviewTile ? "scale-100" : "scale-100"}`}
+                                  unoptimized
+                                />
+
+                                {isLastPreviewTile && overflowCount > 0 ? (
+                                  <div className="absolute inset-0 bg-black/20" />
+                                ) : null}
+
+                                {isLastPreviewTile && overflowCount > 0 ? (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                    <span className="text-3xl font-black tracking-tight text-white">+{overflowCount}</span>
+                                  </div>
+                                ) : null}
+                              </button>
+                            );
+                          })}
                         </div>
 
                         

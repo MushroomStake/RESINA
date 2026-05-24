@@ -21,15 +21,22 @@ function extractPhoneDigits(value: string): string {
 function normalizePhoneNumber(value: string): string {
   const digits = extractPhoneDigits(value);
 
+  if (!digits) {
+    return "";
+  }
+
   if (digits.startsWith("63")) {
-    return `${PHONE_COUNTRY_PREFIX}${digits.slice(2, 12)}`;
+    const localDigits = digits.slice(2, 12);
+    return localDigits ? `${PHONE_COUNTRY_PREFIX}${localDigits}` : "";
   }
 
   if (digits.startsWith("0")) {
-    return `${PHONE_COUNTRY_PREFIX}${digits.slice(1, 11)}`;
+    const localDigits = digits.slice(1, 11);
+    return localDigits ? `${PHONE_COUNTRY_PREFIX}${localDigits}` : "";
   }
 
-  return `${PHONE_COUNTRY_PREFIX}${digits.slice(0, 10)}`;
+  const localDigits = digits.slice(0, 10);
+  return localDigits ? `${PHONE_COUNTRY_PREFIX}${localDigits}` : "";
 }
 
 function isValidPhoneNumber(value: string): boolean {
@@ -85,9 +92,10 @@ export async function PUT(request: NextRequest) {
     const adminSupabaseDynamic = adminSupabase as any;
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber.trim());
+    const hasPhoneNumber = Boolean(normalizedPhoneNumber);
     const fullName = buildFullName(firstName, middleName, lastName);
 
-    if (!isValidPhoneNumber(normalizedPhoneNumber)) {
+    if (hasPhoneNumber && !isValidPhoneNumber(normalizedPhoneNumber)) {
       return NextResponse.json({ error: "Phone number must be in the format +639XXXXXXXXX." }, { status: 400 });
     }
 
@@ -119,7 +127,7 @@ export async function PUT(request: NextRequest) {
           middle_name: middleName.trim(),
           last_name: lastName.trim(),
           full_name: fullName,
-          phone_number: normalizedPhoneNumber,
+          phone_number: hasPhoneNumber ? normalizedPhoneNumber : null,
           role,
           position: role,
         },
@@ -137,7 +145,7 @@ export async function PUT(request: NextRequest) {
         middle_name: middleName.trim(),
         last_name: lastName.trim(),
         full_name: fullName,
-        phone_number: normalizedPhoneNumber,
+        phone_number: hasPhoneNumber ? normalizedPhoneNumber : null,
         email: normalizedEmail,
         role,
       })

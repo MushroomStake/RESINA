@@ -47,6 +47,8 @@ function buildFullName(first: string, middle: string, last: string): string {
 
 const PHONE_COUNTRY_PREFIX = "+63";
 const PHONE_LOCAL_LENGTH = 10;
+const LAST_ADMIN_TOOLTIP =
+  "Member is disabled because this is the only admin account. Add or update another user to Admin first, then change this role to Member.";
 
 function extractPhoneLocalDigits(value: string): string {
   const digitsOnly = value.replace(/\D/g, "");
@@ -479,12 +481,13 @@ export default function AdminProfilePage() {
 
     const fullName = buildFullName(updateUserForm.firstName, updateUserForm.middleName, updateUserForm.lastName);
     const normalizedPhoneNumber = normalizePhoneNumber(updateUserForm.phoneNumber);
+    const hasPhoneNumber = Boolean(normalizedPhoneNumber);
     if (!fullName || !updateUserForm.email.trim()) {
       showStatus("error", "First name, last name, and email are required.");
       return;
     }
 
-    if (!isValidPhoneNumber(normalizedPhoneNumber)) {
+    if (hasPhoneNumber && !isValidPhoneNumber(normalizedPhoneNumber)) {
       showStatus("error", "Please enter a valid phone number in the format +639XXXXXXXXX.");
       return;
     }
@@ -500,7 +503,7 @@ export default function AdminProfilePage() {
           firstName: updateUserForm.firstName.trim(),
           middleName: updateUserForm.middleName.trim(),
           lastName: updateUserForm.lastName.trim(),
-          phoneNumber: normalizedPhoneNumber,
+          phoneNumber: normalizedPhoneNumber || "",
           email: updateUserForm.email.trim().toLowerCase(),
           role: updateUserForm.role,
         }),
@@ -678,13 +681,23 @@ export default function AdminProfilePage() {
                   value={position}
                   onChange={(e) => requestPositionChange(e.target.value as Role)}
                   disabled={myRole !== "admin"}
+                  title={isCurrentUserLastAdmin ? LAST_ADMIN_TOOLTIP : undefined}
                   className="w-[180px] rounded-lg border border-[#d1d5db] px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-[#f9fafb]"
                 >
                   <option value="admin">Admin</option>
-                  <option value="member" disabled={isCurrentUserLastAdmin}>
+                  <option value="member" disabled={isCurrentUserLastAdmin} title={isCurrentUserLastAdmin ? LAST_ADMIN_TOOLTIP : undefined}>
                     Member
                   </option>
                 </select>
+                {isCurrentUserLastAdmin ? (
+                  <div className="group relative mt-2 inline-flex cursor-help items-center gap-1 text-xs text-[#9ca3af]">
+                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#d1d5db] text-[10px] font-bold text-[#6b7280]">i</span>
+                    <span>Why is Member disabled?</span>
+                    <span className="pointer-events-none invisible absolute left-0 top-[calc(100%+8px)] z-20 w-80 rounded-lg border border-[#d1d5db] bg-white p-3 text-xs text-[#374151] opacity-0 shadow-lg transition-all duration-150 group-hover:visible group-hover:opacity-100">
+                      {LAST_ADMIN_TOOLTIP}
+                    </span>
+                  </div>
+                ) : null}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className="text-xs text-[#6b7280]">Role guide:</span>
                   <RoleHoverGuide role="admin" />
@@ -951,13 +964,23 @@ export default function AdminProfilePage() {
                 <select
                   value={updateUserForm.role}
                   onChange={(e) => requestUpdatePositionChange(e.target.value as Role)}
+                  title={isUpdateTargetLastAdmin ? LAST_ADMIN_TOOLTIP : undefined}
                   className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm"
                 >
                   <option value="admin">Admin</option>
-                  <option value="member" disabled={isUpdateTargetLastAdmin}>
+                  <option value="member" disabled={isUpdateTargetLastAdmin} title={isUpdateTargetLastAdmin ? LAST_ADMIN_TOOLTIP : undefined}>
                     Member
                   </option>
                 </select>
+                {isUpdateTargetLastAdmin ? (
+                  <div className="group relative mt-2 inline-flex cursor-help items-center gap-1 text-xs text-[#9ca3af]">
+                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#d1d5db] text-[10px] font-bold text-[#6b7280]">i</span>
+                    <span>Why is Member disabled?</span>
+                    <span className="pointer-events-none invisible absolute left-0 top-[calc(100%+8px)] z-20 w-80 rounded-lg border border-[#d1d5db] bg-white p-3 text-xs text-[#374151] opacity-0 shadow-lg transition-all duration-150 group-hover:visible group-hover:opacity-100">
+                      {LAST_ADMIN_TOOLTIP}
+                    </span>
+                  </div>
+                ) : null}
               </label>
 
               <label className="md:col-span-2">

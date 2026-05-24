@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
 import { downloadAnalyticsReportXlsx } from "./xlsx-report";
 import { ActivityLogSection } from "../dashboard/components/activity-log-section";
@@ -248,6 +248,7 @@ function formatDateForFileName(value: Date): string {
 
 export default function AdminHistoryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
 
   const [isChecking, setIsChecking] = useState(true);
@@ -260,6 +261,7 @@ export default function AdminHistoryPage() {
   const [selectedDate, setSelectedDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showDateFilterHelp, setShowDateFilterHelp] = useState(false);
+  const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
   const dateHelpButtonRef = useRef<HTMLButtonElement | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
   const tooltipElRef = useRef<HTMLDivElement | null>(null);
@@ -447,6 +449,38 @@ export default function AdminHistoryPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, statusFilter, dateFilter, selectedDate]);
+
+  useEffect(() => {
+    const targetRecordId = searchParams.get("recordId")?.trim() ?? "";
+    if (!targetRecordId) {
+      setHighlightedRecordId(null);
+      return;
+    }
+
+    setHighlightedRecordId(targetRecordId);
+    const index = filteredRecords.findIndex((entry) => entry.id === targetRecordId);
+    if (index < 0) {
+      return;
+    }
+
+    const targetPage = Math.floor(index / pageSize) + 1;
+    if (targetPage !== currentPage) {
+      setCurrentPage(targetPage);
+    }
+  }, [currentPage, filteredRecords, pageSize, searchParams]);
+
+  useEffect(() => {
+    if (!highlightedRecordId) {
+      return;
+    }
+
+    const row = document.getElementById(`history-row-${highlightedRecordId}`);
+    if (!row) {
+      return;
+    }
+
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightedRecordId, pagedRecords]);
 
   useEffect(() => {
     function updatePos() {
@@ -696,7 +730,13 @@ export default function AdminHistoryPage() {
                     const config = ALERT_LEVELS[entry.alertLevel];
 
                     return (
-                      <tr key={entry.id} className="border-b border-[#e9f0f7] transition odd:bg-[#fbfdff] hover:bg-[#edf5ff] last:border-b-0">
+                      <tr
+                        key={entry.id}
+                        id={`history-row-${entry.id}`}
+                        className={`border-b border-[#e9f0f7] transition odd:bg-[#fbfdff] hover:bg-[#edf5ff] last:border-b-0 ${
+                          highlightedRecordId === entry.id ? "!bg-[#fff7ed]" : ""
+                        }`}
+                      >
                         <td className="px-4 py-4 whitespace-nowrap text-[#475569]">{formatHistoryDate(entry)}</td>
                         <td className="px-4 py-4 whitespace-nowrap text-[#475569]">{formatHistoryTime(entry)}</td>
                         <td className="px-4 py-4">

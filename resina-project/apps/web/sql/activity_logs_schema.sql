@@ -8,12 +8,21 @@ create table if not exists public.activity_logs (
   id            uuid        primary key default gen_random_uuid(),
   action_type   text        not null,
   actor_name    text        not null default 'System',
+  actor_auth_user_id uuid   null,
+  actor_role    text        null,
   detail        text        not null,
   reference_id  uuid        null,
   created_at    timestamptz not null default now()
 );
 
+alter table public.activity_logs
+  add column if not exists actor_auth_user_id uuid null;
+
+alter table public.activity_logs
+  add column if not exists actor_role text null;
+
 create index if not exists idx_activity_logs_created_at on public.activity_logs(created_at desc);
+create index if not exists idx_activity_logs_actor_role on public.activity_logs(actor_role);
 
 alter table public.activity_logs enable row level security;
 

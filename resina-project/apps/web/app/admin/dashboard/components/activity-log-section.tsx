@@ -7,6 +7,7 @@ type ActivityLogRow = {
   id: string;
   action_type: string;
   actor_name: string;
+  actor_role?: string | null;
   detail: string;
   created_at: string;
 };
@@ -49,11 +50,21 @@ export function ActivityLogSection() {
       const from = (currentPage - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      const { data, count } = await supabase
+      const primaryResult = await supabase
+        .from("activity_logs")
+        .select("id, action_type, actor_name, actor_role, detail, created_at", { count: "exact" })
+        .in("actor_role", ["admin", "member"])
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      const fallbackResult = await supabase
         .from("activity_logs")
         .select("id, action_type, actor_name, detail, created_at", { count: "exact" })
         .order("created_at", { ascending: false })
         .range(from, to);
+
+      const data = primaryResult.error ? fallbackResult.data : primaryResult.data;
+      const count = primaryResult.error ? fallbackResult.count : primaryResult.count;
 
       if (isMounted) {
         setLogs((data ?? []) as ActivityLogRow[]);
@@ -72,6 +83,10 @@ export function ActivityLogSection() {
         (payload) => {
           if (isMounted) {
             const newRow = payload.new as ActivityLogRow;
+            const role = String(newRow.actor_role ?? "").toLowerCase();
+            if (newRow.actor_role !== undefined && role !== "admin" && role !== "member") {
+              return;
+            }
             setTotalCount((prev) => prev + 1);
             if (currentPage === 1) {
               setLogs((prev) => [newRow, ...prev].slice(0, PAGE_SIZE));
@@ -101,7 +116,7 @@ export function ActivityLogSection() {
           <thead className="text-[#6b7280]">
             <tr>
               <th className="pb-2 font-medium">Date & Time</th>
-              <th className="pb-2 font-medium">Admin</th>
+              <th className="pb-2 font-medium">Personnel</th>
               <th className="pb-2 font-medium">Action</th>
               <th className="pb-2 font-medium">Detail</th>
             </tr>

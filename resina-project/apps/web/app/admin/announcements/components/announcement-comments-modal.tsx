@@ -327,7 +327,7 @@ export function AnnouncementCommentsModal({
         className="comments-backdrop absolute inset-0 bg-black/55"
       />
 
-      <div className="comments-modal-shell relative z-10 flex max-h-[calc(100vh-16px)] w-[calc(100vw-8px)] max-w-[2300px] flex-col overflow-hidden rounded-[26px] border border-[#d1d5db] bg-white shadow-[0_22px_60px_rgba(15,23,42,0.28)] sm:w-[calc(100vw-24px)]">
+      <div className="comments-modal-shell relative z-10 flex max-h-[calc(100vh-16px)] w-[calc(100vw-8px)] max-w-[1200px] flex-col overflow-hidden rounded-[26px] border border-[#d1d5db] bg-white shadow-[0_22px_60px_rgba(15,23,42,0.28)] sm:w-[calc(100vw-24px)]">
         <div className="flex items-start justify-between border-b border-[#e5e7eb] px-6 py-5 sm:px-8">
           <div>
             <h2 className="text-[34px] font-bold leading-tight text-[#1f2937] sm:text-[40px]">Comments</h2>
