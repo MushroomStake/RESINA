@@ -95,7 +95,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </div>
 
         <div
-          className={`fixed inset-0 z-40 bg-[rgba(15,23,42,0.45)] transition-opacity duration-200 md:hidden ${
+          className={`fixed inset-0 z-[60] bg-[rgba(15,23,42,0.45)] transition-opacity duration-200 md:hidden ${
             isSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
           }`}
           onClick={() => setIsSidebarOpen(false)}
@@ -112,14 +112,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         <aside
           id="admin-mobile-sidebar"
-          className={`fixed inset-y-0 left-0 z-50 w-[280px] max-w-[85vw] border-r border-[#e5e7eb] bg-[#f7f8f9] shadow-xl transition-transform duration-300 md:hidden ${
+          className={`fixed inset-y-0 left-0 z-[70] w-[280px] max-w-[85vw] border-r border-[#e5e7eb] bg-[#f7f8f9] shadow-xl transition-transform duration-300 md:hidden ${
             isSidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
           <AdminSidebar activePage={activePage} />
         </aside>
 
-        <div className="min-w-0 w-full flex-1 overflow-x-hidden overflow-y-auto">
+        <div
+          className={`min-w-0 w-full flex-1 overflow-x-hidden overflow-y-auto transition-opacity duration-200 md:opacity-100 ${
+            isSidebarOpen ? "pointer-events-none opacity-0 md:pointer-events-auto md:opacity-100" : "opacity-100"
+          }`}
+        >
           <AdminPageHeader
             activePage={activePage}
             onMenuToggle={() => setIsSidebarOpen((prev) => !prev)}

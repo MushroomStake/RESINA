@@ -15,7 +15,7 @@ create table if not exists public.activity_logs (
   created_at    timestamptz not null default now()
 );
 
-alter table public.activity_logs
+alter table public.activity_logsw
   add column if not exists actor_auth_user_id uuid null;
 
 alter table public.activity_logs

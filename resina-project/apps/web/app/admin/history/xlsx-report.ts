@@ -10,7 +10,7 @@ export type AnalyticsReportRow = {
   description: string;
 };
 
-type BuildAnalyticsWorkbookOptions = {
+export type AnalyticsReportExportOptions = {
   rows: AnalyticsReportRow[];
   dateRangeLabel: string;
   generatedAt: string;
@@ -20,6 +20,7 @@ type BuildAnalyticsWorkbookOptions = {
 };
 
 const TEXT_ENCODER = new TextEncoder();
+const STA_RITA_ICON_PATH = "/images/Sta Rita Icon.png";
 
 function encodeUtf8(value: string): Uint8Array {
   return TEXT_ENCODER.encode(value);
@@ -168,7 +169,7 @@ function rowXml(rowNumber: number, cells: string[], height?: number): string {
   return `<row r="${rowNumber}"${heightAttributes}>${cells.join("")}</row>`;
 }
 
-function createSheetXml(options: BuildAnalyticsWorkbookOptions): string {
+function createSheetXml(options: AnalyticsReportExportOptions): string {
   const rows = options.rows;
   const dataStartRow = 9;
 
@@ -177,7 +178,6 @@ function createSheetXml(options: BuildAnalyticsWorkbookOptions): string {
     inlineStringCell("B8", "Time", 6),
     inlineStringCell("C8", "Status", 6),
     inlineStringCell("D8", "Water Level (m)", 6),
-    inlineStringCell("E8", "Description", 6),
   ], 22);
 
   const dataRows = rows.map((entry, index) => {
@@ -196,13 +196,12 @@ function createSheetXml(options: BuildAnalyticsWorkbookOptions): string {
       inlineStringCell(`B${rowNumber}`, formatExcelTime(entry), 7),
       inlineStringCell(`C${rowNumber}`, entry.statusLabel, statusStyle),
       numberCell(`D${rowNumber}`, entry.waterLevel, 8),
-      inlineStringCell(`E${rowNumber}`, entry.description, 9),
     ], 20);
   });
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <dimension ref="A1:G${Math.max(9, dataStartRow + rows.length - 1)}"/>
+  <dimension ref="A1:F${Math.max(9, dataStartRow + rows.length - 1)}"/>
   <sheetViews>
     <sheetView workbookViewId="0">
       <pane ySplit="7" topLeftCell="A8" activePane="bottomLeft" state="frozen"/>
@@ -211,13 +210,12 @@ function createSheetXml(options: BuildAnalyticsWorkbookOptions): string {
   </sheetViews>
   <sheetFormatPr defaultRowHeight="20"/>
   <cols>
-    <col min="1" max="1" width="16" customWidth="1"/>
+    <col min="1" max="1" width="18" customWidth="1"/>
     <col min="2" max="2" width="16" customWidth="1"/>
-    <col min="3" max="3" width="16" customWidth="1"/>
-    <col min="4" max="4" width="16" customWidth="1"/>
-    <col min="5" max="5" width="52" customWidth="1"/>
+    <col min="3" max="3" width="18" customWidth="1"/>
+    <col min="4" max="4" width="18" customWidth="1"/>
+    <col min="5" max="5" width="16" customWidth="1"/>
     <col min="6" max="6" width="16" customWidth="1"/>
-    <col min="7" max="7" width="16" customWidth="1"/>
   </cols>
   <sheetData>
     ${rowXml(1, [inlineStringCell("B1", options.reportTitle, 1)], 30)}
@@ -230,7 +228,7 @@ function createSheetXml(options: BuildAnalyticsWorkbookOptions): string {
     ${headerRow}
     ${dataRows.join("")}
   </sheetData>
-  <autoFilter ref="A8:E${Math.max(8, dataStartRow + rows.length - 1)}"/>
+  <autoFilter ref="A8:D${Math.max(8, dataStartRow + rows.length - 1)}"/>
   <mergeCells count="5">
     <mergeCell ref="B1:F1"/>
     <mergeCell ref="B2:F2"/>
@@ -238,7 +236,67 @@ function createSheetXml(options: BuildAnalyticsWorkbookOptions): string {
     <mergeCell ref="B5:F5"/>
     <mergeCell ref="B6:F6"/>
   </mergeCells>
+  <printOptions horizontalCentered="1" verticalCentered="0" gridLines="0"/>
+  <pageMargins left="0.35" right="0.35" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>
+  <pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/>
+  <drawing r:id="rId1"/>
 </worksheet>`;
+}
+
+function createWorksheetRelsXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>
+</Relationships>`;
+}
+
+function createDrawingXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <xdr:twoCellAnchor editAs="oneCell">
+    <xdr:from>
+      <xdr:col>0</xdr:col>
+      <xdr:colOff>0</xdr:colOff>
+      <xdr:row>0</xdr:row>
+      <xdr:rowOff>0</xdr:rowOff>
+    </xdr:from>
+    <xdr:to>
+      <xdr:col>1</xdr:col>
+      <xdr:colOff>0</xdr:colOff>
+      <xdr:row>3</xdr:row>
+      <xdr:rowOff>0</xdr:rowOff>
+    </xdr:to>
+    <xdr:pic>
+      <xdr:nvPicPr>
+        <xdr:cNvPr id="2" name="Sta Rita Icon"/>
+        <xdr:cNvPicPr/>
+      </xdr:nvPicPr>
+      <xdr:blipFill>
+        <a:blip r:embed="rId1"/>
+        <a:stretch>
+          <a:fillRect/>
+        </a:stretch>
+      </xdr:blipFill>
+      <xdr:spPr>
+        <a:xfrm>
+          <a:off x="0" y="0"/>
+          <a:ext cx="0" cy="0"/>
+        </a:xfrm>
+        <a:prstGeom prst="rect">
+          <a:avLst/>
+        </a:prstGeom>
+      </xdr:spPr>
+    </xdr:pic>
+    <xdr:clientData/>
+  </xdr:twoCellAnchor>
+</xdr:wsDr>`;
+}
+
+function createDrawingRelsXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/sta-rita-icon.png"/>
+</Relationships>`;
 }
 
 function createWorkbookXml(): string {
@@ -273,8 +331,10 @@ function createContentTypesXml(): string {
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 </Types>`;
 }
@@ -331,7 +391,7 @@ function createStylesXml(): string {
 }
 
 async function fetchImageBytes(path: string): Promise<Uint8Array> {
-  const response = await fetch(path);
+  const response = await fetch(encodeURI(path));
   if (!response.ok) {
     throw new Error(`Failed to load image: ${path}`);
   }
@@ -381,7 +441,9 @@ function formatExcelTime(entry: AnalyticsReportRow): string {
   });
 }
 
-export async function buildAnalyticsReportXlsx(options: BuildAnalyticsWorkbookOptions): Promise<Uint8Array> {
+export async function buildAnalyticsReportXlsx(options: AnalyticsReportExportOptions): Promise<Uint8Array> {
+  const logoImage = await fetchImageBytes(STA_RITA_ICON_PATH);
+
   const files = [
     { name: "[Content_Types].xml", data: encodeUtf8(createContentTypesXml()) },
     { name: "_rels/.rels", data: encodeUtf8(createRootRelsXml()) },
@@ -389,12 +451,16 @@ export async function buildAnalyticsReportXlsx(options: BuildAnalyticsWorkbookOp
     { name: "xl/_rels/workbook.xml.rels", data: encodeUtf8(createWorkbookRelsXml()) },
     { name: "xl/styles.xml", data: encodeUtf8(createStylesXml()) },
     { name: "xl/worksheets/sheet1.xml", data: encodeUtf8(createSheetXml(options)) },
+    { name: "xl/worksheets/_rels/sheet1.xml.rels", data: encodeUtf8(createWorksheetRelsXml()) },
+    { name: "xl/drawings/drawing1.xml", data: encodeUtf8(createDrawingXml()) },
+    { name: "xl/drawings/_rels/drawing1.xml.rels", data: encodeUtf8(createDrawingRelsXml()) },
+    { name: "xl/media/sta-rita-icon.png", data: logoImage },
   ];
 
   return createZip(files);
 }
 
-export async function downloadAnalyticsReportXlsx(options: BuildAnalyticsWorkbookOptions, fileName: string): Promise<void> {
+export async function downloadAnalyticsReportXlsx(options: AnalyticsReportExportOptions, fileName: string): Promise<void> {
   const archive = await buildAnalyticsReportXlsx(options);
   const archiveBuffer = archive.buffer.slice(
     archive.byteOffset,

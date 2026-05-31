@@ -361,7 +361,7 @@ export default function AdminDashboardPage() {
     }
 
     if (!found) {
-      setFetchError("No sensor rows found yet. Waiting for Twilio to write records into Supabase.");
+      setFetchError("No sensor data found yet. Waiting for new records in Supabase.");
     }
 
     if (!silent) {

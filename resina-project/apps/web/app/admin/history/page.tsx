@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
+import { downloadAnalyticsReportPdf } from "./pdf-report";
 import { downloadAnalyticsReportXlsx } from "./xlsx-report";
 import { ActivityLogSection } from "../dashboard/components/activity-log-section";
 import { AdminPageSkeleton } from "../components/admin-skeleton";
@@ -400,6 +401,7 @@ export default function AdminHistoryPage() {
   })();
 
   const currentXlsxFileName = `${currentReportBaseName}.xlsx`;
+  const currentPdfFileName = `${currentReportBaseName}.pdf`;
 
   const totalPages = Math.max(1, Math.ceil(filteredRecords.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -544,6 +546,30 @@ export default function AdminHistoryPage() {
     );
   };
 
+  const handleDownloadPdf = async () => {
+    const generatedAt = new Date().toLocaleString("en-PH", {
+      timeZone: "Asia/Manila",
+      month: "long",
+      day: "2-digit",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    await downloadAnalyticsReportPdf(
+      {
+        rows: filteredRecords,
+        dateRangeLabel: currentDateRangeLabel,
+        generatedAt,
+        reportTitle: "Sta. Rita Bridge Water Level Monitoring Report",
+        barangayName: "Barangay Sta. Rita",
+        cityName: "Lungsod ng Olongapo",
+      },
+      currentPdfFileName,
+    );
+  };
+
   if (isChecking) {
     return <AdminPageSkeleton title="Loading analytics report..." blockCount={2} />;
   }
@@ -681,7 +707,15 @@ export default function AdminHistoryPage() {
                   disabled={filteredRecords.length === 0}
                   className="rounded-xl bg-[#123b63] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0f2f50] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Download Report
+                  Download XLSX
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadPdf()}
+                  disabled={filteredRecords.length === 0}
+                  className="rounded-xl border border-[#c7d8ea] bg-white px-4 py-2 text-sm font-semibold text-[#123b63] shadow-sm transition hover:border-[#9bc2e8] hover:bg-[#f7fbff] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Download PDF
                 </button>
               </div>
             </div>

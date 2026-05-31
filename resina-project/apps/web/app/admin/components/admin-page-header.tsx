@@ -19,6 +19,17 @@ type NotificationItem = {
   message: string;
   createdAt: string;
   targetUrl: string;
+  isRead: boolean;
+};
+
+type NotificationRow = {
+  id: string;
+  kind: NotificationItem["kind"];
+  title: string;
+  message: string;
+  created_at: string;
+  target_url: string;
+  is_read: boolean;
 };
 
 type NotificationFilter = "all" | "unread" | "read";
@@ -66,10 +77,8 @@ export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }
   const [isNotifLoading, setIsNotifLoading] = useState(false);
   const [isNotifAnimatingIn, setIsNotifAnimatingIn] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [readMap, setReadMap] = useState<Record<string, boolean>>({});
   const [notifFilter, setNotifFilter] = useState<NotificationFilter>("all");
   const [visibleNotifCount, setVisibleNotifCount] = useState(NOTIF_PAGE_SIZE);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const notifPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -116,37 +125,6 @@ export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }
   }, [isNotifOpen]);
 
   useEffect(() => {
-    if (!currentUserId) {
-      return;
-    }
-
-    try {
-      const raw = window.localStorage.getItem(`resina-admin-notif-read:${currentUserId}`);
-      if (!raw) {
-        setReadMap({});
-        return;
-      }
-
-      const parsed = JSON.parse(raw) as Record<string, boolean>;
-      setReadMap(parsed ?? {});
-    } catch {
-      setReadMap({});
-    }
-  }, [currentUserId]);
-
-  useEffect(() => {
-    if (!currentUserId) {
-      return;
-    }
-
-    try {
-      window.localStorage.setItem(`resina-admin-notif-read:${currentUserId}`, JSON.stringify(readMap));
-    } catch {
-      // Ignore storage errors in private mode.
-    }
-  }, [currentUserId, readMap]);
-
-  useEffect(() => {
     let mounted = true;
     let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -161,112 +139,39 @@ export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }
 
       if (!user || !mounted) {
         if (mounted) {
-          setCurrentUserId(null);
           setNotifications([]);
           setIsNotifLoading(false);
         }
         return;
       }
 
-      setCurrentUserId(user.id);
-
-      const sensorResult = await supabase
-        .from("sensor_readings")
-        .select("id, water_level, status, created_at")
+      const { data: notificationRows, error: notificationError } = await supabase
+        .from("admin_notifications")
+        .select("id, kind, title, message, created_at, target_url, is_read")
         .order("created_at", { ascending: false })
-        .limit(8);
+        .limit(20);
 
-      const sensorNotifications: NotificationItem[] = (sensorResult.data ?? []).map((row) => {
-        const reading = Number((row as { water_level?: number }).water_level ?? Number.NaN);
-        const status = String((row as { status?: string }).status ?? "Unknown").trim();
-        const createdAt = String((row as { created_at?: string }).created_at ?? "");
-        const sensorId = String((row as { id?: string }).id ?? "");
-
-        return {
-          id: `sensor-${sensorId}`,
-          kind: "sensor",
-          title: "New sensor reading",
-          message: Number.isNaN(reading)
-            ? `Status updated (${status}).`
-            : `Water level is ${reading.toFixed(2)} m (${status}).`,
-          createdAt,
-          targetUrl: `/admin/history?recordId=${encodeURIComponent(sensorId)}`,
-        };
-      });
-
-      const ownAnnouncements = await supabase
-        .from("announcements")
-        .select("id, title")
-        .eq("posted_by_auth_user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(60);
-
-      const announcementTitleById = new Map<string, string>();
-      const ownAnnouncementIds = (ownAnnouncements.data ?? []).map((row) => {
-        const id = String((row as { id?: string }).id ?? "");
-        const title = String((row as { title?: string }).title ?? "").trim();
-        if (id) {
-          announcementTitleById.set(id, title || "Announcement");
+      if (notificationError) {
+        if (mounted) {
+          setNotifications([]);
+          setIsNotifLoading(false);
         }
-        return id;
-      }).filter(Boolean);
-
-      let commentNotifications: NotificationItem[] = [];
-
-      if (ownAnnouncementIds.length > 0) {
-        const commentsResult = await supabase
-          .from("announcement_comments")
-          .select("id, announcement_id, commenter_name, commenter_auth_user_id, created_at")
-          .in("announcement_id", ownAnnouncementIds)
-          .order("created_at", { ascending: false })
-          .limit(200);
-
-        const grouped = new Map<string, Array<{ id: string; commenterName: string; commenterAuthUserId: string | null; createdAt: string }>>();
-
-        for (const row of commentsResult.data ?? []) {
-          const announcementId = String((row as { announcement_id?: string }).announcement_id ?? "").trim();
-          const commenterName = String((row as { commenter_name?: string }).commenter_name ?? "").trim();
-          const commenterAuthUserId = ((row as { commenter_auth_user_id?: string | null }).commenter_auth_user_id ?? null);
-          const createdAt = String((row as { created_at?: string }).created_at ?? "");
-          const id = String((row as { id?: string }).id ?? "");
-
-          if (!announcementId || !id || !createdAt) {
-            continue;
-          }
-
-          if (commenterAuthUserId === user.id || commenterName.toLowerCase() === "brgy. sta. rita") {
-            continue;
-          }
-
-          const list = grouped.get(announcementId) ?? [];
-          list.push({ id, commenterName: commenterName || "Someone", commenterAuthUserId, createdAt });
-          grouped.set(announcementId, list);
-        }
-
-        commentNotifications = Array.from(grouped.entries()).map(([announcementId, rows]) => {
-          const sorted = [...rows].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          const latest = sorted[0];
-          const uniqueNames = Array.from(new Set(sorted.map((entry) => entry.commenterName).filter(Boolean)));
-          const firstName = uniqueNames[0] ?? "Someone";
-          const message = sorted.length <= 1 && uniqueNames.length === 1
-            ? `${firstName} commented on this post.`
-            : `${firstName}, and others commented on this post.`;
-
-          return {
-            id: `comment-${announcementId}-${latest.id}`,
-            kind: "comment",
-            title: announcementTitleById.get(announcementId) ?? "Announcement",
-            message,
-            createdAt: latest.createdAt,
-            targetUrl: `/admin/announcements?announcementId=${encodeURIComponent(announcementId)}&openComments=1`,
-          } satisfies NotificationItem;
-        });
+        return;
       }
 
-      const merged = [...commentNotifications, ...sensorNotifications]
-        .filter((entry) => entry.createdAt)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 20);
+      const merged = (notificationRows ?? []).map((row) => {
+        const notification = row as NotificationRow;
+
+        return {
+          id: notification.id,
+          kind: notification.kind,
+          title: notification.title,
+          message: notification.message,
+          createdAt: notification.created_at,
+          targetUrl: notification.target_url,
+          isRead: notification.is_read,
+        } satisfies NotificationItem;
+      });
 
       if (mounted) {
         setNotifications(merged);
@@ -289,21 +194,7 @@ export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }
       .channel(`admin-header-notifications-${Date.now()}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "sensor_readings" },
-        () => {
-          scheduleRealtimeRefresh();
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "announcement_comments" },
-        () => {
-          scheduleRealtimeRefresh();
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "announcements" },
+        { event: "INSERT", schema: "public", table: "admin_notifications" },
         () => {
           scheduleRealtimeRefresh();
         },
@@ -349,14 +240,20 @@ export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }
     : "--- --, ----";
 
   const content = HEADER_CONTENT[activePage];
-  const unreadCount = notifications.reduce((count, item) => count + (readMap[item.id] ? 0 : 1), 0);
-  const filteredNotifications = notifications.filter((item) => {
-    const isRead = Boolean(readMap[item.id]);
+  const orderedNotifications = [...notifications].sort((left, right) => {
+    if (left.isRead !== right.isRead) {
+      return left.isRead ? 1 : -1;
+    }
+
+    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+  });
+  const unreadCount = notifications.reduce((count, item) => count + (item.isRead ? 0 : 1), 0);
+  const filteredNotifications = orderedNotifications.filter((item) => {
     if (notifFilter === "read") {
-      return isRead;
+      return item.isRead;
     }
     if (notifFilter === "unread") {
-      return !isRead;
+      return !item.isRead;
     }
     return true;
   });
@@ -367,15 +264,32 @@ export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }
     setVisibleNotifCount(NOTIF_PAGE_SIZE);
   }, [isNotifOpen, notifFilter]);
 
-  const markNotification = (notificationId: string, isRead: boolean) => {
-    setReadMap((prev) => ({
-      ...prev,
-      [notificationId]: isRead,
-    }));
+  const markNotification = async (notificationId: string, isRead: boolean) => {
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("admin_notifications")
+      .update({
+        is_read: isRead,
+        read_at: isRead ? now : null,
+      })
+      .eq("id", notificationId);
+
+    if (!error) {
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item.id === notificationId
+            ? {
+                ...item,
+                isRead,
+              }
+            : item,
+        ),
+      );
+    }
   };
 
   const handleNotificationClick = (item: NotificationItem) => {
-    markNotification(item.id, true);
+    void markNotification(item.id, true);
     setIsNotifOpen(false);
     router.push(item.targetUrl);
   };
@@ -441,11 +355,15 @@ export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }
               <button
                 type="button"
                 onClick={() => {
-                  const next: Record<string, boolean> = {};
-                  notifications.forEach((item) => {
-                    next[item.id] = true;
-                  });
-                  setReadMap((prev) => ({ ...prev, ...next }));
+                    void supabase
+                      .from("admin_notifications")
+                      .update({ is_read: true, read_at: new Date().toISOString() })
+                      .in("id", notifications.map((item) => item.id))
+                      .then(({ error }) => {
+                        if (!error) {
+                          setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })));
+                        }
+                      });
                 }}
                 className="text-xs font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
               >
@@ -508,7 +426,7 @@ export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }
                 <p className="rounded-xl bg-white px-3 py-3 text-sm text-[#64748b]">No new notifications.</p>
               ) : (
                 visibleNotifications.map((item) => {
-                  const isRead = Boolean(readMap[item.id]);
+                  const isRead = item.isRead;
 
                   return (
                     <div
@@ -525,7 +443,7 @@ export function AdminPageHeader({ activePage, onMenuToggle, isMenuOpen = false }
                       <div className="mt-2 flex items-center justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => markNotification(item.id, !isRead)}
+                          onClick={() => void markNotification(item.id, !isRead)}
                           className="text-xs font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
                         >
                           Mark as {isRead ? "unread" : "read"}
