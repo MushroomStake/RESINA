@@ -1,6 +1,5 @@
 import Image from "next/image";
 
-const webAppUrl = process.env.NEXT_PUBLIC_WEB_APP_URL ?? "/admin";
 const mobileAppUrl = process.env.NEXT_PUBLIC_MOBILE_APP_URL ?? "#";
 const apkDownloadUrl = process.env.NEXT_PUBLIC_APK_DOWNLOAD_URL ?? "#";
 
@@ -49,7 +48,9 @@ export default function HomePage() {
 
             <div className="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
               <a
-                href={webAppUrl}
+                href={apkDownloadUrl}
+                target="_blank"
+                rel="noreferrer"
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#49af57] px-7 py-3 text-center text-base font-semibold text-white transition-colors hover:bg-[#3f9a4d] sm:w-auto"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

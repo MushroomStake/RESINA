@@ -98,6 +98,14 @@ If a task touches only one area, document only that area. If a task spans multip
 
 ## Change Log
 
+### 2026-06-05
+
+- Prompt: read the document first, and fix the landing page download button and navbar download link so they install the APK instead of opening the admin portal.
+- Area: web
+- Files changed: [resina-project/apps/web/app/page.tsx](resina-project/apps/web/app/page.tsx), [resina-project/PROJECT_STRUCTURE.md](resina-project/PROJECT_STRUCTURE.md)
+- What changed: switched the landing hero `Download App` CTA to use `NEXT_PUBLIC_APK_DOWNLOAD_URL` (same target as the navbar download button) and removed the unused web portal fallback constant tied to `/admin`.
+- Validation: get_errors on `apps/web/app/page.tsx` (no errors found).
+
 ### 2026-05-31
 
 - Prompt: show unread notifications first and read notifications below them in the admin notification list.
