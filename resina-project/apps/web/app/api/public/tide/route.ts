@@ -35,6 +35,7 @@ export async function GET() {
     const currentHourly = Array.isArray(hourlyRows) ? hourlyRows.find((r: any) => Number(r.hour_of_day) === manilaHour) : null;
 
     const payload = {
+      date: predictionDate,
       current: {
         currentHeight: currentHourly ? Number(currentHourly.estimated_height) : null,
         state: null,
