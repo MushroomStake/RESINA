@@ -98,6 +98,42 @@ If a task touches only one area, document only that area. If a task spans multip
 
 ## Change Log
 
+### 2026-06-11
+
+- Prompt: create role-specific documentation for residents and admins with a shared architecture link.
+- Area: root
+- Files changed: [resina-project/docs/architecture.md](docs/architecture.md), [resina-project/docs/roles/residents.md](docs/roles/residents.md), [resina-project/docs/roles/admin.md](docs/roles/admin.md), [resina-project/PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
+- What changed: added resident and admin Markdown guides, plus a short architecture overview that the role docs link to.
+- Validation: documentation only.
+
+### 2026-06-11 (landing)
+
+- Prompt: display sensor, weather, and tide monitoring on public landing page for unauthenticated users.
+- Area: web
+- Files changed: [resina-project/apps/web/app/page.tsx](resina-project/apps/web/app/page.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicSensorCard.tsx](resina-project/apps/web/app/components/public-monitoring/PublicSensorCard.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicWeatherCard.tsx](resina-project/apps/web/app/components/public-monitoring/PublicWeatherCard.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicTideCard.tsx](resina-project/apps/web/app/components/public-monitoring/PublicTideCard.tsx)
+- What changed: added three lightweight public monitoring components that fetch `/api/sensor/current`, `/api/weather/current`, and `/api/tide/current`, and rendered them on the landing page in a new "Monitoring (Public)" section.
+- Validation: documentation and typecheck pending; runtime requires API endpoints to exist and be CORS-accessible.
+
+### 2026-06-11 (public-monitoring)
+
+- Prompt: expose admin-style sensor, weather, and tide monitors on the public landing page for unauthenticated users and match admin visuals/behaviour.
+- Area: web, api
+- Files changed: [resina-project/apps/web/app/page.tsx](resina-project/apps/web/app/page.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicMonitoringSection.tsx](resina-project/apps/web/app/components/public-monitoring/PublicMonitoringSection.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicSensorCard.tsx](resina-project/apps/web/app/components/public-monitoring/PublicSensorCard.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicWeatherCard.tsx](resina-project/apps/web/app/components/public-monitoring/PublicWeatherCard.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicTideCard.tsx](resina-project/apps/web/app/components/public-monitoring/PublicTideCard.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicTideWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicTideWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicTideWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicTideWrapper.tsx), [resina-project/apps/web/.env.local](resina-project/apps/web/.env.local), [resina-project/apps/api/src/index.ts](resina-project/apps/api/src/index.ts)
+- What changed: 
+	- Added a public "Monitoring (Public)" section on the landing page and three client-side wrapper components that fetch public-safe API endpoints and render the exact admin UI components (`CurrentSensorStatus`, `WeatherUpdateSection`, `TideMonitorSection`).
+	- Implemented API endpoints in `apps/api/src/index.ts`: `/api/sensor/current` and `/api/weather/current` that return small, public-safe summaries sourced from Supabase tables. Tide endpoints already existed and are consumed by the tide wrapper.
+	- Updated the web wrappers to compute and pass admin-style styling props (e.g., `sensorGradientClass`, `noticeClass`, `weatherCardClass`) so background and alert visuals match the admin dashboard thresholds.
+	- Stacked the three monitors vertically on the landing page and increased container widths to match admin sizing.
+	- Added `NEXT_PUBLIC_API_URL` to `apps/web/.env.local` to point the web client to the running API during development.
+- Validation: runtime validation required — restart API and web dev servers and verify:
+	- `GET /api/sensor/current` returns `{ current: { waterLevel, statusLabel, updatedAt }, ... }`.
+	- `GET /api/weather/current` returns `{ current: { temperature, humidity, heatIndex, windSpeed, intensityDescription, manualDescription, owmMain, owmDescription, iconPath, updatedAt }, ... }`.
+	- `GET /api/tide/current` continues to return `{ current: { currentHeight, state, ... }, extremes: [...] }` and the public tide wrapper now reads `current.currentHeight` and `current.state` to display current tide plus next high/low.
+
+Notes:
+- The wrappers intentionally use client-side fetching and are implemented as `use client` components to avoid requiring server-side admin credentials in the public landing page.
+- If database table/column names differ in your environment, the API endpoints may need column mapping adjustments; check API logs and the browser console for 4xx/5xx errors.
+
 ### 2026-06-05
 
 - Prompt: read the document first, and fix the landing page download button and navbar download link so they install the APK instead of opening the admin portal.

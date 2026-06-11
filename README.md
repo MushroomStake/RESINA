@@ -1,5 +1,9 @@
 # RESINA
 
+## AI Structure Reference
+
+If you are prompting an AI to work in this repository, start with [resina-project/PROJECT_STRUCTURE.md](resina-project/PROJECT_STRUCTURE.md). It contains the current workspace map, ownership boundaries, and the change log format to update after each task.
+
 ## Root Monorepo Commands
 
 Run these from the repository root at `resina-project/`.

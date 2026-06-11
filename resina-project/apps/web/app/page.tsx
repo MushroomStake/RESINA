@@ -1,4 +1,5 @@
 import Image from "next/image";
+import PublicMonitoringSection from "./components/public-monitoring/PublicMonitoringSection";
 
 const mobileAppUrl = process.env.NEXT_PUBLIC_MOBILE_APP_URL ?? "#";
 const apkDownloadUrl = process.env.NEXT_PUBLIC_APK_DOWNLOAD_URL ?? "#";
@@ -74,6 +75,8 @@ export default function HomePage() {
             />
           </div>
         </section>
+
+        <PublicMonitoringSection />
 
         <footer className="mt-6 border-t border-[#e8ecee] bg-[#f0f2f4] px-5 py-10 md:px-10">
           <div className="grid grid-cols-1 gap-10 md:grid-cols-[1.1fr_1fr_1fr]">

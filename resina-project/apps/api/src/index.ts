@@ -298,6 +298,87 @@ app.get("/api/tide/extremes", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/sensor/current
+ * Returns a small public-safe summary of the latest sensor reading
+ */
+app.get("/api/sensor/current", async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from("sensor_readings")
+      .select("id, water_level, status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: error.message ?? String(error) });
+    }
+
+    if (!data) {
+      return res.status(404).json({ error: "No sensor readings available" });
+    }
+
+    const safe = {
+      current: {
+        waterLevel: data.water_level === null ? null : Number(data.water_level),
+        statusLabel: data.status ?? null,
+        updatedAt: data.created_at ?? null,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    res.json(safe);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
+/**
+ * GET /api/weather/current
+ * Returns a small public-safe summary of latest weather log
+ */
+app.get("/api/weather/current", async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from("weather_logs")
+      .select(
+        "id, recorded_at, temperature, humidity, heat_index, wind_speed, weather_main, weather_description, intensity, manual_description, icon_path"
+      )
+      .order("recorded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      return res.status(500).json({ error: error.message ?? String(error) });
+    }
+
+    if (!data) {
+      return res.status(404).json({ error: "No weather logs available" });
+    }
+
+    const safe = {
+      current: {
+        temperature: data.temperature ?? null,
+        humidity: data.humidity ?? null,
+        heatIndex: data.heat_index ?? null,
+        windSpeed: data.wind_speed ?? null,
+        owmMain: data.weather_main ?? null,
+        owmDescription: data.weather_description ?? null,
+        intensityDescription: data.intensity ?? "-",
+        manualDescription: data.manual_description ?? null,
+        iconPath: data.icon_path ?? null,
+        updatedAt: data.recorded_at ?? null,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    res.json(safe);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+  }
+});
+
 // 404 handler
 app.use((req: Request, res: Response) => {
   res.status(404).json({
