@@ -134,6 +134,20 @@ Notes:
 - The wrappers intentionally use client-side fetching and are implemented as `use client` components to avoid requiring server-side admin credentials in the public landing page.
 - If database table/column names differ in your environment, the API endpoints may need column mapping adjustments; check API logs and the browser console for 4xx/5xx errors.
 
+### 2026-06-11 (serverless consolidation)
+
+- Prompt: move public API endpoints into Next.js serverless routes so `/api/*` resolves from the web deployment
+- Area: web
+- Files changed: [resina-project/apps/web/app/api/public/sensor/route.ts](apps/web/app/api/public/sensor/route.ts), [resina-project/apps/web/app/api/public/weather/route.ts](apps/web/app/api/public/weather/route.ts), [resina-project/apps/web/app/api/public/tide/route.ts](apps/web/app/api/public/tide/route.ts), [resina-project/apps/web/app/api/sensor/current/route.ts](apps/web/app/api/sensor/current/route.ts), [resina-project/apps/web/app/api/weather/current/route.ts](apps/web/app/api/weather/current/route.ts), [resina-project/apps/web/app/api/tide/current/route.ts](apps/web/app/api/tide/current/route.ts), [resina-project/apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx](apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx](apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicTideWrapper.tsx](apps/web/app/components/public-monitoring/PublicTideWrapper.tsx)
+- What changed: implemented serverless Next.js API routes that return public-safe summaries from Supabase and updated the public monitoring wrappers to call same-origin `/api/sensor/current`, `/api/weather/current`, and `/api/tide/current` so the landing page works when deployed to Vercel without a separate Express API.
+- Validation: start the Next dev server in `apps/web` and run:
+```
+curl http://localhost:3000/api/sensor/current
+curl http://localhost:3000/api/weather/current
+curl http://localhost:3000/api/tide/current
+```
+Expect 200 JSON responses matching the shapes described in the public-monitoring entry.
+
 ### 2026-06-05
 
 - Prompt: read the document first, and fix the landing page download button and navbar download link so they install the APK instead of opening the admin portal.

@@ -10,8 +10,7 @@ export default function PublicTideWrapper() {
 
   useEffect(() => {
     let mounted = true;
-    const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
-    const url = API_BASE ? `${API_BASE}/api/tide/current` : `/api/tide/current`;
+    const url = `/api/tide/current`;
     fetch(url)
       .then((r) => r.json())
       .then((json) => {

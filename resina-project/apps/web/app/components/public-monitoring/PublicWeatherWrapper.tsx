@@ -10,8 +10,7 @@ export default function PublicWeatherWrapper() {
 
   useEffect(() => {
     let mounted = true;
-    const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
-    const url = API_BASE ? `${API_BASE}/api/weather/current` : `/api/weather/current`;
+    const url = `/api/weather/current`;
     fetch(url)
       .then((r) => r.json())
       .then((json) => {

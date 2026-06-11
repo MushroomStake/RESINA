@@ -10,8 +10,7 @@ export default function PublicSensorWrapper() {
 
   useEffect(() => {
     let mounted = true;
-    const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
-    const url = API_BASE ? `${API_BASE}/api/sensor/current` : `/api/sensor/current`;
+    const url = `/api/sensor/current`;
     fetch(url)
       .then((r) => r.json())
       .then((json) => {
