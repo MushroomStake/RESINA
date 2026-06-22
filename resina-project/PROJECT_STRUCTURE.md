@@ -148,6 +148,13 @@ curl http://localhost:3000/api/tide/current
 ```
 Expect 200 JSON responses matching the shapes described in the public-monitoring entry.
 
+### 2026-06-22
+
+- Prompt: fix incorrect water level mapping in public sensor endpoint that turned null into 0
+- Area: web
+- Files changed: [resina-project/apps/web/app/api/public/sensor/route.ts](resina-project/apps/web/app/api/public/sensor/route.ts)
+- What changed: preserved `null` for `waterLevel` when `water_level` is null instead of using `Number(null)` which evaluated to `0`, preventing misleading zero readings in the UI.
+- Validation: documentation and typecheck recommended; run Next dev server and `curl http://localhost:3000/api/sensor/current` to verify `current.waterLevel` is `null` when no reading exists.
 ### 2026-06-05
 
 - Prompt: read the document first, and fix the landing page download button and navbar download link so they install the APK instead of opening the admin portal.

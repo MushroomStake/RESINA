@@ -41,7 +41,9 @@ export default function PublicWeatherWrapper() {
   else weatherCardClass = "bg-[#E74C4C]";
 
   const weatherState = {
-    dateLabel: data?.current?.updatedAt ? new Date(data.current.updatedAt).toLocaleString() : "-",
+    dateLabel: data?.current?.updatedAt
+      ? new Date(data.current.updatedAt).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "long", day: "numeric", year: "numeric" })
+      : "-",
     temperature: data?.current?.temperature ?? "-",
     humidity: data?.current?.humidity ?? null,
     heatIndex: heatIndex,

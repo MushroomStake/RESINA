@@ -21,7 +21,7 @@ export async function GET() {
 
     const payload = {
       current: {
-        waterLevel: Number(data.water_level ?? null),
+        waterLevel: data.water_level === null ? null : Number(data.water_level),
         statusLabel: data.status ?? "Unknown",
         updatedAt: data.created_at ?? null,
       },

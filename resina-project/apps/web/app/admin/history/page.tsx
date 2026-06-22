@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
+import { Chart, registerables } from "chart.js";
+import "chartjs-adapter-date-fns";
+Chart.register(...registerables);
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
@@ -260,6 +263,11 @@ export default function AdminHistoryPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | AlertLevelKey>("all");
   const [dateFilter, setDateFilter] = useState<"7d" | "30d" | "90d" | "all" | "date">("30d");
   const [selectedDate, setSelectedDate] = useState("");
+  const [chartDate, setChartDate] = useState(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString().slice(0, 10);
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const [showDateFilterHelp, setShowDateFilterHelp] = useState(false);
   const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
@@ -449,6 +457,139 @@ export default function AdminHistoryPage() {
   const pageItems = buildPageItems(totalPages, safePage, 9);
 
   useEffect(() => {
+    const ctx = document.getElementById("history-chart") as HTMLCanvasElement | null;
+    if (!ctx) return;
+
+    // Chart uses its own data source (ignore table filters) and selects records for chartDate
+    const dayRecords = records.filter((r) => {
+      const entryDate = r.readingDate ?? r.recordedAt.slice(0, 10);
+      return entryDate === chartDate;
+    });
+
+    // aggregate readings into hourly averages for smoother lines
+    // Use readingDate+readingTime when present so chart buckets match the table
+    const hourMap: Record<string, { max: number; ts: string }> = {};
+    dayRecords.forEach((r) => {
+      // prefer explicit reading timestamp when available (readingDate + readingTime)
+      let d: Date;
+      if (r.readingDate && r.readingTime) {
+        d = new Date(`${r.readingDate}T${r.readingTime}`);
+        if (Number.isNaN(d.getTime())) d = new Date(r.recordedAt);
+      } else {
+        d = new Date(r.recordedAt);
+      }
+
+      // bucket by the hour in ISO string (hour start)
+      const hourStart = new Date(d);
+      hourStart.setMinutes(0, 0, 0);
+      const key = hourStart.toISOString();
+      if (!hourMap[key]) hourMap[key] = { max: r.waterLevel, ts: key };
+      else hourMap[key].max = Math.max(hourMap[key].max, r.waterLevel);
+    });
+
+    // Use highest active node per hour (max) instead of averaging
+    const aggregated = Object.values(hourMap)
+      .map((h) => ({ x: h.ts, y: Math.round(h.max * 100) / 100 }))
+      .sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
+
+    const chartData = {
+      datasets: [
+        {
+          label: "Water Level (m)",
+          data: aggregated,
+          borderColor: "#1e3a8a",
+          backgroundColor: "rgba(30,58,138,0.08)",
+          tension: 0.25,
+          pointRadius: 3,
+          pointBackgroundColor: "#1e3a8a",
+          fill: true,
+        },
+      ],
+    };
+
+    // plugin to draw horizontal threshold bands
+    const thresholdPlugin = {
+      id: "thresholdBands",
+      beforeDraw: (chartInstance: any) => {
+        const { ctx: c, chartArea, scales } = chartInstance;
+        if (!chartArea) return;
+        const yScale = scales.y;
+
+        const bands = [
+          { from: 0, to: 2.49, color: "rgba(167,243,208,0.12)" }, // normal (green)
+          { from: 2.5, to: 2.99, color: "rgba(253,230,138,0.12)" }, // critical (yellow)
+          { from: 3.0, to: 3.99, color: "rgba(230,186,159,0.12)" }, // evacuation (orange)
+          { from: 4.0, to: 4.5, color: "rgba(229,76,76,0.12)" }, // spilling (red)
+        ];
+
+        for (const band of bands) {
+          const y1 = yScale.getPixelForValue(band.to);
+          const y2 = yScale.getPixelForValue(band.from);
+          c.save();
+          c.fillStyle = band.color;
+          c.fillRect(chartArea.left, y1, chartArea.right - chartArea.left, y2 - y1);
+          c.restore();
+        }
+      },
+    };
+
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: chartData as any,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            type: "time",
+            time: {
+              unit: "hour",
+              tooltipFormat: "hh:mm a",
+              displayFormats: {
+                hour: "hh:mm a",
+              },
+              },
+              // show fixed range 00:00 (12:00 AM) to 22:00 (10:00 PM)
+              min: new Date(`${chartDate}T00:00:00`).toISOString(),
+              max: new Date(`${chartDate}T22:00:00`).toISOString(),
+            title: { display: true, text: "Time (12-hour)" },
+            ticks: {
+              autoSkip: true,
+              maxRotation: 0,
+              minRotation: 0,
+              stepSize: 2,
+              callback: function (tickValue: any, index: number, ticks: any) {
+                const raw = (ticks && ticks[index] && ticks[index].value) || tickValue;
+                const d = new Date(raw);
+                if (Number.isNaN(d.getTime())) return "";
+                return d.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", hour12: true });
+              },
+            },
+          },
+          y: {
+            min: 0,
+            max: 4,
+            title: { display: true, text: "Meters (m)" },
+            ticks: { stepSize: 0.5 },
+          },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { mode: "index", intersect: false },
+        },
+      },
+      plugins: [thresholdPlugin],
+    });
+
+    // adjust canvas height
+    (ctx as HTMLCanvasElement).style.height = "260px";
+
+    return () => {
+      chart.destroy();
+    };
+  }, [records, chartDate]);
+
+  useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, statusFilter, dateFilter, selectedDate]);
 
@@ -577,6 +718,63 @@ export default function AdminHistoryPage() {
   return (
     <section className="p-6 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
+        <section className="overflow-hidden rounded-[20px] border border-[#e6eef9] bg-white p-4 shadow-sm">
+          <div className="flex items-start justify-between">
+            <h3 className="mb-3 text-sm font-semibold text-[#0f2847]">Water Level (m) — Time series</h3>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 rounded-xl border border-[#d0dceb] bg-white px-3 py-2 text-[#374151] shadow-sm">
+                <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#6b7280]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 2v4M8 2v4M3 10h18" />
+                </svg>
+                <input
+                  type="date"
+                  value={chartDate}
+                  onChange={(e) => setChartDate(e.target.value)}
+                  aria-label="Select chart date for chart"
+                  className="bg-transparent outline-none text-sm"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  setChartDate(today.toISOString().slice(0, 10));
+                }}
+                className="rounded-full border px-3 py-1 text-xs bg-white hover:bg-[#f1f7ff]"
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(chartDate + "T00:00:00");
+                  d.setDate(d.getDate() - 1);
+                  setChartDate(d.toISOString().slice(0, 10));
+                }}
+                className="rounded-full border px-3 py-1 text-xs bg-white hover:bg-[#f1f7ff]"
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(chartDate + "T00:00:00");
+                  d.setDate(d.getDate() + 1);
+                  setChartDate(d.toISOString().slice(0, 10));
+                }}
+                className="rounded-full border px-3 py-1 text-xs bg-white hover:bg-[#f1f7ff]"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+          <div className="w-full mt-3">
+            <canvas id="history-chart" />
+          </div>
+        </section>
         <section className="relative overflow-hidden rounded-[28px] border border-[#d5e2f1] bg-[linear-gradient(135deg,#f9fcff_0%,#f1f7ff_48%,#edf5ff_100%)] p-4 shadow-[0_18px_40px_rgba(15,23,42,0.08)] md:p-5">
           <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18),transparent_70%)]" />
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -596,7 +794,7 @@ export default function AdminHistoryPage() {
               />
             </label>
 
-            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
               <div className="relative flex items-center gap-2">
                 <div className="flex items-center gap-2 rounded-xl border border-[#d0dceb] bg-white px-3 py-2.5 text-[#374151] shadow-sm">
                   <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#6b7280]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -648,12 +846,16 @@ export default function AdminHistoryPage() {
                   <input
                     type="date"
                     value={selectedDate}
-                    onChange={(event) => setSelectedDate(event.target.value)}
+                    onChange={(event) => {
+                      setSelectedDate(event.target.value);
+                    }}
                     aria-label="Select a specific history date"
                     className="bg-transparent outline-none"
                   />
                 </label>
               ) : null}
+
+              {/* removed: chart picker/buttons (moved to chart header) */}
 
               <div className="rounded-xl border border-[#d0dceb] bg-white px-3 py-2.5 text-xs text-[#59779b] shadow-sm">
                 Range: <span className="font-medium text-[#374151]">{currentDateRangeLabel}</span>
