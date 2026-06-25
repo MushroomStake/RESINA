@@ -1,6 +1,6 @@
 # RESINA Project Structure Reference
 
-Last updated: 2026-05-31
+Last updated: 2026-06-26
 
 This document is the short source of truth for future AI prompts. Read this first, then inspect only the folder that owns the requested change.
 
@@ -97,6 +97,22 @@ Rules for entries:
 If a task touches only one area, document only that area. If a task spans multiple areas, add one entry per area or one combined entry with the affected paths.
 
 ## Change Log
+
+### 2026-06-26 (sensor dedupe)
+
+- Prompt: fix duplication from the hardware endpoint and system without changing the Arduino code.
+- Area: web
+- Files changed: [resina-project/apps/web/app/api/sensor-readings/route.ts](apps/web/app/api/sensor-readings/route.ts)
+- What changed: added a server-side duplicate check to the sensor ingest route so a repeated reading that already exists at the top of `sensor_readings` returns the existing row instead of inserting another one or dispatching alerts again.
+- Validation: get_errors on apps/web/app/api/sensor-readings/route.ts (no errors found).
+
+### 2026-06-26
+
+- Prompt: remove the non-resident option from mobile registration and default new accounts to resident.
+- Area: mobile
+- Files changed: [resina-project/apps/mobile/App.tsx](apps/mobile/App.tsx)
+- What changed: removed the resident type selector from the registration form, made registration always submit `resident_status: resident`, and kept the address field as a required resident-only field.
+- Validation: get_errors on apps/mobile/App.tsx (no errors found).
 
 ### 2026-06-11
 

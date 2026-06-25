@@ -73,7 +73,6 @@ type RegisterForm = {
   lastName: string;
   email: string;
   phoneNumber: string;
-  residentStatus: ResidentStatus;
   addressPurok: string;
   password: string;
   confirmPassword: string;
@@ -662,7 +661,6 @@ export default function App() {
     lastName: "",
     email: "",
     phoneNumber: PHONE_COUNTRY_PREFIX,
-    residentStatus: "resident",
     addressPurok: "",
     password: "",
     confirmPassword: "",
@@ -2037,7 +2035,7 @@ export default function App() {
     const fullName = buildFullName(firstName, middleName, lastName);
     const email = registerForm.email.trim().toLowerCase();
     const phoneNumber = normalizePhoneNumber(registerForm.phoneNumber.trim());
-    const residentStatus = registerForm.residentStatus;
+    const residentStatus: ResidentStatus = "resident";
     const addressPurok = registerForm.addressPurok.trim();
     const password = registerForm.password;
     const confirmPassword = registerForm.confirmPassword;
@@ -2052,7 +2050,7 @@ export default function App() {
       return;
     }
 
-    if (residentStatus === "resident" && !addressPurok) {
+    if (!addressPurok) {
       setErrorMessage("Address / Purok is required for Sta. Rita residents.");
       return;
     }
@@ -2091,7 +2089,7 @@ export default function App() {
           last_name: lastName,
           phone_number: phoneNumber,
           resident_status: residentStatus,
-          address_purok: residentStatus === "resident" ? addressPurok : "",
+          address_purok: addressPurok,
           data_privacy_accepted: true,
           role: "user",
         },
@@ -3764,66 +3762,14 @@ export default function App() {
                   />
                 </View>
 
-                <Text style={styles.inputLabelRegister}>Resident Type</Text>
-                <View style={styles.registerResidentRow}>
-                  <Pressable
-                    style={[
-                      styles.registerResidentChip,
-                      registerForm.residentStatus === "resident" && styles.registerResidentChipActive,
-                    ]}
-                    onPress={() =>
-                      setRegisterForm((prev) => ({
-                        ...prev,
-                        residentStatus: "resident",
-                      }))
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.registerResidentChipText,
-                        registerForm.residentStatus === "resident" && styles.registerResidentChipTextActive,
-                      ]}
-                    >
-                      Resident of Sta. Rita
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={[
-                      styles.registerResidentChip,
-                      registerForm.residentStatus === "non_resident" && styles.registerResidentChipActive,
-                    ]}
-                    onPress={() =>
-                      setRegisterForm((prev) => ({
-                        ...prev,
-                        residentStatus: "non_resident",
-                        addressPurok: "",
-                      }))
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.registerResidentChipText,
-                        registerForm.residentStatus === "non_resident" && styles.registerResidentChipTextActive,
-                      ]}
-                    >
-                      Non-Resident
-                    </Text>
-                  </Pressable>
-                </View>
-
-                {registerForm.residentStatus === "resident" ? (
-                  <>
-                    <Text style={styles.inputLabelRegister}>Address / Purok</Text>
-                    <TextInput
-                      value={registerForm.addressPurok}
-                      onChangeText={(value) => setRegisterForm((prev) => ({ ...prev, addressPurok: value }))}
-                      style={styles.input}
-                      placeholder="Purok 4, Riverside St."
-                      placeholderTextColor="#9ca3af"
-                    />
-                  </>
-                ) : null}
+                <Text style={styles.inputLabelRegister}>Address / Purok</Text>
+                <TextInput
+                  value={registerForm.addressPurok}
+                  onChangeText={(value) => setRegisterForm((prev) => ({ ...prev, addressPurok: value }))}
+                  style={styles.input}
+                  placeholder="Purok 4, Riverside St."
+                  placeholderTextColor="#9ca3af"
+                />
 
                 <Text style={styles.inputLabelRegister}>Password</Text>
                 <View style={styles.passwordRow}>

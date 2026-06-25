@@ -13,9 +13,22 @@ type SensorReadingRequestBody = {
   reading_time?: string;
   createdAt?: string;
   created_at?: string;
+  deviceId?: string;
+  device_id?: string;
+  deviceTs?: number | string;
+  device_ts?: number | string;
   sourceDeviceId?: string;
   source_device_id?: string;
   metadata?: Record<string, unknown>;
+};
+
+type SensorReadingRow = {
+  id: string | number;
+  water_level: number | string | null;
+  status: string | null;
+  reading_date: string | null;
+  reading_time: string | null;
+  created_at: string | null;
 };
 
 function resolveIngestSecretStatus(request: NextRequest): NextResponse | null {
@@ -74,6 +87,61 @@ function parseWaterLevel(value: number | string | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseDeviceTimestamp(value: number | string | undefined): number | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeReadingText(value: string | null | undefined): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function isDuplicateReading(
+  latestRow: SensorReadingRow | null,
+  waterLevel: number,
+  status: string,
+  readingDate: string,
+  readingTime: string,
+  deviceTimestamp: number | null,
+): boolean {
+  if (!latestRow) {
+    return false;
+  }
+
+  const latestWaterLevel = parseWaterLevel(latestRow.water_level ?? undefined);
+  if (latestWaterLevel === null || Math.abs(latestWaterLevel - waterLevel) > 0.001) {
+    return false;
+  }
+
+  if (normalizeReadingText(latestRow.status) !== normalizeReadingText(status)) {
+    return false;
+  }
+
+  const latestReadingDate = String(latestRow.reading_date ?? "").trim();
+  const latestReadingTime = String(latestRow.reading_time ?? "").trim();
+  if (latestReadingDate !== readingDate || latestReadingTime !== readingTime) {
+    return false;
+  }
+
+  const latestCreatedAt = latestRow.created_at ? new Date(latestRow.created_at).getTime() : Number.NaN;
+  if (Number.isFinite(latestCreatedAt) && Math.abs(Date.now() - latestCreatedAt) <= 15_000) {
+    return true;
+  }
+
+  if (deviceTimestamp !== null && Number.isFinite(deviceTimestamp) && Number.isFinite(latestCreatedAt)) {
+    const deviceLag = Math.abs(Date.now() - deviceTimestamp);
+    const createdAtLag = Math.abs(Date.now() - latestCreatedAt);
+
+    return deviceLag <= 30_000 && createdAtLag <= 30_000;
+  }
+
+  return false;
+}
+
 function normalizeStatus(value: string | undefined, waterLevel: number | null): string {
   if (value && value.trim()) {
     return value.trim();
@@ -124,6 +192,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as SensorReadingRequestBody;
     const waterLevel = parseWaterLevel(body.waterLevel ?? body.water_level);
+    const deviceTimestamp = parseDeviceTimestamp(body.deviceTs ?? body.device_ts);
 
     if (waterLevel === null) {
       return NextResponse.json({ error: "waterLevel is required and must be numeric." }, { status: 400 });
@@ -135,6 +204,35 @@ export async function POST(request: NextRequest) {
 
     const adminSupabase = createAdminClient();
     const adminSupabaseDynamic = adminSupabase as any;
+
+    const { data: latestRow, error: latestRowError } = await adminSupabaseDynamic
+      .from("sensor_readings")
+      .select("id, water_level, status, reading_date, reading_time, created_at")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestRowError) {
+      return NextResponse.json(
+        { error: latestRowError.message ?? "Failed to check for duplicate sensor readings." },
+        { status: 500 },
+      );
+    }
+
+    if (isDuplicateReading(latestRow as SensorReadingRow | null, waterLevel, status, readingDate, readingTime, deviceTimestamp)) {
+      return NextResponse.json(
+        {
+          ok: true,
+          skipped: true,
+          reason: "Duplicate reading already recorded.",
+          reading: latestRow,
+          sourceDeviceId: body.deviceId ?? body.device_id ?? body.sourceDeviceId ?? body.source_device_id ?? null,
+          deviceTs: deviceTimestamp,
+          metadata: body.metadata ?? null,
+        },
+        { status: 200 },
+      );
+    }
 
     const insertPayload = {
       water_level: waterLevel,
