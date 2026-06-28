@@ -98,6 +98,14 @@ If a task touches only one area, document only that area. If a task spans multip
 
 ## Change Log
 
+### 2026-06-28 (sensor retry dedupe)
+
+- Prompt: stop repeated hardware sensor posts from creating duplicate readings when the water level and status are the same.
+- Area: web
+- Files changed: [resina-project/apps/web/app/api/sensor-readings/route.ts](apps/web/app/api/sensor-readings/route.ts)
+- What changed: relaxed duplicate detection to treat the latest same-value reading as a duplicate when it arrives in the same short time window, instead of requiring an exact `reading_time` match.
+- Validation: get_errors on apps/web/app/api/sensor-readings/route.ts (no errors found).
+
 ### 2026-06-28
 
 - Prompt: remove the duplicated Normal/Critical sensor statuses and keep the hardware status labels in sensor readings.

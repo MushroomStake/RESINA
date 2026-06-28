@@ -135,8 +135,6 @@ function isDuplicateReading(
   latestRow: SensorReadingRow | null,
   waterLevel: number,
   status: string,
-  readingDate: string,
-  readingTime: string,
   deviceTimestamp: number | null,
 ): boolean {
   if (!latestRow) {
@@ -152,13 +150,11 @@ function isDuplicateReading(
     return false;
   }
 
-  const latestReadingDate = String(latestRow.reading_date ?? "").trim();
-  const latestReadingTime = String(latestRow.reading_time ?? "").trim();
-  if (latestReadingDate !== readingDate || latestReadingTime !== readingTime) {
-    return false;
-  }
-
   const latestCreatedAt = latestRow.created_at ? new Date(latestRow.created_at).getTime() : Number.NaN;
+  const latestReadingTime = String(latestRow.reading_time ?? "").trim();
+  const latestReadingDate = String(latestRow.reading_date ?? "").trim();
+  const hasSameReadingWindow = Boolean(latestReadingDate) && Boolean(latestReadingTime);
+
   if (Number.isFinite(latestCreatedAt) && Math.abs(Date.now() - latestCreatedAt) <= 15_000) {
     return true;
   }
@@ -167,7 +163,7 @@ function isDuplicateReading(
     const deviceLag = Math.abs(Date.now() - deviceTimestamp);
     const createdAtLag = Math.abs(Date.now() - latestCreatedAt);
 
-    return deviceLag <= 30_000 && createdAtLag <= 30_000;
+    return deviceLag <= 30_000 && createdAtLag <= 30_000 && hasSameReadingWindow;
   }
 
   return false;
@@ -255,7 +251,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (isDuplicateReading(latestRow as SensorReadingRow | null, waterLevel, status, readingDate, readingTime, deviceTimestamp)) {
+    if (isDuplicateReading(latestRow as SensorReadingRow | null, waterLevel, status, deviceTimestamp)) {
       return NextResponse.json(
         {
           ok: true,
