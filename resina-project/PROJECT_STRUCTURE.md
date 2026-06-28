@@ -98,6 +98,14 @@ If a task touches only one area, document only that area. If a task spans multip
 
 ## Change Log
 
+### 2026-06-28 (hardware status required)
+
+- Prompt: fully remove the final Unknown status fallback from sensor ingest.
+- Area: web
+- Files changed: [resina-project/apps/web/app/api/sensor-readings/route.ts](apps/web/app/api/sensor-readings/route.ts)
+- What changed: removed the last `normalizeStatus` fallback and made the route reject requests that do not include a hardware-provided status, so `sensor_readings.status` no longer stores `Unknown`.
+- Validation: get_errors on apps/web/app/api/sensor-readings/route.ts (no errors found).
+
 ### 2026-06-28 (hardware status only)
 
 - Prompt: remove water-level-based status synthesis from sensor ingest and keep only the Arduino hardware status.

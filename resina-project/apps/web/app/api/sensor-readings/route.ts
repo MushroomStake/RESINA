@@ -169,15 +169,6 @@ function isDuplicateReading(
   return false;
 }
 
-function normalizeStatus(value: string | undefined): string {
-  const hardwareStatus = normalizeHardwareStatus(value);
-  if (hardwareStatus) {
-    return hardwareStatus;
-  }
-
-  return String(value ?? "").trim() || "Unknown";
-}
-
 function resolveReadingTimestamp(body: SensorReadingRequestBody, fallbackTimestamp: string): string {
   const providedTimestamp = body.createdAt ?? body.created_at;
   if (providedTimestamp && !Number.isNaN(new Date(providedTimestamp).getTime())) {
@@ -210,7 +201,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "waterLevel is required and must be numeric." }, { status: 400 });
     }
 
-    const status = normalizeStatus(body.status);
+    const status = normalizeHardwareStatus(body.status);
+    if (!status) {
+      return NextResponse.json({ error: "status is required and must come from the hardware." }, { status: 400 });
+    }
     const readingDate = resolveDatePart(body.readingDate ?? body.reading_date);
     const readingTime = resolveTimePart(body.readingTime ?? body.reading_time);
 
