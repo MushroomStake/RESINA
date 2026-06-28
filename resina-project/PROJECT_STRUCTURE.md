@@ -98,6 +98,14 @@ If a task touches only one area, document only that area. If a task spans multip
 
 ## Change Log
 
+### 2026-06-28 (hardware status only)
+
+- Prompt: remove water-level-based status synthesis from sensor ingest and keep only the Arduino hardware status.
+- Area: web
+- Files changed: [resina-project/apps/web/app/api/sensor-readings/route.ts](apps/web/app/api/sensor-readings/route.ts)
+- What changed: removed the fallback that inferred `Normal Level`, `Critical Level`, `Evacuation Level`, `Spilling Level`, or `No Water` from water level, so the ingest route now stores only the hardware-provided status text.
+- Validation: get_errors on apps/web/app/api/sensor-readings/route.ts (no errors found).
+
 ### 2026-06-28 (sensor retry dedupe)
 
 - Prompt: stop repeated hardware sensor posts from creating duplicate readings when the water level and status are the same.

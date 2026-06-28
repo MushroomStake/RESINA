@@ -169,33 +169,13 @@ function isDuplicateReading(
   return false;
 }
 
-function normalizeStatus(value: string | undefined, waterLevel: number | null): string {
+function normalizeStatus(value: string | undefined): string {
   const hardwareStatus = normalizeHardwareStatus(value);
   if (hardwareStatus) {
     return hardwareStatus;
   }
 
-  if (waterLevel === null) {
-    return "Unknown";
-  }
-
-  if (waterLevel <= 0.001) {
-    return "No Water";
-  }
-
-  if (waterLevel >= 4) {
-    return "Spilling Level";
-  }
-
-  if (waterLevel >= 3) {
-    return "Evacuation Level";
-  }
-
-  if (waterLevel >= 2.5) {
-    return "Critical Level";
-  }
-
-  return "Normal Level";
+  return String(value ?? "").trim() || "Unknown";
 }
 
 function resolveReadingTimestamp(body: SensorReadingRequestBody, fallbackTimestamp: string): string {
@@ -230,7 +210,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "waterLevel is required and must be numeric." }, { status: 400 });
     }
 
-    const status = normalizeStatus(body.status, waterLevel);
+    const status = normalizeStatus(body.status);
     const readingDate = resolveDatePart(body.readingDate ?? body.reading_date);
     const readingTime = resolveTimePart(body.readingTime ?? body.reading_time);
 
