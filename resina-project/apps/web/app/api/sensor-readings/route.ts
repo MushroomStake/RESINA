@@ -100,6 +100,37 @@ function normalizeReadingText(value: string | null | undefined): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function normalizeHardwareStatus(value: string | undefined): string | null {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return null;
+  }
+
+  const normalized = text.toLowerCase();
+
+  if (normalized.includes("no water")) {
+    return "No Water";
+  }
+
+  if (normalized.includes("spilling")) {
+    return "Spilling Level";
+  }
+
+  if (normalized.includes("evac")) {
+    return "Evacuation Level";
+  }
+
+  if (normalized.includes("critical") || normalized.includes("alert level 2") || normalized.includes("alert 2")) {
+    return "Critical Level";
+  }
+
+  if (normalized.includes("normal") || normalized.includes("alert level 1") || normalized.includes("alert 1")) {
+    return "Normal Level";
+  }
+
+  return text;
+}
+
 function isDuplicateReading(
   latestRow: SensorReadingRow | null,
   waterLevel: number,
@@ -143,27 +174,32 @@ function isDuplicateReading(
 }
 
 function normalizeStatus(value: string | undefined, waterLevel: number | null): string {
-  if (value && value.trim()) {
-    return value.trim();
+  const hardwareStatus = normalizeHardwareStatus(value);
+  if (hardwareStatus) {
+    return hardwareStatus;
   }
 
   if (waterLevel === null) {
     return "Unknown";
   }
 
+  if (waterLevel <= 0.001) {
+    return "No Water";
+  }
+
   if (waterLevel >= 4) {
-    return "Spilling";
+    return "Spilling Level";
   }
 
   if (waterLevel >= 3) {
-    return "Evacuation";
+    return "Evacuation Level";
   }
 
   if (waterLevel >= 2.5) {
-    return "Critical";
+    return "Critical Level";
   }
 
-  return "Normal";
+  return "Normal Level";
 }
 
 function resolveReadingTimestamp(body: SensorReadingRequestBody, fallbackTimestamp: string): string {
