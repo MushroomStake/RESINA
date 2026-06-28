@@ -98,6 +98,22 @@ If a task touches only one area, document only that area. If a task spans multip
 
 ## Change Log
 
+### 2026-06-28 (analytics chart navigation)
+
+- Prompt: make the analytics time-series Next button advance correctly.
+- Area: web
+- Files changed: [resina-project/apps/web/app/admin/history/page.tsx](apps/web/app/admin/history/page.tsx)
+- What changed: changed chart date formatting to use local calendar parts instead of `toISOString()`, which removes the UTC day shift that made Prev/Next appear stuck.
+- Validation: get_errors on apps/web/app/admin/history/page.tsx (no errors found).
+
+### 2026-06-28 (analytics chart date fix)
+
+- Prompt: stop the analytics time-series date picker clear action from crashing and make the Prev/Next buttons work again.
+- Area: web
+- Files changed: [resina-project/apps/web/app/admin/history/page.tsx](apps/web/app/admin/history/page.tsx)
+- What changed: added a safe chart-date resolver, made the clear action fall back to today instead of producing an invalid date, and reused the same resolver for Prev/Next navigation and chart bounds.
+- Validation: get_errors on apps/web/app/admin/history/page.tsx (no errors found).
+
 ### 2026-06-28 (hardware status required)
 
 - Prompt: fully remove the final Unknown status fallback from sensor ingest.

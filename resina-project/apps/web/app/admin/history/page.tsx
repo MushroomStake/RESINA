@@ -250,6 +250,24 @@ function formatDateForFileName(value: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function resolveChartDateValue(value: string): Date {
+  const parsed = value ? new Date(`${value}T00:00:00`) : new Date();
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  const fallback = new Date();
+  fallback.setHours(0, 0, 0, 0);
+  return fallback;
+}
+
+function formatChartDateValue(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function AdminHistoryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -264,9 +282,7 @@ export default function AdminHistoryPage() {
   const [dateFilter, setDateFilter] = useState<"7d" | "30d" | "90d" | "all" | "date">("30d");
   const [selectedDate, setSelectedDate] = useState("");
   const [chartDate, setChartDate] = useState(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.toISOString().slice(0, 10);
+    return formatChartDateValue(new Date());
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [showDateFilterHelp, setShowDateFilterHelp] = useState(false);
@@ -460,10 +476,13 @@ export default function AdminHistoryPage() {
     const ctx = document.getElementById("history-chart") as HTMLCanvasElement | null;
     if (!ctx) return;
 
+    const resolvedChartDate = resolveChartDateValue(chartDate);
+    const resolvedChartDateKey = formatChartDateValue(resolvedChartDate);
+
     // Chart uses its own data source (ignore table filters) and selects records for chartDate
     const dayRecords = records.filter((r) => {
       const entryDate = r.readingDate ?? r.recordedAt.slice(0, 10);
-      return entryDate === chartDate;
+      return entryDate === resolvedChartDateKey;
     });
 
     // aggregate readings into hourly averages for smoother lines
@@ -550,8 +569,8 @@ export default function AdminHistoryPage() {
               },
               },
               // show fixed range 00:00 (12:00 AM) to 22:00 (10:00 PM)
-              min: new Date(`${chartDate}T00:00:00`).toISOString(),
-              max: new Date(`${chartDate}T22:00:00`).toISOString(),
+              min: resolvedChartDate.toISOString(),
+              max: new Date(resolvedChartDate.getTime() + 22 * 60 * 60 * 1000).toISOString(),
             title: { display: true, text: "Time (12-hour)" },
             ticks: {
               autoSkip: true,
@@ -730,7 +749,15 @@ export default function AdminHistoryPage() {
                 <input
                   type="date"
                   value={chartDate}
-                  onChange={(e) => setChartDate(e.target.value)}
+                  onChange={(e) => {
+                    const nextValue = e.target.value;
+                    if (!nextValue) {
+                      setChartDate(formatChartDateValue(new Date()));
+                      return;
+                    }
+
+                    setChartDate(nextValue);
+                  }}
                   aria-label="Select chart date for chart"
                   className="bg-transparent outline-none text-sm"
                 />
@@ -739,9 +766,7 @@ export default function AdminHistoryPage() {
               <button
                 type="button"
                 onClick={() => {
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  setChartDate(today.toISOString().slice(0, 10));
+                  setChartDate(formatChartDateValue(new Date()));
                 }}
                 className="rounded-full border px-3 py-1 text-xs bg-white hover:bg-[#f1f7ff]"
               >
@@ -750,9 +775,9 @@ export default function AdminHistoryPage() {
               <button
                 type="button"
                 onClick={() => {
-                  const d = new Date(chartDate + "T00:00:00");
+                  const d = resolveChartDateValue(chartDate);
                   d.setDate(d.getDate() - 1);
-                  setChartDate(d.toISOString().slice(0, 10));
+                  setChartDate(formatChartDateValue(d));
                 }}
                 className="rounded-full border px-3 py-1 text-xs bg-white hover:bg-[#f1f7ff]"
               >
@@ -761,9 +786,9 @@ export default function AdminHistoryPage() {
               <button
                 type="button"
                 onClick={() => {
-                  const d = new Date(chartDate + "T00:00:00");
+                  const d = resolveChartDateValue(chartDate);
                   d.setDate(d.getDate() + 1);
-                  setChartDate(d.toISOString().slice(0, 10));
+                  setChartDate(formatChartDateValue(d));
                 }}
                 className="rounded-full border px-3 py-1 text-xs bg-white hover:bg-[#f1f7ff]"
               >
