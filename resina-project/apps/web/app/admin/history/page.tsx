@@ -287,9 +287,12 @@ export default function AdminHistoryPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showDateFilterHelp, setShowDateFilterHelp] = useState(false);
   const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
+  const [zoomedChartPoint, setZoomedChartPoint] = useState<string | null>(null);
   const dateHelpButtonRef = useRef<HTMLButtonElement | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
   const tooltipElRef = useRef<HTMLDivElement | null>(null);
+  const chartCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const chartRef = useRef<Chart | null>(null);
 
   const pageSize = 5;
 
@@ -472,61 +475,88 @@ export default function AdminHistoryPage() {
 
   const pageItems = buildPageItems(totalPages, safePage, 9);
 
-  useEffect(() => {
-    const ctx = document.getElementById("history-chart") as HTMLCanvasElement | null;
-    if (!ctx) return;
-
+  const chartPoints = useMemo(() => {
     const resolvedChartDate = resolveChartDateValue(chartDate);
     const resolvedChartDateKey = formatChartDateValue(resolvedChartDate);
 
-    // Chart uses its own data source (ignore table filters) and selects records for chartDate
-    const dayRecords = records.filter((r) => {
-      const entryDate = r.readingDate ?? r.recordedAt.slice(0, 10);
+    const dayRecords = records.filter((record) => {
+      const entryDate = record.readingDate ?? record.recordedAt.slice(0, 10);
       return entryDate === resolvedChartDateKey;
     });
 
-    // aggregate readings into hourly averages for smoother lines
-    // Use readingDate+readingTime when present so chart buckets match the table
-    const hourMap: Record<string, { max: number; ts: string }> = {};
-    dayRecords.forEach((r) => {
-      // prefer explicit reading timestamp when available (readingDate + readingTime)
-      let d: Date;
-      if (r.readingDate && r.readingTime) {
-        d = new Date(`${r.readingDate}T${r.readingTime}`);
-        if (Number.isNaN(d.getTime())) d = new Date(r.recordedAt);
-      } else {
-        d = new Date(r.recordedAt);
-      }
+    return dayRecords
+      .map((record) => {
+        let timestamp: Date;
+        if (record.readingDate && record.readingTime) {
+          timestamp = new Date(`${record.readingDate}T${record.readingTime}`);
+          if (Number.isNaN(timestamp.getTime())) {
+            timestamp = new Date(record.recordedAt);
+          }
+        } else {
+          timestamp = new Date(record.recordedAt);
+        }
 
-      // bucket by the hour in ISO string (hour start)
-      const hourStart = new Date(d);
-      hourStart.setMinutes(0, 0, 0);
-      const key = hourStart.toISOString();
-      if (!hourMap[key]) hourMap[key] = { max: r.waterLevel, ts: key };
-      else hourMap[key].max = Math.max(hourMap[key].max, r.waterLevel);
-    });
+        return {
+          x: timestamp.toISOString(),
+          y: Math.round(record.waterLevel * 100) / 100,
+        };
+      })
+      .sort((left, right) => new Date(left.x).getTime() - new Date(right.x).getTime());
+  }, [chartDate, records]);
 
-    // Use highest active node per hour (max) instead of averaging
-    const aggregated = Object.values(hourMap)
-      .map((h) => ({ x: h.ts, y: Math.round(h.max * 100) / 100 }))
-      .sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
+  const chartWindow = useMemo(() => {
+    const resolvedChartDate = resolveChartDateValue(chartDate);
+    const dayStart = new Date(resolvedChartDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart.getTime() + 22 * 60 * 60 * 1000);
 
-    const chartData = {
-      datasets: [
-        {
-          label: "Water Level (m)",
-          data: aggregated,
-          borderColor: "#1e3a8a",
-          backgroundColor: "rgba(30,58,138,0.08)",
-          tension: 0.25,
-          pointRadius: 3,
-          pointBackgroundColor: "#1e3a8a",
-          fill: true,
-        },
-      ],
+    if (!zoomedChartPoint) {
+      return {
+        min: dayStart,
+        max: dayEnd,
+        zoomed: false,
+      };
+    }
+
+    const selectedPoint = new Date(zoomedChartPoint);
+    if (Number.isNaN(selectedPoint.getTime())) {
+      return {
+        min: dayStart,
+        max: dayEnd,
+        zoomed: false,
+      };
+    }
+
+    const halfWindowMs = 30 * 60 * 1000;
+    const min = new Date(Math.max(dayStart.getTime(), selectedPoint.getTime() - halfWindowMs));
+    const max = new Date(Math.min(dayEnd.getTime(), selectedPoint.getTime() + halfWindowMs));
+
+    if (max.getTime() <= min.getTime()) {
+      return {
+        min: dayStart,
+        max: dayEnd,
+        zoomed: false,
+      };
+    }
+
+    return {
+      min,
+      max,
+      zoomed: true,
     };
+  }, [chartDate, zoomedChartPoint]);
 
-    // plugin to draw horizontal threshold bands
+  useEffect(() => {
+    const canvas = chartCanvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    if (chartRef.current) {
+      chartRef.current.destroy();
+      chartRef.current = null;
+    }
+
     const thresholdPlugin = {
       id: "thresholdBands",
       beforeDraw: (chartInstance: any) => {
@@ -535,10 +565,10 @@ export default function AdminHistoryPage() {
         const yScale = scales.y;
 
         const bands = [
-          { from: 0, to: 2.49, color: "rgba(167,243,208,0.12)" }, // normal (green)
-          { from: 2.5, to: 2.99, color: "rgba(253,230,138,0.12)" }, // critical (yellow)
-          { from: 3.0, to: 3.99, color: "rgba(230,186,159,0.12)" }, // evacuation (orange)
-          { from: 4.0, to: 4.5, color: "rgba(229,76,76,0.12)" }, // spilling (red)
+          { from: 0, to: 2.49, color: "rgba(167,243,208,0.12)" },
+          { from: 2.5, to: 2.99, color: "rgba(253,230,138,0.12)" },
+          { from: 3.0, to: 3.99, color: "rgba(230,186,159,0.12)" },
+          { from: 4.0, to: 4.5, color: "rgba(229,76,76,0.12)" },
         ];
 
         for (const band of bands) {
@@ -552,31 +582,74 @@ export default function AdminHistoryPage() {
       },
     };
 
-    const chart = new Chart(ctx, {
+    const chart = new Chart(canvas, {
       type: "line",
-      data: chartData as any,
+      data: {
+        datasets: [
+          {
+            label: "Water Level (m)",
+            data: chartPoints as any,
+            borderColor: "#1e3a8a",
+            backgroundColor: "rgba(30,58,138,0.08)",
+            tension: chartWindow.zoomed ? 0.12 : 0.25,
+            pointRadius: (context: { raw?: { x?: string } }) => {
+              if (!chartWindow.zoomed) {
+                return 3;
+              }
+
+              return context.raw?.x === zoomedChartPoint ? 8 : 5;
+            },
+            pointHoverRadius: chartWindow.zoomed ? 10 : 6,
+            pointBackgroundColor: "#1e3a8a",
+            fill: true,
+          },
+        ],
+      } as any,
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: {
+          duration: 450,
+          easing: "easeInOutCubic",
+        },
+        interaction: {
+          mode: "nearest",
+          intersect: true,
+        },
+        onClick: (_event: unknown, elements: Array<{ datasetIndex: number; index: number }>, chartInstance: any) => {
+          if (elements.length === 0) {
+            setZoomedChartPoint(null);
+            return;
+          }
+
+          const first = elements[0];
+          const point = chartInstance.data.datasets[first.datasetIndex]?.data[first.index] as { x?: string } | undefined;
+          if (point?.x) {
+            setZoomedChartPoint(point.x);
+          }
+        },
         scales: {
           x: {
             type: "time",
             time: {
-              unit: "hour",
+              unit: chartWindow.zoomed ? "minute" : "hour",
               tooltipFormat: "hh:mm a",
-              displayFormats: {
-                hour: "hh:mm a",
-              },
-              },
-              // show fixed range 00:00 (12:00 AM) to 22:00 (10:00 PM)
-              min: resolvedChartDate.toISOString(),
-              max: new Date(resolvedChartDate.getTime() + 22 * 60 * 60 * 1000).toISOString(),
+              displayFormats: chartWindow.zoomed
+                ? {
+                    minute: "hh:mm a",
+                  }
+                : {
+                    hour: "hh:mm a",
+                  },
+            },
+            min: chartWindow.min.toISOString(),
+            max: chartWindow.max.toISOString(),
             title: { display: true, text: "Time (12-hour)" },
             ticks: {
               autoSkip: true,
               maxRotation: 0,
               minRotation: 0,
-              stepSize: 2,
+              stepSize: chartWindow.zoomed ? 1 : 2,
               callback: function (tickValue: any, index: number, ticks: any) {
                 const raw = (ticks && ticks[index] && ticks[index].value) || tickValue;
                 const d = new Date(raw);
@@ -594,19 +667,20 @@ export default function AdminHistoryPage() {
         },
         plugins: {
           legend: { display: false },
-          tooltip: { mode: "index", intersect: false },
+          tooltip: { mode: chartWindow.zoomed ? "nearest" : "index", intersect: chartWindow.zoomed },
         },
-      },
+      } as any,
       plugins: [thresholdPlugin],
     });
 
-    // adjust canvas height
-    (ctx as HTMLCanvasElement).style.height = "260px";
+    canvas.style.height = "260px";
+    chartRef.current = chart;
 
     return () => {
       chart.destroy();
+      chartRef.current = null;
     };
-  }, [records, chartDate]);
+  }, [chartPoints, chartWindow, zoomedChartPoint]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -797,7 +871,7 @@ export default function AdminHistoryPage() {
             </div>
           </div>
           <div className="w-full mt-3">
-            <canvas id="history-chart" />
+            <canvas id="history-chart" ref={chartCanvasRef} />
           </div>
         </section>
         <section className="relative overflow-hidden rounded-[28px] border border-[#d5e2f1] bg-[linear-gradient(135deg,#f9fcff_0%,#f1f7ff_48%,#edf5ff_100%)] p-4 shadow-[0_18px_40px_rgba(15,23,42,0.08)] md:p-5">

@@ -98,6 +98,30 @@ If a task touches only one area, document only that area. If a task spans multip
 
 ## Change Log
 
+### 2026-07-08 (history chart simplification)
+
+- Prompt: simplify the admin analytics water-level time series after the zoom interaction caused a blank graph.
+- Area: web
+- Files changed: [resina-project/apps/web/app/admin/history/page.tsx](apps/web/app/admin/history/page.tsx), [resina-project/PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
+- What changed: collapsed the chart into a single rebuild effect driven by the derived points and zoom window so the chart renders actual data again and still animates zoom in/out.
+- Validation: get_errors on apps/web/app/admin/history/page.tsx (no errors found).
+
+### 2026-07-08 (history chart zoom interaction)
+
+- Prompt: in admin analytics report section, click a specific water-level dot to zoom into minute-level detail and zoom back out when clicking outside the dot.
+- Area: web
+- Files changed: [resina-project/apps/web/app/admin/history/page.tsx](apps/web/app/admin/history/page.tsx), [resina-project/PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
+- What changed: added click-to-zoom behavior for the history chart so selecting a point animates into a minute-scale window around that reading, and clicking outside the point restores the hourly overview.
+- Validation: get_errors on apps/web/app/admin/history/page.tsx (no errors found).
+
+### 2026-07-08 (history chart exact timestamps)
+
+- Prompt: in admin analytics report section, show water level time-series dots at the exact reading hour and minute instead of the highest reading within each hour.
+- Area: web
+- Files changed: [resina-project/apps/web/app/admin/history/page.tsx](apps/web/app/admin/history/page.tsx), [resina-project/PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
+- What changed: removed the hourly max aggregation in the history chart and now plot each reading at its exact timestamp while keeping the existing time axis and meter scale.
+- Validation: get_errors on apps/web/app/admin/history/page.tsx (no errors found).
+
 ### 2026-06-28 (analytics chart navigation)
 
 - Prompt: make the analytics time-series Next button advance correctly.
@@ -183,18 +207,19 @@ If a task touches only one area, document only that area. If a task spans multip
 - Prompt: expose admin-style sensor, weather, and tide monitors on the public landing page for unauthenticated users and match admin visuals/behaviour.
 - Area: web, api
 - Files changed: [resina-project/apps/web/app/page.tsx](resina-project/apps/web/app/page.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicMonitoringSection.tsx](resina-project/apps/web/app/components/public-monitoring/PublicMonitoringSection.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicSensorCard.tsx](resina-project/apps/web/app/components/public-monitoring/PublicSensorCard.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicWeatherCard.tsx](resina-project/apps/web/app/components/public-monitoring/PublicWeatherCard.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicTideCard.tsx](resina-project/apps/web/app/components/public-monitoring/PublicTideCard.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicTideWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicTideWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicTideWrapper.tsx](resina-project/apps/web/app/components/public-monitoring/PublicTideWrapper.tsx), [resina-project/apps/web/.env.local](resina-project/apps/web/.env.local), [resina-project/apps/api/src/index.ts](resina-project/apps/api/src/index.ts)
-- What changed: 
-	- Added a public "Monitoring (Public)" section on the landing page and three client-side wrapper components that fetch public-safe API endpoints and render the exact admin UI components (`CurrentSensorStatus`, `WeatherUpdateSection`, `TideMonitorSection`).
-	- Implemented API endpoints in `apps/api/src/index.ts`: `/api/sensor/current` and `/api/weather/current` that return small, public-safe summaries sourced from Supabase tables. Tide endpoints already existed and are consumed by the tide wrapper.
-	- Updated the web wrappers to compute and pass admin-style styling props (e.g., `sensorGradientClass`, `noticeClass`, `weatherCardClass`) so background and alert visuals match the admin dashboard thresholds.
-	- Stacked the three monitors vertically on the landing page and increased container widths to match admin sizing.
-	- Added `NEXT_PUBLIC_API_URL` to `apps/web/.env.local` to point the web client to the running API during development.
+- What changed:
+  - Added a public "Monitoring (Public)" section on the landing page and three client-side wrapper components that fetch public-safe API endpoints and render the exact admin UI components (`CurrentSensorStatus`, `WeatherUpdateSection`, `TideMonitorSection`).
+  - Implemented API endpoints in `apps/api/src/index.ts`: `/api/sensor/current` and `/api/weather/current` that return small, public-safe summaries sourced from Supabase tables. Tide endpoints already existed and are consumed by the tide wrapper.
+  - Updated the web wrappers to compute and pass admin-style styling props (e.g., `sensorGradientClass`, `noticeClass`, `weatherCardClass`) so background and alert visuals match the admin dashboard thresholds.
+  - Stacked the three monitors vertically on the landing page and increased container widths to match admin sizing.
+  - Added `NEXT_PUBLIC_API_URL` to `apps/web/.env.local` to point the web client to the running API during development.
 - Validation: runtime validation required — restart API and web dev servers and verify:
-	- `GET /api/sensor/current` returns `{ current: { waterLevel, statusLabel, updatedAt }, ... }`.
-	- `GET /api/weather/current` returns `{ current: { temperature, humidity, heatIndex, windSpeed, intensityDescription, manualDescription, owmMain, owmDescription, iconPath, updatedAt }, ... }`.
-	- `GET /api/tide/current` continues to return `{ current: { currentHeight, state, ... }, extremes: [...] }` and the public tide wrapper now reads `current.currentHeight` and `current.state` to display current tide plus next high/low.
+  - `GET /api/sensor/current` returns `{ current: { waterLevel, statusLabel, updatedAt }, ... }`.
+  - `GET /api/weather/current` returns `{ current: { temperature, humidity, heatIndex, windSpeed, intensityDescription, manualDescription, owmMain, owmDescription, iconPath, updatedAt }, ... }`.
+  - `GET /api/tide/current` continues to return `{ current: { currentHeight, state, ... }, extremes: [...] }` and the public tide wrapper now reads `current.currentHeight` and `current.state` to display current tide plus next high/low.
 
 Notes:
+
 - The wrappers intentionally use client-side fetching and are implemented as `use client` components to avoid requiring server-side admin credentials in the public landing page.
 - If database table/column names differ in your environment, the API endpoints may need column mapping adjustments; check API logs and the browser console for 4xx/5xx errors.
 
@@ -205,11 +230,13 @@ Notes:
 - Files changed: [resina-project/apps/web/app/api/public/sensor/route.ts](apps/web/app/api/public/sensor/route.ts), [resina-project/apps/web/app/api/public/weather/route.ts](apps/web/app/api/public/weather/route.ts), [resina-project/apps/web/app/api/public/tide/route.ts](apps/web/app/api/public/tide/route.ts), [resina-project/apps/web/app/api/sensor/current/route.ts](apps/web/app/api/sensor/current/route.ts), [resina-project/apps/web/app/api/weather/current/route.ts](apps/web/app/api/weather/current/route.ts), [resina-project/apps/web/app/api/tide/current/route.ts](apps/web/app/api/tide/current/route.ts), [resina-project/apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx](apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx](apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx), [resina-project/apps/web/app/components/public-monitoring/PublicTideWrapper.tsx](apps/web/app/components/public-monitoring/PublicTideWrapper.tsx)
 - What changed: implemented serverless Next.js API routes that return public-safe summaries from Supabase and updated the public monitoring wrappers to call same-origin `/api/sensor/current`, `/api/weather/current`, and `/api/tide/current` so the landing page works when deployed to Vercel without a separate Express API.
 - Validation: start the Next dev server in `apps/web` and run:
+
 ```
 curl http://localhost:3000/api/sensor/current
 curl http://localhost:3000/api/weather/current
 curl http://localhost:3000/api/tide/current
 ```
+
 Expect 200 JSON responses matching the shapes described in the public-monitoring entry.
 
 ### 2026-06-22
@@ -219,6 +246,7 @@ Expect 200 JSON responses matching the shapes described in the public-monitoring
 - Files changed: [resina-project/apps/web/app/api/public/sensor/route.ts](resina-project/apps/web/app/api/public/sensor/route.ts)
 - What changed: preserved `null` for `waterLevel` when `water_level` is null instead of using `Number(null)` which evaluated to `0`, preventing misleading zero readings in the UI.
 - Validation: documentation and typecheck recommended; run Next dev server and `curl http://localhost:3000/api/sensor/current` to verify `current.waterLevel` is `null` when no reading exists.
+
 ### 2026-06-05
 
 - Prompt: read the document first, and fix the landing page download button and navbar download link so they install the APK instead of opening the admin portal.
@@ -373,7 +401,7 @@ Expect 200 JSON responses matching the shapes described in the public-monitoring
 
 ### 2026-05-31
 
-- Prompt: remove overlapping subtitle and avoid duplicated "Barangay" label in PDF header.
+- e bPrompt: remove overlapping subtitle and avoid duplicated "Barangay" label in PDF header.
 - Area: web
 - Files changed: [resina-project/apps/web/app/admin/history/pdf-report.ts](resina-project/apps/web/app/admin/history/pdf-report.ts), [resina-project/PROJECT_STRUCTURE.md](resina-project/PROJECT_STRUCTURE.md)
 - What changed: removed the "Analytics report export" subtitle and print the `barangayName` and `cityName` values directly to prevent the label being duplicated; adjusted vertical spacing to prevent overlap.
