@@ -39,10 +39,10 @@ export default function HomePage() {
               RESINA
             </h1>
             <p className="mt-3 text-2xl font-semibold leading-tight text-[#0d3d73] sm:text-3xl md:text-[42px]">
-              Real-time Water Level Sensor IoT Network for Adaptive Flood Alerts
+              Real-time Water Level Sensor for  Flood Alerts
             </p>
             <p className="mt-6 max-w-[520px] text-base leading-7 text-[#5e6872] sm:mt-8 sm:text-lg md:text-xl">
-              RESINA deploys IoT flood sensors along critical waterways in Barangay Sta. Rita,
+              RESINA deploys flood sensors along critical waterways in Barangay Sta. Rita,
               Olongapo City — monitoring water levels in real time to keep residents and
               barangay officials informed before flooding occurs.
             </p>
