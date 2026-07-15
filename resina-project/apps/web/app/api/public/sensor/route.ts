@@ -5,6 +5,12 @@ function resolveDeviceStatusLabel(status: unknown): string {
   return String(status ?? "inactive").toLowerCase() === "active" ? "Active" : "Inactive";
 }
 
+type StatusCheckRow = {
+  device_id: string;
+  status: string;
+  last_seen: string;
+};
+
 export async function GET() {
   try {
     const admin = createAdminClient();
@@ -20,7 +26,7 @@ export async function GET() {
       .select("device_id, status, last_seen")
       .order("last_seen", { ascending: false })
       .limit(1)
-      .maybeSingle();
+      .maybeSingle<StatusCheckRow>();
 
     if (error && !statusData) {
       return NextResponse.json({ error: error.message }, { status: 500 });
