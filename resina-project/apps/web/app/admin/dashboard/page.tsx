@@ -24,6 +24,7 @@ type SensorSnapshot = {
   statusText: string | null;
   updatedAt: string | null;
   sourceTable: string | null;
+  deviceStatusLabel: string;
 };
 
 type WeatherState = {
@@ -301,6 +302,7 @@ export default function AdminDashboardPage() {
     statusText: null,
     updatedAt: null,
     sourceTable: null,
+    deviceStatusLabel: "Inactive",
   });
 
   const alertLevel = inferAlertLevel(snapshot);
@@ -326,6 +328,13 @@ export default function AdminDashboardPage() {
       { table: "water_levels", orderBy: "created_at" },
       { table: "sensor_logs", orderBy: "timestamp" },
     ];
+    const { data: statusData } = await supabase
+      .from("status_check")
+      .select("device_id, status, last_seen")
+      .order("last_seen", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const deviceStatusLabel = String(statusData?.status ?? "inactive").toLowerCase() === "active" ? "Active" : "Inactive";
 
     if (!silent) {
       setIsLoadingData(true);
@@ -354,6 +363,7 @@ export default function AdminDashboardPage() {
         statusText: (row.status ?? row.level_status ?? row.alert_status ?? row.alert_level ?? null) as string | null,
         updatedAt: (row.created_at ?? row.timestamp ?? row.recorded_at ?? null) as string | null,
         sourceTable: source.table,
+        deviceStatusLabel,
       });
 
       found = true;
@@ -607,6 +617,11 @@ export default function AdminDashboardPage() {
         )
         .on(
           "postgres_changes",
+          { event: "*", schema: "public", table: "status_check" },
+          scheduleSensorReload,
+        )
+        .on(
+          "postgres_changes",
           { event: "*", schema: "public", table: "weather_logs" },
           scheduleWeatherReload,
         )
@@ -745,6 +760,7 @@ export default function AdminDashboardPage() {
             rangeLabel={rangeLabel}
             waterLevel={snapshot.waterLevel}
             lastUpdateLabel={lastUpdateLabel}
+            deviceStatusLabel={snapshot.deviceStatusLabel}
             isLoadingData={isLoadingData}
             sourceTable={snapshot.sourceTable}
             fetchError={fetchError}

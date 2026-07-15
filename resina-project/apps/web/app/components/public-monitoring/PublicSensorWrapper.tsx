@@ -1,28 +1,59 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createClient } from "../../../lib/supabase/client";
 import { CurrentSensorStatus } from "../../admin/dashboard/components/current-sensor-status";
 
 export default function PublicSensorWrapper() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     let mounted = true;
     const url = `/api/sensor/current`;
-    fetch(url)
-      .then((r) => r.json())
-      .then((json) => {
-        if (!mounted) return;
-        if (json?.error) setError(json.error);
-        else setData(json);
-      })
-      .catch((e) => mounted && setError(e?.message || String(e)))
-      .finally(() => mounted && setLoading(false));
 
-    return () => { mounted = false; };
-  }, []);
+    const loadSensor = async () => {
+      try {
+        const response = await fetch(url);
+        const json = await response.json();
+
+        if (!mounted) return;
+        if (json?.error) {
+          setError(json.error);
+        } else {
+          setData(json);
+        }
+      } catch (exception) {
+        if (mounted) {
+          setError(exception instanceof Error ? exception.message : String(exception));
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadSensor();
+
+    const channel = supabase
+      .channel("public-sensor-status")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "status_check" },
+        () => {
+          void loadSensor();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase]);
 
   const ALERT_LEVELS: Record<string, any> = {
     normal: {
@@ -70,6 +101,7 @@ export default function PublicSensorWrapper() {
   const rangeLabel = "Normal: 0.00 - 1.50m";
   const waterLevel = data?.current?.waterLevel ?? null;
   const lastUpdateLabel = data?.current?.updatedAt ? `Last update: ${new Date(data.current.updatedAt).toLocaleString()}` : "Last update: -";
+  const deviceStatusLabel = data?.current?.deviceStatusLabel ?? "Inactive";
 
   const inferred = inferAlertLevel(waterLevel, data?.current?.statusLabel ?? null);
   const alertConfig = ALERT_LEVELS[inferred] ?? ALERT_LEVELS.normal;
@@ -80,6 +112,7 @@ export default function PublicSensorWrapper() {
       rangeLabel={rangeLabel}
       waterLevel={waterLevel}
       lastUpdateLabel={lastUpdateLabel}
+      deviceStatusLabel={deviceStatusLabel}
       isLoadingData={loading}
       sourceTable={null}
       fetchError={error}

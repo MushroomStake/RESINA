@@ -12,6 +12,7 @@ type SensorStatusCardProps = {
   alertDescription: string;
   backgroundColor: string;
   waterLevel: number | null;
+  deviceStatusLabel: string;
 };
 
 const MAX_METER = 5;
@@ -131,6 +132,7 @@ export function SensorStatusCard({
   alertDescription,
   backgroundColor,
   waterLevel,
+  deviceStatusLabel,
 }: SensorStatusCardProps) {
   const safeLevel = waterLevel === null || Number.isNaN(waterLevel) ? null : clamp(waterLevel, 0, MAX_METER);
   const snappedMarkerLevel =
@@ -143,6 +145,11 @@ export function SensorStatusCard({
   const sensorGradientColors = resolveSensorGradientColors(safeLevel, backgroundColor);
   const displayTitle = safeLevel === null ? alertTitle : levelVisual.title;
   const displayBadge = safeLevel === null ? alertBadge : levelVisual.badge;
+  const isDeviceActive = deviceStatusLabel.toLowerCase() === "active";
+  const deviceStatusText = isDeviceActive ? "Active" : "Inactive";
+  const deviceStatusBorderColor = isDeviceActive ? "rgba(220,252,231,0.85)" : "rgba(254,226,226,0.85)";
+  const deviceStatusBackgroundColor = isDeviceActive ? "rgba(240,253,244,0.94)" : "rgba(254,242,242,0.94)";
+  const deviceStatusTextColor = isDeviceActive ? "#166534" : "#b91c1c";
   const trendRef = useRef<number | null>(safeLevel);
   const [trendLabel, setTrendLabel] = useState<"Rising" | "Falling" | null>(null);
 
@@ -276,7 +283,10 @@ export function SensorStatusCard({
       <View style={styles.cardBackdropB} />
       <View style={styles.sensorMetaRow}>
         <Text style={styles.sensorChip}>{stationLabel}</Text>
-        <Text style={styles.sensorUpdated}>UPDATED • {normalizeUpdatedLabel(updatedLabel)}</Text>
+        <View style={[styles.sensorStatusChip, { borderColor: deviceStatusBorderColor, backgroundColor: deviceStatusBackgroundColor }]}>
+          <View style={[styles.sensorStatusDot, { backgroundColor: isDeviceActive ? "#22c55e" : "#ef4444" }]} />
+          <Text style={[styles.sensorStatusText, { color: deviceStatusTextColor }]}>{deviceStatusText}</Text>
+        </View>
       </View>
 
       <View style={styles.visualRow}>
@@ -383,6 +393,7 @@ export function SensorStatusCard({
       <View style={styles.sensorDescriptionWrap}>
         <Text style={styles.sensorDescriptionLabel}>DESCRIPTION</Text>
         <Text style={styles.sensorDescriptionText}>{alertDescription}</Text>
+        <Text style={styles.sensorUpdated}>UPDATED • {normalizeUpdatedLabel(updatedLabel)}</Text>
       </View>
     </LinearGradient>
   );
@@ -442,6 +453,25 @@ const styles = StyleSheet.create({
     fontSize: 10,
     opacity: 0.95,
     letterSpacing: 0.2,
+  },
+  sensorStatusChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  sensorStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 99,
+  },
+  sensorStatusText: {
+    fontWeight: "800",
+    fontSize: 11,
+    letterSpacing: 0.3,
   },
   visualRow: {
     flexDirection: "row",

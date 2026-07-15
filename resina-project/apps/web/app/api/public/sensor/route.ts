@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "../../../../lib/supabase/admin";
 
+function resolveDeviceStatusLabel(status: unknown): string {
+  return String(status ?? "inactive").toLowerCase() === "active" ? "Active" : "Inactive";
+}
+
 export async function GET() {
   try {
     const admin = createAdminClient();
@@ -11,19 +15,25 @@ export async function GET() {
       .limit(1)
       .maybeSingle();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    const { data: statusData } = await admin
+      .from("status_check")
+      .select("device_id, status, last_seen")
+      .order("last_seen", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (!data) {
-      return NextResponse.json({ error: "No sensor readings found" }, { status: 404 });
+    if (error && !statusData) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     const payload = {
       current: {
-        waterLevel: data.water_level === null ? null : Number(data.water_level),
-        statusLabel: data.status ?? "Unknown",
-        updatedAt: data.created_at ?? null,
+        waterLevel: data?.water_level === null || data?.water_level === undefined ? null : Number(data.water_level),
+        statusLabel: data?.status ?? "Unknown",
+        updatedAt: data?.created_at ?? null,
+        deviceStatusLabel: resolveDeviceStatusLabel(statusData?.status),
+        deviceId: statusData?.device_id ?? null,
+        deviceLastSeen: statusData?.last_seen ?? null,
       },
     };
 

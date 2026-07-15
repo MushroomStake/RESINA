@@ -13,6 +13,7 @@ type CurrentSensorStatusProps = {
   rangeLabel: string;
   waterLevel: number | null;
   lastUpdateLabel: string;
+  deviceStatusLabel: string;
   isLoadingData: boolean;
   sourceTable: string | null;
   fetchError: string | null;
@@ -163,6 +164,7 @@ export function CurrentSensorStatus({
   rangeLabel,
   waterLevel,
   lastUpdateLabel,
+  deviceStatusLabel,
   isLoadingData,
   sourceTable,
   fetchError,
@@ -178,6 +180,12 @@ export function CurrentSensorStatus({
   const levelDotClass = resolveLevelDotClass(safeLevel);
   const levelTextClass = resolveLevelTextClass(safeLevel);
   const shortUpdateLabel = lastUpdateLabel.replace("Last update:", "").trim();
+  const isDeviceActive = deviceStatusLabel.toLowerCase() === "active";
+  const deviceStatusText = isDeviceActive ? "Active" : "Inactive";
+  const deviceStatusClass = isDeviceActive
+    ? "border-[#d9f7e4] bg-[#ecfdf3] text-[#166534]"
+    : "border-[#fee2e2] bg-[#fef2f2] text-[#b91c1c]";
+  const deviceStatusDotClass = isDeviceActive ? "bg-[#22c55e]" : "bg-[#ef4444]";
 
   return (
     <>
@@ -185,9 +193,9 @@ export function CurrentSensorStatus({
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.14),transparent_45%)]" />
         <div className="relative z-10 flex items-center justify-between gap-3">
           <span className="rounded-full border border-white/35 bg-white/85 px-3 py-1 text-sm font-bold text-[#0d3152]">Sta. Rita Bridge</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-white/95">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#b8ffd2]" />
-            Live Sensor
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-wide ${deviceStatusClass}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${deviceStatusDotClass}`} />
+            {deviceStatusText}
           </span>
         </div>
 
@@ -287,9 +295,9 @@ export function CurrentSensorStatus({
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(110deg,rgba(255,255,255,0.14),transparent_40%)]" />
         <div className="flex items-center justify-between gap-3">
           <span className="rounded-full border border-white/35 bg-white/85 px-3 py-1 text-sm font-bold text-[#0d3152]">Sta. Rita Bridge</span>
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/12 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-white/95">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#b8ffd2]" />
-            Live Sensor
+          <span className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-wide ${deviceStatusClass}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${deviceStatusDotClass}`} />
+            {deviceStatusText}
           </span>
         </div>
 

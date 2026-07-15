@@ -82,6 +82,7 @@ type SensorSnapshot = {
   waterLevel: number | null;
   statusText: string | null;
   updatedAt: string | null;
+  deviceStatusLabel: string;
 };
 
 type WeatherSnapshot = {
@@ -426,6 +427,11 @@ function normalizeStatusMessage(message: string, variant: "error" | "success"): 
       normalized.includes("not confirmed") ||
       normalized.includes("confirm your email") ||
       normalized.includes("email_not_confirmed")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "status_check" },
+          scheduleSensorReload,
+        )
     ) {
       return "Your email is not confirmed yet. Please check your inbox and confirm your account.";
     }
@@ -567,6 +573,7 @@ export default function App() {
     waterLevel: null,
     statusText: null,
     updatedAt: null,
+    deviceStatusLabel: "Inactive",
   });
 
   const [weatherSnapshot, setWeatherSnapshot] = useState<WeatherSnapshot>({
@@ -1032,7 +1039,10 @@ export default function App() {
   const loadSensorSnapshot = async (allowLiveFetch = true): Promise<CacheAwareLoadResult> => {
     const cached = await readCache<SensorSnapshot>(CACHE_KEYS.sensor, CACHE_TTL_MS.sensor);
     if (cached) {
-      setSensorSnapshot(cached.value);
+      setSensorSnapshot({
+        ...cached.value,
+        deviceStatusLabel: cached.value.deviceStatusLabel ?? "Inactive",
+      });
       setSensorSyncState({ source: "cache", cachedAt: cached.updatedAt });
     }
 
@@ -1050,6 +1060,14 @@ export default function App() {
     ];
 
     try {
+      const { data: statusData } = await supabase
+        .from("status_check")
+        .select("device_id, status, last_seen")
+        .order("last_seen", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const deviceStatusLabel = String(statusData?.status ?? "inactive").toLowerCase() === "active" ? "Active" : "Inactive";
+
       for (const source of sources) {
         const { data, error } = await supabase
           .from(source.table)
@@ -1070,6 +1088,7 @@ export default function App() {
           waterLevel: Number.isNaN(waterLevel) ? null : waterLevel,
           statusText: (row.status ?? row.level_status ?? row.alert_status ?? row.alert_level ?? null) as string | null,
           updatedAt: (row.created_at ?? row.timestamp ?? row.recorded_at ?? null) as string | null,
+          deviceStatusLabel,
         };
 
         setSensorSnapshot(nextSnapshot);
@@ -2820,6 +2839,7 @@ export default function App() {
           alertDescription={alertConfig.description}
           backgroundColor={alertConfig.cardColor}
           waterLevel={sensorSnapshot.waterLevel}
+          deviceStatusLabel={sensorSnapshot.deviceStatusLabel}
           textVariant={homeTextVariant}
           statusLabel={getSectionSyncLabel(sensorSyncState, isOnline)}
           statusVariant={getSectionSyncVariant(sensorSyncState, isOnline)}
