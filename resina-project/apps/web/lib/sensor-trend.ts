@@ -23,6 +23,8 @@ export function buildWaterTrendFromRows(
   rows: Array<{ water_level?: number | string | null; created_at?: string | null }>,
 ): SensorTrendSummary {
   const STALE_READING_MS = 30 * 60 * 1000;
+  const MAX_PAIR_GAP_MINUTES = 120;
+  const MAX_PREDICTION_MINUTES = 180;
   const STEP_SIZE = 0.5;
 
   const validRows = rows
@@ -81,6 +83,18 @@ export function buildWaterTrendFromRows(
     };
   }
 
+  if (deltaMinutes > MAX_PAIR_GAP_MINUTES) {
+    return {
+      direction: "stable",
+      currentLevel,
+      previousLevel,
+      nextThreshold: null,
+      ratePerMinute: null,
+      minutesToThreshold: null,
+      message: "Waiting for newer readings to estimate trend.",
+    };
+  }
+
   const deltaDistance = currentLevel - previousLevel;
 
   if (deltaDistance === 0) {
@@ -126,6 +140,11 @@ export function buildWaterTrendFromRows(
 
     const target = currentLevel + STEP_SIZE;
     const minutesToThreshold = Math.abs(STEP_SIZE / ratePerMinute);
+    const roundedMinutes = Math.round(minutesToThreshold);
+    const trendMessage =
+      Number.isFinite(minutesToThreshold) && minutesToThreshold <= MAX_PREDICTION_MINUTES
+        ? `Water level is rising. It may reach ${target.toFixed(2)}m in about ${roundedMinutes} minutes.`
+        : "Water level is rising. Collecting more readings for a better time estimate.";
 
     return {
       direction: "rising",
@@ -134,7 +153,7 @@ export function buildWaterTrendFromRows(
       nextThreshold: target,
       ratePerMinute,
       minutesToThreshold: Number.isFinite(minutesToThreshold) ? Math.max(0, minutesToThreshold) : null,
-      message: `Water level is rising. It may reach ${target.toFixed(2)}m in about ${Math.round(minutesToThreshold)} minutes.`,
+      message: trendMessage,
     };
   }
 
@@ -164,6 +183,11 @@ export function buildWaterTrendFromRows(
 
   const target = currentLevel - STEP_SIZE;
   const minutesToThreshold = Math.abs(STEP_SIZE / ratePerMinute);
+  const roundedMinutes = Math.round(minutesToThreshold);
+  const trendMessage =
+    Number.isFinite(minutesToThreshold) && minutesToThreshold <= MAX_PREDICTION_MINUTES
+      ? `Water level is falling. It may reach ${target.toFixed(2)}m in about ${roundedMinutes} minutes.`
+      : "Water level is falling. Collecting more readings for a better time estimate.";
 
   return {
     direction: "falling",
@@ -172,6 +196,6 @@ export function buildWaterTrendFromRows(
     nextThreshold: target,
     ratePerMinute,
     minutesToThreshold: Number.isFinite(minutesToThreshold) ? Math.max(0, minutesToThreshold) : null,
-    message: `Water level is falling. It may reach ${target.toFixed(2)}m in about ${Math.round(minutesToThreshold)} minutes.`,
+    message: trendMessage,
   };
 }

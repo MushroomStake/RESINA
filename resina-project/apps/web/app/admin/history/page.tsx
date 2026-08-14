@@ -39,28 +39,28 @@ const ALERT_LEVELS: Record<
   normal: {
     statusLabel: "Normal",
     rangeLabel: "1.5 - 2.49m",
-    description: "Water level remains stable. No immediate threat observed at the current threshold.",
+    description: "Water level is within the normal range. Continue regular monitoring.",
     chipClass: "border-[#A7F3D0] bg-[#D1FAE5] text-[#166534]",
     activeFilterClass: "border-[#A7F3D0] bg-[#D1FAE5] text-[#166534]",
   },
   critical: {
     statusLabel: "Critical",
     rangeLabel: "2.5 - 2.9m",
-    description: "Caution; stay alert and monitor the situation within the critical threshold.",
+    description: "Water is high. Stay alert and prepare essentials in case conditions worsen.",
     chipClass: "border-[#FDE68A] bg-[#FEF3C7] text-[#B45309]",
     activeFilterClass: "border-[#FDE68A] bg-[#FEF3C7] text-[#B45309]",
   },
   evacuation: {
     statusLabel: "Evacuation",
     rangeLabel: "3.0 - 3.9m",
-    description: "Immediate danger; action is required now once readings enter the evacuation threshold.",
+    description: "Danger level reached. Evacuate low-lying areas and follow barangay instructions.",
     chipClass: "border-[#A95C2B] bg-[#E6BA9F6E] text-[#A95C2B]",
     activeFilterClass: "border-[#A95C2B] bg-[#E6BA9F6E] text-[#A95C2B]",
   },
   spilling: {
     statusLabel: "Spilling",
     rangeLabel: "4.0m",
-    description: "Extreme hazard; overflow risk is active once readings reach the spilling threshold.",
+    description: "Overflow level reached. Immediate evacuation and emergency response are required.",
     chipClass: "border-[#E54C4C] bg-[#F7C8C8] text-[#E54C4C]",
     activeFilterClass: "border-[#E54C4C] bg-[#F7C8C8] text-[#E54C4C]",
   },
@@ -99,16 +99,16 @@ function inferAlertLevel(statusText: string | null, waterLevel: number | null): 
 
 function buildHistoryDescription(level: AlertLevelKey): string {
   if (level === "spilling") {
-    return "Classified under the spilling threshold range.";
+    return "Overflow level reached. Immediate evacuation and rescue response required.";
   }
   if (level === "evacuation") {
-    return "Classified under the evacuation threshold range.";
+    return "Danger level reached. Move residents in low areas to safer ground now.";
   }
   if (level === "critical") {
-    return "Classified under the critical threshold range.";
+    return "High-water warning. Stay alert and prepare for possible evacuation.";
   }
 
-  return "Classified under the normal threshold range.";
+  return "Normal level. Continue monitoring and keep channels open for updates.";
 }
 
 function resolveRangeLabel(level: AlertLevelKey, fallback: string): string {
@@ -813,7 +813,10 @@ export default function AdminHistoryPage() {
       <div className="mx-auto max-w-7xl space-y-6">
         <section className="overflow-hidden rounded-[20px] border border-[#e6eef9] bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between">
-            <h3 className="mb-3 text-sm font-semibold text-[#0f2847]">Water Level (m) — Time series</h3>
+            <div>
+              <h3 className="mb-1 text-sm font-semibold text-[#0f2847]">Water Level (m) — Time Series</h3>
+              <p className="text-xs text-[#5b6b80]">Daily chart of water level movement for the selected date.</p>
+            </div>
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-2 rounded-xl border border-[#d0dceb] bg-white px-3 py-2 text-[#374151] shadow-sm">
                 <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#6b7280]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -999,6 +1002,7 @@ export default function AdminHistoryPage() {
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#5b7ea9]">Analytics Table</p>
                 <h2 className="mt-1 text-2xl font-semibold text-[#0f2847]">Water Level Records</h2>
+                <p className="mt-1 text-sm text-[#5b6b80]">Each row shows the recorded water level, status, and plain-language risk note.</p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
