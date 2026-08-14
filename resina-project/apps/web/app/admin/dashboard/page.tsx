@@ -14,6 +14,7 @@ import {
 import { CurrentSensorStatus } from "./components/current-sensor-status";
 import { WeatherUpdateSection } from "./components/weather-update-section";
 import { TideMonitorSection } from "./components/tide-monitor-section";
+import { buildWaterTrendFromRows } from "../../../lib/sensor-trend";
 import StatusFeedbackModal from "../components/status-feedback-modal";
 import { AdminPageSkeleton } from "../components/admin-skeleton";
 
@@ -25,6 +26,7 @@ type SensorSnapshot = {
   updatedAt: string | null;
   sourceTable: string | null;
   deviceStatusLabel: string;
+  trendMessage?: string | null;
 };
 
 type WeatherState = {
@@ -358,12 +360,17 @@ export default function AdminDashboardPage() {
         row.water_level ?? row.level ?? row.sensor_level ?? row.reading ?? row.value ?? Number.NaN,
       );
 
+      const trend = buildWaterTrendFromRows(
+        (await supabase.from(source.table).select("water_level, created_at").order(source.orderBy, { ascending: false }).limit(2)).data ?? [],
+      );
+
       setSnapshot({
         waterLevel: Number.isNaN(waterLevel) ? null : waterLevel,
         statusText: (row.status ?? row.level_status ?? row.alert_status ?? row.alert_level ?? null) as string | null,
         updatedAt: (row.created_at ?? row.timestamp ?? row.recorded_at ?? null) as string | null,
         sourceTable: source.table,
         deviceStatusLabel,
+        trendMessage: trend.message,
       });
 
       found = true;
@@ -764,6 +771,7 @@ export default function AdminDashboardPage() {
             isLoadingData={isLoadingData}
             sourceTable={snapshot.sourceTable}
             fetchError={fetchError}
+            trendMessage={snapshot.trendMessage}
           />
 
           <WeatherUpdateSection

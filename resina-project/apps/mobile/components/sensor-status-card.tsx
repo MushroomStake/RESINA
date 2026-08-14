@@ -13,6 +13,7 @@ type SensorStatusCardProps = {
   backgroundColor: string;
   waterLevel: number | null;
   deviceStatusLabel: string;
+  trendMessage?: string | null;
 };
 
 const MAX_METER = 5;
@@ -133,6 +134,7 @@ export function SensorStatusCard({
   backgroundColor,
   waterLevel,
   deviceStatusLabel,
+  trendMessage,
 }: SensorStatusCardProps) {
   const safeLevel = waterLevel === null || Number.isNaN(waterLevel) ? null : clamp(waterLevel, 0, MAX_METER);
   const snappedMarkerLevel =
@@ -393,6 +395,7 @@ export function SensorStatusCard({
       <View style={styles.sensorDescriptionWrap}>
         <Text style={styles.sensorDescriptionLabel}>DESCRIPTION</Text>
         <Text style={styles.sensorDescriptionText}>{alertDescription}</Text>
+        {trendMessage ? <Text style={styles.trendBannerText}>{trendMessage}</Text> : null}
         <Text style={styles.sensorUpdated}>UPDATED • {normalizeUpdatedLabel(updatedLabel)}</Text>
       </View>
     </LinearGradient>
@@ -453,6 +456,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     opacity: 0.95,
     letterSpacing: 0.2,
+  },
+  trendBannerText: {
+    marginTop: 8,
+    color: "rgba(255,255,255,0.96)",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
   },
   sensorStatusChip: {
     flexDirection: "row",

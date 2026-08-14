@@ -116,6 +116,7 @@ export default function PublicSensorWrapper() {
       isLoadingData={loading}
       sourceTable={null}
       fetchError={error}
+      trendMessage={data?.current?.trendMessage ?? null}
     />
   );
 }

@@ -1,14 +1,7 @@
-export type SensorSnapshotLike = {
-  waterLevel: number | null;
-  statusText: string | null;
-};
+export type SensorTrendDirection = "rising" | "falling" | "stable";
 
-export type AlertLevelKey = "normal" | "critical" | "evacuation" | "spilling";
-
-export type WaterTrendDirection = "rising" | "falling" | "stable";
-
-export type WaterTrendSummary = {
-  direction: WaterTrendDirection;
+export type SensorTrendSummary = {
+  direction: SensorTrendDirection;
   currentLevel: number | null;
   previousLevel: number | null;
   nextThreshold: number | null;
@@ -17,21 +10,31 @@ export type WaterTrendSummary = {
   message: string;
 };
 
-function parseWaterLevel(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
+function parseLevel(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-export function buildWaterTrendSummary(rows: Array<{ water_level?: number | string | null; created_at?: string | null }>): WaterTrendSummary {
+export function buildWaterTrendFromRows(
+  rows: Array<{ water_level?: number | string | null; created_at?: string | null }>,
+): SensorTrendSummary {
   const STALE_READING_MS = 30 * 60 * 1000;
   const STEP_SIZE = 0.5;
 
   const validRows = rows
-    .map((row) => ({
-      waterLevel: parseWaterLevel(row.water_level),
-      timeMs: row.created_at ? new Date(row.created_at).getTime() : Number.NaN,
-    }))
+    .map((row) => {
+      const waterLevel = parseLevel(row.water_level);
+      const timeMs = row.created_at ? new Date(row.created_at).getTime() : Number.NaN;
+
+      return {
+        waterLevel,
+        timeMs,
+      };
+    })
     .filter((row) => row.waterLevel !== null && Number.isFinite(row.timeMs))
     .sort((a, b) => b.timeMs - a.timeMs);
 
@@ -171,56 +174,4 @@ export function buildWaterTrendSummary(rows: Array<{ water_level?: number | stri
     minutesToThreshold: Number.isFinite(minutesToThreshold) ? Math.max(0, minutesToThreshold) : null,
     message: `Water level is falling. It may reach ${target.toFixed(2)}m in about ${Math.round(minutesToThreshold)} minutes.`,
   };
-}
-
-export function inferAlertLevel(snapshot: SensorSnapshotLike): AlertLevelKey {
-  const status = (snapshot.statusText ?? "").toLowerCase();
-
-  if (status.includes("spill")) return "spilling";
-  if (status.includes("evac")) return "evacuation";
-  if (status.includes("critical") || status.includes("alert level 2") || status.includes("alert 2")) {
-    return "critical";
-  }
-  if (status.includes("normal") || status.includes("alert level 1") || status.includes("alert 1")) {
-    return "normal";
-  }
-  if (snapshot.waterLevel !== null) {
-    if (snapshot.waterLevel >= 4) return "spilling";
-    if (snapshot.waterLevel >= 3) return "evacuation";
-    if (snapshot.waterLevel >= 2.5) return "critical";
-  }
-
-  return "normal";
-}
-
-export function formatRangeLabel(level: number | null, fallback: string): string {
-  if (level === null || Number.isNaN(level)) return fallback;
-
-  if (level >= 4) return "4.0m";
-  if (level >= 3) return "3.0 - 3.9m";
-  if (level >= 2.5) return "2.5 - 2.9m";
-  if (level >= 1.5) return "1.5 - 2.49m";
-
-  return fallback;
-}
-
-export function formatSensorUpdatedAt(updatedAt: string | null): string {
-  if (!updatedAt) return "UPDATED: NO RECENT DATA";
-
-  const timestamp = new Date(updatedAt);
-  if (Number.isNaN(timestamp.getTime())) {
-    return "UPDATED: NO RECENT DATA";
-  }
-
-  return `UPDATED: ${timestamp
-    .toLocaleString("en-PH", {
-      timeZone: "Asia/Manila",
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    })
-    .toUpperCase()}`;
 }

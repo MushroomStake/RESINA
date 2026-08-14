@@ -17,6 +17,7 @@ type CurrentSensorStatusProps = {
   isLoadingData: boolean;
   sourceTable: string | null;
   fetchError: string | null;
+  trendMessage?: string | null;
 };
 
 const VISUAL_MAX_METER = 4.4;
@@ -168,6 +169,7 @@ export function CurrentSensorStatus({
   isLoadingData,
   sourceTable,
   fetchError,
+  trendMessage,
 }: CurrentSensorStatusProps) {
   const safeLevel = waterLevel === null || Number.isNaN(waterLevel) ? null : clamp(waterLevel, 0, 5);
   const normalizedLevel = safeLevel === null ? 0 : clamp(safeLevel, 0, VISUAL_MAX_METER) / VISUAL_MAX_METER;
@@ -261,6 +263,12 @@ export function CurrentSensorStatus({
         <div className={`relative z-10 mt-3 rounded-xl border px-3.5 py-3 text-sm leading-7 shadow-sm ${alertConfig.noticeClass}`}>
           {alertConfig.description}
         </div>
+
+        {trendMessage ? (
+          <div className="relative z-10 mt-2 rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-medium text-white/95 shadow-sm backdrop-blur-sm">
+            {trendMessage}
+          </div>
+        ) : null}
 
         <div className="relative z-10 mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/80">
           <span>{shortUpdateLabel}</span>
@@ -360,6 +368,11 @@ export function CurrentSensorStatus({
         </div>
 
         <div className={`mt-3 rounded-xl border px-4 py-3 text-sm leading-7 shadow-sm ${alertConfig.noticeClass}`}>{alertConfig.description}</div>
+        {trendMessage ? (
+          <div className="mt-3 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-medium text-white shadow-sm backdrop-blur-sm">
+            {trendMessage}
+          </div>
+        ) : null}
 
         {isLoadingData ? (
           <div className="mt-3 animate-pulse rounded-lg border border-white/30 bg-white/25 p-2.5">

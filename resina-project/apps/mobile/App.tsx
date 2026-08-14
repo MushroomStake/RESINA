@@ -27,7 +27,12 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { Session } from "@supabase/supabase-js";
 import { readCache, writeCache } from "./lib/cache";
 import { CACHE_KEYS, CACHE_TTL_MS } from "./lib/cache-config";
-import { inferAlertLevel, formatRangeLabel, formatSensorUpdatedAt } from "./lib/helpers/sensor-helpers";
+import {
+  inferAlertLevel,
+  formatRangeLabel,
+  formatSensorUpdatedAt,
+  buildWaterTrendSummary,
+} from "./lib/helpers/sensor-helpers";
 import {
   DEFAULT_WEATHER_ADVISORY,
   getWeatherBackground,
@@ -83,6 +88,7 @@ type SensorSnapshot = {
   statusText: string | null;
   updatedAt: string | null;
   deviceStatusLabel: string;
+  trendMessage?: string | null;
 };
 
 type WeatherSnapshot = {
@@ -1084,11 +1090,18 @@ export default function App() {
           row.water_level ?? row.level ?? row.sensor_level ?? row.reading ?? row.value ?? Number.NaN,
         );
 
+        const trendRows = await supabase
+          .from(source.table)
+          .select("water_level, created_at")
+          .order(source.orderBy, { ascending: false })
+          .limit(2);
+
         const nextSnapshot: SensorSnapshot = {
           waterLevel: Number.isNaN(waterLevel) ? null : waterLevel,
           statusText: (row.status ?? row.level_status ?? row.alert_status ?? row.alert_level ?? null) as string | null,
           updatedAt: (row.created_at ?? row.timestamp ?? row.recorded_at ?? null) as string | null,
           deviceStatusLabel,
+          trendMessage: buildWaterTrendSummary(trendRows.data ?? []).message,
         };
 
         setSensorSnapshot(nextSnapshot);
@@ -2840,6 +2853,7 @@ export default function App() {
           backgroundColor={alertConfig.cardColor}
           waterLevel={sensorSnapshot.waterLevel}
           deviceStatusLabel={sensorSnapshot.deviceStatusLabel}
+          trendMessage={sensorSnapshot.trendMessage}
           textVariant={homeTextVariant}
           statusLabel={getSectionSyncLabel(sensorSyncState, isOnline)}
           statusVariant={getSectionSyncVariant(sensorSyncState, isOnline)}

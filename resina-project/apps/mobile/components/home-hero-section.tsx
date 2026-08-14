@@ -14,6 +14,7 @@ export type HomeHeroSectionProps = {
   backgroundColor: string;
   waterLevel: number | null;
   deviceStatusLabel: string;
+  trendMessage?: string | null;
   textVariant?: "light" | "dark";
   statusLabel?: string | null;
   statusVariant?: SectionSyncBadgeVariant;
@@ -31,6 +32,7 @@ export function HomeHeroSection({
   backgroundColor,
   waterLevel,
   deviceStatusLabel,
+  trendMessage,
   textVariant = "dark",
   statusLabel,
   statusVariant = "neutral",
@@ -55,6 +57,7 @@ export function HomeHeroSection({
         backgroundColor={backgroundColor}
         waterLevel={waterLevel}
         deviceStatusLabel={deviceStatusLabel}
+        trendMessage={trendMessage}
       />
     </View>
   );
