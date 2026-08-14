@@ -296,7 +296,53 @@ export default function AdminHistoryPage() {
 
   const pageSize = 5;
 
+  const loadHistoryRecords = async (): Promise<void> => {
+    setPageError(null);
+    setIsLoading(true);
+
+    const { data: rows, error } = await supabase
+      .from("sensor_readings")
+      .select("id, water_level, status, reading_date, reading_time, created_at")
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (error) {
+      setPageError(error.message);
+      setRecords([]);
+      setIsLoading(false);
+      return;
+    }
+
+    const normalized = (rows ?? [])
+      .map((row) => normalizeHistoryRow(row as Record<string, unknown>))
+      .filter((entry): entry is HistoryRecord => entry !== null)
+      .sort((left, right) => new Date(right.recordedAt).getTime() - new Date(left.recordedAt).getTime());
+
+    setRecords(normalized);
+    if (normalized.length === 0) {
+      setPageError("No analytics data found for the selected period.");
+    }
+
+    setIsLoading(false);
+  };
+
   useEffect(() => {
+    let isMounted = true;
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleReload = () => {
+      if (reloadTimer !== null) {
+        return;
+      }
+
+      reloadTimer = setTimeout(() => {
+        reloadTimer = null;
+        if (isMounted) {
+          void loadHistoryRecords();
+        }
+      }, 350);
+    };
+
     const initialize = async () => {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) {
@@ -304,38 +350,35 @@ export default function AdminHistoryPage() {
         return;
       }
 
-      setPageError(null);
-      setIsLoading(true);
-
-      const { data: rows, error } = await supabase
-        .from("sensor_readings")
-        .select("id, water_level, status, reading_date, reading_time, created_at")
-        .order("created_at", { ascending: false })
-        .limit(500);
-
-      if (error) {
-        setPageError(error.message);
-        setRecords([]);
-        setIsLoading(false);
-        setIsChecking(false);
-        return;
-      }
-
-      const normalized = (rows ?? [])
-        .map((row) => normalizeHistoryRow(row as Record<string, unknown>))
-        .filter((entry): entry is HistoryRecord => entry !== null)
-        .sort((left, right) => new Date(right.recordedAt).getTime() - new Date(left.recordedAt).getTime());
-
-      setRecords(normalized);
-      if (normalized.length === 0) {
-        setPageError("No analytics data found for the selected period.");
-      }
-
-      setIsLoading(false);
+      await loadHistoryRecords();
       setIsChecking(false);
     };
 
     void initialize();
+
+    const channel = supabase
+      .channel("admin-history-live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sensor_readings" },
+        scheduleReload,
+      )
+      .subscribe();
+
+    const fallbackTimer = setInterval(() => {
+      if (isMounted) {
+        void loadHistoryRecords();
+      }
+    }, 10_000);
+
+    return () => {
+      isMounted = false;
+      if (reloadTimer !== null) {
+        clearTimeout(reloadTimer);
+      }
+      clearInterval(fallbackTimer);
+      void supabase.removeChannel(channel);
+    };
   }, [router, supabase]);
 
   const dateFilteredRecords = records.filter((entry) => {

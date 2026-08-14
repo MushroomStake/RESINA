@@ -125,6 +125,18 @@ export function buildWaterTrendFromRows(
     };
   }
 
+  if (currentLevel < 1.5) {
+    return {
+      direction: "stable",
+      currentLevel,
+      previousLevel,
+      nextThreshold: null,
+      ratePerMinute: null,
+      minutesToThreshold: null,
+      message: "No current sensor reading available.",
+    };
+  }
+
   if (deltaDistance > 0) {
     if (currentLevel >= 4.0) {
       return {
@@ -138,12 +150,13 @@ export function buildWaterTrendFromRows(
       };
     }
 
-    const target = currentLevel + STEP_SIZE;
-    const minutesToThreshold = Math.abs(STEP_SIZE / ratePerMinute);
+    const target = currentLevel < 2.5 ? 2.5 : currentLevel < 3.0 ? 3.0 : 4.0;
+    const distanceToTarget = Math.max(target - currentLevel, 0);
+    const minutesToThreshold = Math.abs(distanceToTarget / ratePerMinute);
     const roundedMinutes = Math.round(minutesToThreshold);
     const trendMessage =
       Number.isFinite(minutesToThreshold) && minutesToThreshold <= MAX_PREDICTION_MINUTES
-        ? `Water level is rising. It may reach ${target.toFixed(2)}m in about ${roundedMinutes} minutes.`
+        ? `Water level is rising. It may reach ${target.toFixed(2)}m in about ${Math.max(1, roundedMinutes)} minutes.`
         : "Water level is rising. Collecting more readings for a better time estimate.";
 
     return {
@@ -181,12 +194,13 @@ export function buildWaterTrendFromRows(
     };
   }
 
-  const target = currentLevel - STEP_SIZE;
-  const minutesToThreshold = Math.abs(STEP_SIZE / ratePerMinute);
+  const target = currentLevel > 3.0 ? 3.0 : currentLevel > 2.5 ? 2.5 : 1.5;
+  const distanceToTarget = Math.max(currentLevel - target, 0);
+  const minutesToThreshold = Math.abs(distanceToTarget / ratePerMinute);
   const roundedMinutes = Math.round(minutesToThreshold);
   const trendMessage =
     Number.isFinite(minutesToThreshold) && minutesToThreshold <= MAX_PREDICTION_MINUTES
-      ? `Water level is falling. It may reach ${target.toFixed(2)}m in about ${roundedMinutes} minutes.`
+      ? `Water level is falling. It may reach ${target.toFixed(2)}m in about ${Math.max(1, roundedMinutes)} minutes.`
       : "Water level is falling. Collecting more readings for a better time estimate.";
 
   return {

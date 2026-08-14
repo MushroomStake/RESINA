@@ -12,6 +12,7 @@ export default function PublicSensorWrapper() {
 
   useEffect(() => {
     let mounted = true;
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
     const url = `/api/sensor/current`;
 
     const loadSensor = async () => {
@@ -38,19 +39,51 @@ export default function PublicSensorWrapper() {
 
     void loadSensor();
 
+    const scheduleLoad = () => {
+      if (reloadTimer !== null) {
+        return;
+      }
+
+      reloadTimer = setTimeout(() => {
+        reloadTimer = null;
+        void loadSensor();
+      }, 300);
+    };
+
     const channel = supabase
       .channel("public-sensor-status")
       .on(
         "postgres_changes",
+        { event: "*", schema: "public", table: "sensor_readings" },
+        scheduleLoad,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sensor_status" },
+        scheduleLoad,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "water_levels" },
+        scheduleLoad,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sensor_logs" },
+        scheduleLoad,
+      )
+      .on(
+        "postgres_changes",
         { event: "*", schema: "public", table: "status_check" },
-        () => {
-          void loadSensor();
-        },
+        scheduleLoad,
       )
       .subscribe();
 
     return () => {
       mounted = false;
+      if (reloadTimer !== null) {
+        clearTimeout(reloadTimer);
+      }
       void supabase.removeChannel(channel);
     };
   }, [supabase]);
