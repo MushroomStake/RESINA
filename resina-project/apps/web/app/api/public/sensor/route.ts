@@ -6,6 +6,11 @@ function resolveDeviceStatusLabel(status: unknown): string {
   return String(status ?? "inactive").toLowerCase() === "active" ? "Active" : "Inactive";
 }
 
+function resolveTestDeviceStatus(status: string): string {
+  if (process.env.NEXT_PUBLIC_SENSOR_STATUS_TEST_MODE !== "true") return status;
+  return process.env.NEXT_PUBLIC_SENSOR_STATUS_TEST_ACTIVE === "true" ? "Active" : "Inactive";
+}
+
 type StatusCheckRow = {
   device_id: string;
   status: string;
@@ -19,7 +24,7 @@ export async function GET() {
       .from("sensor_readings")
       .select("water_level, status, created_at")
       .order("created_at", { ascending: false })
-      .limit(2);
+      .limit(100);
 
     const { data: statusData } = await admin
       .from("status_check")
@@ -40,12 +45,14 @@ export async function GET() {
         waterLevel: latest?.water_level === null || latest?.water_level === undefined ? null : Number(latest.water_level),
         statusLabel: latest?.status ?? "Unknown",
         updatedAt: latest?.created_at ?? null,
-        deviceStatusLabel: resolveDeviceStatusLabel(statusData?.status),
+        deviceStatusLabel: resolveTestDeviceStatus(resolveDeviceStatusLabel(statusData?.status)),
         deviceId: statusData?.device_id ?? null,
         deviceLastSeen: statusData?.last_seen ?? null,
         trendDirection: trend.direction,
+        trendState: trend.state,
+        trendRate: trend.ratePerMinute,
+        estimatedMinutesToOverflow: trend.estimatedMinutesToOverflow,
         trendMessage: trend.message,
-        nextThreshold: trend.nextThreshold,
       },
     };
 

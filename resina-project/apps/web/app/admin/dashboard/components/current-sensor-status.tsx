@@ -17,6 +17,9 @@ type CurrentSensorStatusProps = {
   isLoadingData: boolean;
   sourceTable: string | null;
   fetchError: string | null;
+  trendState?: string | null;
+  trendRate?: number | null;
+  estimatedMinutesToOverflow?: number | null;
   trendMessage?: string | null;
 };
 
@@ -169,6 +172,9 @@ export function CurrentSensorStatus({
   isLoadingData,
   sourceTable,
   fetchError,
+  trendState,
+  trendRate,
+  estimatedMinutesToOverflow,
   trendMessage,
 }: CurrentSensorStatusProps) {
   const safeLevel = waterLevel === null || Number.isNaN(waterLevel) ? null : clamp(waterLevel, 0, 5);
@@ -188,6 +194,9 @@ export function CurrentSensorStatus({
     ? "border-[#d9f7e4] bg-[#ecfdf3] text-[#166534]"
     : "border-[#fee2e2] bg-[#fef2f2] text-[#b91c1c]";
   const deviceStatusDotClass = isDeviceActive ? "bg-[#22c55e]" : "bg-[#ef4444]";
+  const trendBadge = trendState === "rapid-surge" ? "Fast Surge" : trendState === "slow-rise" ? "Slow Rise" : trendState === "receding" ? "Receding" : trendState === "baseline" ? "Baseline" : trendState === "unavailable" ? "Unavailable" : "Stable";
+  const trendRateLabel = trendRate === null || trendRate === undefined ? "N/A" : `${trendState === "receding" ? "" : trendRate > 0 ? "+" : ""}${Math.abs(trendRate).toFixed(2)} m/min`;
+  const trendBadgeClass = trendState === "rapid-surge" ? "border-[#fecaca] bg-[#fee2e2] text-[#991b1b]" : trendState === "slow-rise" ? "border-[#fde68a] bg-[#fef3c7] text-[#92400e]" : trendState === "receding" ? "border-[#bfdbfe] bg-[#dbeafe] text-[#1d4ed8]" : "border-[#d1d5db] bg-[#f3f4f6] text-[#4b5563]";
 
   return (
     <>
@@ -232,7 +241,7 @@ export function CurrentSensorStatus({
           </div>
 
           <div className="relative overflow-hidden rounded-2xl border border-white/30 bg-[#12345a33] backdrop-blur-sm">
-            <div className="relative h-full min-h-[176px] overflow-hidden rounded-2xl">
+            <div className="relative h-full min-h-[270px] overflow-hidden rounded-2xl">
               <div className={`absolute inset-x-0 bottom-0 bg-[#2f8cffc8] transition-[height] duration-700 ${fillHeightClass}`}>
                 <div className="water-surface absolute inset-x-0 top-[-2px] h-[10px]" />
                 <div className="wave-layer-primary absolute -top-[8px] left-[-70%] h-[28px] w-[260%]">
@@ -250,6 +259,7 @@ export function CurrentSensorStatus({
               <div className="absolute left-1/2 top-4 w-[74%] -translate-x-1/2 rounded-2xl border border-white/35 bg-[linear-gradient(180deg,rgba(255,255,255,0.16),rgba(255,255,255,0.06))] px-3 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] backdrop-blur-[6px]">
                 <div className="flex min-h-[124px] flex-col items-center justify-center gap-1.5">
                   <p className="text-[42px] font-black leading-none text-white">{meterText}</p>
+                  {trendState ? <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${trendBadgeClass}`}>{trendBadge} - {trendRateLabel}</span> : null}
                   <p className="text-[17px] font-extrabold leading-tight text-white">{alertConfig.title}</p>
                   <span className={`mt-0.5 inline-block rounded-full bg-white px-3 py-1 text-sm font-bold shadow-sm ${levelTextClass}`}>
                     {alertConfig.badge}
@@ -340,7 +350,7 @@ export function CurrentSensorStatus({
           </div>
 
           <div className="relative overflow-hidden rounded-2xl border border-white/30 bg-[#12345a33] backdrop-blur-sm">
-            <div className="relative h-full min-h-[176px] overflow-hidden rounded-2xl">
+            <div className="relative h-full min-h-[270px] overflow-hidden rounded-2xl">
               <div className={`absolute inset-x-0 bottom-0 bg-[#2f8cffc8] transition-[height] duration-700 ${fillHeightClass}`}>
                 <div className="water-surface absolute inset-x-0 top-[-2px] h-[10px]" />
                 <div className="wave-layer-primary absolute -top-[8px] left-[-70%] h-[28px] w-[260%]">
@@ -357,6 +367,7 @@ export function CurrentSensorStatus({
 
               <div className="absolute left-1/2 top-4 w-[68%] -translate-x-1/2 rounded-2xl border border-white/35 bg-[linear-gradient(180deg,rgba(255,255,255,0.16),rgba(255,255,255,0.06))] px-5 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] backdrop-blur-[6px] md:w-[58%] xl:w-[52%]">
                 <p className="text-4xl font-black leading-none text-white md:text-5xl">{meterText}</p>
+                {trendState ? <span className={`mt-3 inline-flex rounded-full border px-3 py-1 text-sm font-bold ${trendBadgeClass}`}>{trendBadge} - {trendRateLabel}</span> : null}
                 <p className="mt-2 text-3xl font-extrabold leading-none text-white md:text-4xl">{alertConfig.title}</p>
                 <span className={`mt-3 inline-block rounded-full bg-white px-3 py-1 text-base font-bold shadow-sm ${levelTextClass}`}>
                   {alertConfig.badge}

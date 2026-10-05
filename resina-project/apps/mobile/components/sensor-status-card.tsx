@@ -13,6 +13,8 @@ type SensorStatusCardProps = {
   backgroundColor: string;
   waterLevel: number | null;
   deviceStatusLabel: string;
+  trendState?: string | null;
+  trendRate?: number | null;
   trendMessage?: string | null;
 };
 
@@ -134,6 +136,8 @@ export function SensorStatusCard({
   backgroundColor,
   waterLevel,
   deviceStatusLabel,
+  trendState,
+  trendRate,
   trendMessage,
 }: SensorStatusCardProps) {
   const safeLevel = waterLevel === null || Number.isNaN(waterLevel) ? null : clamp(waterLevel, 0, MAX_METER);
@@ -152,8 +156,9 @@ export function SensorStatusCard({
   const deviceStatusBorderColor = isDeviceActive ? "rgba(220,252,231,0.85)" : "rgba(254,226,226,0.85)";
   const deviceStatusBackgroundColor = isDeviceActive ? "rgba(240,253,244,0.94)" : "rgba(254,242,242,0.94)";
   const deviceStatusTextColor = isDeviceActive ? "#166534" : "#b91c1c";
-  const trendRef = useRef<number | null>(safeLevel);
-  const [trendLabel, setTrendLabel] = useState<"Rising" | "Falling" | null>(null);
+  const trendBadge = trendState === "rapid-surge" ? "Fast Surge" : trendState === "slow-rise" ? "Slow Rise" : trendState === "receding" ? "Receding" : trendState === "baseline" ? "Baseline" : trendState === "unavailable" ? "Unavailable" : "Stable";
+  const trendRateLabel = trendRate === null || trendRate === undefined ? "N/A" : `${trendState === "receding" ? "" : trendRate > 0 ? "+" : ""}${Math.abs(trendRate).toFixed(2)} m/min`;
+  const trendBadgeColor = trendState === "rapid-surge" ? "#ffb4b4" : trendState === "slow-rise" ? "#ffe08a" : trendState === "receding" ? "#9ed8ff" : "#e4e9f0";
 
   const fillAnim = useRef(new Animated.Value(normalizedLevel)).current;
   const waveAnimA = useRef(new Animated.Value(0)).current;
@@ -161,19 +166,6 @@ export function SensorStatusCard({
   const waveAnimC = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const previous = trendRef.current;
-    if (safeLevel !== null && previous !== null) {
-      if (safeLevel > previous + 0.01) {
-        setTrendLabel("Rising");
-      } else if (safeLevel < previous - 0.01) {
-        setTrendLabel("Falling");
-      } else {
-        setTrendLabel(null);
-      }
-    }
-
-    trendRef.current = safeLevel;
-
     Animated.timing(fillAnim, {
       toValue: snappedMarkerLevel / LABEL_MAX_METER,
       duration: 700,
@@ -386,7 +378,7 @@ export function SensorStatusCard({
                 {displayTitle}
               </Text>
               <Text style={[styles.alertBadge, { color: levelVisual.color }]}>{displayBadge}</Text>
-              {trendLabel ? <Text style={styles.trendText}>{trendLabel}</Text> : null}
+              {trendState ? <Text style={[styles.trendText, { color: trendBadgeColor }]}>{trendBadge} - {trendRateLabel}</Text> : null}
             </View>
           </View>
         </View>

@@ -98,6 +98,14 @@ If a task touches only one area, document only that area. If a task spans multip
 
 ## Change Log
 
+### 2026-10-05 (water-level RoR/RoF monitoring)
+
+- Prompt: replace water-level prediction-rate behavior with Rate of Rise and Rate of Fall detection, clearer user text, responsive badges, and active/inactive testing controls.
+- Area: multiple
+- Files changed: [resina-project/apps/web/lib/sensor-trend.ts](apps/web/lib/sensor-trend.ts), [resina-project/apps/mobile/lib/helpers/sensor-helpers.ts](apps/mobile/lib/helpers/sensor-helpers.ts), [resina-project/apps/web/app/admin/dashboard/components/current-sensor-status.tsx](apps/web/app/admin/dashboard/components/current-sensor-status.tsx), [resina-project/apps/web/app/admin/dashboard/page.tsx](apps/web/app/admin/dashboard/page.tsx), [resina-project/apps/web/app/api/public/sensor/route.ts](apps/web/app/api/public/sensor/route.ts), [resina-project/apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx](apps/web/app/components/public-monitoring/PublicSensorWrapper.tsx), [resina-project/apps/web/.env.example](apps/web/.env.example), [resina-project/apps/web/.env.local](apps/web/.env.local), [resina-project/apps/mobile/App.tsx](apps/mobile/App.tsx), [resina-project/apps/mobile/components/home-hero-section.tsx](apps/mobile/components/home-hero-section.tsx), [resina-project/apps/mobile/components/sensor-status-card.tsx](apps/mobile/components/sensor-status-card.tsx), [resina-project/apps/mobile/.env.example](apps/mobile/.env.example), [resina-project/apps/mobile/.env](apps/mobile/.env)
+- What changed: added threshold-based RoR/RoF calculation using 1.50m-to-4.00m sensor crossings, chronological timestamp handling, 30-minute stale resets, zero-level resets, overflow ETA, clear rise/fall paragraphs, color-coded responsive trend badges, taller web glass panels so alert/range text remains visible, and opt-in environment overrides for testing active or inactive device status. Also removed a misplaced mobile realtime fragment that blocked TypeScript validation.
+- Validation: `get_errors` passed for changed web and mobile source files; mobile `npx.cmd tsc --noEmit` passed; Supabase test seed uses generated sensor IDs and was verified against the RoR/RoF display output.
+
 ### 2026-07-08 (history chart simplification)
 
 - Prompt: simplify the admin analytics water-level time series after the zoom interaction caused a blank graph.

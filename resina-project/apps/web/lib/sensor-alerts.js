@@ -1,0 +1,140 @@
+export const ALERT_LEVELS = {
+    normal: {
+        title: "Normal Level",
+        badge: "Alert Level 1",
+        rangeLabel: "1.5 - 2.49m",
+        englishDescription: "Water level is normal. Conditions are safe for now.",
+        tagalogDescription: "Normal ang antas ng tubig. Ligtas ang sitwasyon at walang inaasahang banta sa ngayon.",
+        smsEnglishDescription: "Water level is normal. Conditions are safe for now.",
+        smsTagalogDescription: "Normal ang antas ng tubig. Ligtas ang sitwasyon at walang inaasahang banta sa ngayon.",
+    },
+    critical: {
+        title: "Critical Level",
+        badge: "Alert Level 2",
+        rangeLabel: "2.5 - 2.9m",
+        englishDescription: "Water level is high. Stay alert, prepare supplies, and keep monitoring advisories.",
+        tagalogDescription: "Mataas ang tubig. Maging alerto, ihanda ang mga gamit, at patuloy na magmonitor sa mga balita.",
+        smsEnglishDescription: "Water level is high. Stay alert, prepare supplies, and keep monitoring advisories.",
+        smsTagalogDescription: "Mataas ang tubig. Maging alerto, ihanda ang mga gamit, at patuloy na magmonitor sa mga balita.",
+    },
+    evacuation: {
+        title: "Evacuation Level",
+        badge: "Alert Level 3",
+        rangeLabel: "3.0 - 3.9m",
+        englishDescription: "Water level is dangerous. Evacuate immediately to higher ground or an evacuation center.",
+        tagalogDescription: "Mapanganib ang antas ng tubig. Lumikas na agad patungo sa mas mataas na lugar o evacuation center.",
+        smsEnglishDescription: "Water level is dangerous. Evacuate immediately to higher ground or an evacuation center.",
+        smsTagalogDescription: "Mapanganib ang antas ng tubig. Lumikas na agad patungo sa mas mataas na lugar o evacuation center.",
+    },
+    spilling: {
+        title: "Spilling Level",
+        badge: "Alert Level 4",
+        rangeLabel: "4.0m",
+        englishDescription: "Water is overflowing. The situation is dangerous; prioritize safety and follow responders.",
+        tagalogDescription: "Umaapaw na ang tubig. Delikado na ang sitwasyon; unahin ang kaligtasan ng buhay at sumunod sa mga rescuer.",
+        smsEnglishDescription: "Water is overflowing. The situation is dangerous; prioritize safety and follow responders.",
+        smsTagalogDescription: "Umaapaw na ang tubig. Delikado na ang sitwasyon; unahin ang kaligtasan ng buhay at sumunod sa mga rescuer.",
+    },
+};
+export function inferAlertLevel(snapshot) {
+    const status = (snapshot.statusText ?? "").toLowerCase();
+    if (status.includes("spill")) {
+        return "spilling";
+    }
+    if (status.includes("evac")) {
+        return "evacuation";
+    }
+    if (status.includes("critical") || status.includes("alert level 2") || status.includes("alert 2")) {
+        return "critical";
+    }
+    if (status.includes("normal") || status.includes("alert level 1") || status.includes("alert 1")) {
+        return "normal";
+    }
+    if (snapshot.waterLevel !== null) {
+        if (snapshot.waterLevel >= 4) {
+            return "spilling";
+        }
+        if (snapshot.waterLevel >= 3) {
+            return "evacuation";
+        }
+        if (snapshot.waterLevel >= 2.5) {
+            return "critical";
+        }
+    }
+    return "normal";
+}
+export function isAlertLevelCriticalOrAbove(level) {
+    // Include all alert levels for SMS dispatches (send for `normal` as well).
+    // Previously this returned `level !== "normal"` to only send for critical+.
+    return true;
+}
+export function formatWaterLevel(level) {
+    if (level === null || Number.isNaN(level)) {
+        return "Unavailable";
+    }
+    return `${level.toFixed(2)}m`;
+}
+export function formatAlertLevelName(level) {
+    return ALERT_LEVELS[level].title;
+}
+export function formatAlertLevelBadge(level) {
+    return ALERT_LEVELS[level].badge;
+}
+function formatManilaTimestamp(value) {
+    const date = new Date(value);
+    const formatter = new Intl.DateTimeFormat("en-PH", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+    });
+    const parts = formatter.formatToParts(date);
+    const year = parts.find((part) => part.type === "year")?.value ?? "";
+    const month = parts.find((part) => part.type === "month")?.value ?? "";
+    const day = parts.find((part) => part.type === "day")?.value ?? "";
+    const hour = parts.find((part) => part.type === "hour")?.value ?? "";
+    const minute = parts.find((part) => part.type === "minute")?.value ?? "";
+    const dayPeriod = (parts.find((part) => part.type === "dayPeriod")?.value ?? "").replace(/\s+/g, "");
+    return `${month} ${day}, ${year} - ${hour}:${minute}${dayPeriod}`;
+}
+function buildCombinedSmsMessage(locationLine, title, currentLevel, tagalog, english) {
+    const sep = "\n\n";
+    const titleLine = title.toUpperCase();
+    const levelLine = `Current Level: ${currentLevel}`;
+    const advisoryHeader = "RESINA ADVISORY:";
+    return `${titleLine}\n${levelLine}${sep}${locationLine}${sep}${advisoryHeader}\n${tagalog}${sep}${english}`;
+}
+export function buildSensorAlertMessage(snapshot, opts) {
+    const alertLevel = inferAlertLevel(snapshot);
+    const details = ALERT_LEVELS[alertLevel];
+    const currentLevel = formatWaterLevel(snapshot.waterLevel);
+    const updatedAt = snapshot.updatedAt ? formatManilaTimestamp(snapshot.updatedAt) : "Unknown";
+    const location = opts?.location ?? "Sta. Rita Bridge";
+    const title = details.title;
+    const locationLine = `${location} | ${updatedAt}`;
+    return buildCombinedSmsMessage(locationLine, title, currentLevel, details.smsTagalogDescription, details.smsEnglishDescription);
+}
+function buildSmsMessage(title, currentLevel, locationLine, description) {
+    const sep = "\n\n";
+    const titleLine = title.toUpperCase();
+    const levelLine = `Current Level: ${currentLevel}`;
+    const advisoryHeader = "RESINA ADVISORY:";
+    return `${titleLine}\n${levelLine}${sep}${locationLine}${sep}${advisoryHeader}\n${description}`;
+}
+export function buildSensorAlertMessages(snapshot, opts) {
+    const alertLevel = inferAlertLevel(snapshot);
+    const details = ALERT_LEVELS[alertLevel];
+    const currentLevel = formatWaterLevel(snapshot.waterLevel);
+    const updatedAt = snapshot.updatedAt ? formatManilaTimestamp(snapshot.updatedAt) : "Unknown";
+    const location = opts?.location ?? "Sta. Rita Bridge";
+    const header = `${details.title.toUpperCase()} - ${currentLevel}`;
+    const locationLine = `${location} | ${updatedAt}`;
+    const title = details.title;
+    const tagalog = buildSmsMessage(title, currentLevel, locationLine, details.smsTagalogDescription);
+    const english = buildSmsMessage(title, currentLevel, locationLine, details.smsEnglishDescription);
+    return { tagalog, english };
+}
+//# sourceMappingURL=sensor-alerts.js.map

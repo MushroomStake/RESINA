@@ -26,6 +26,9 @@ type SensorSnapshot = {
   updatedAt: string | null;
   sourceTable: string | null;
   deviceStatusLabel: string;
+  trendState?: string | null;
+  trendRate?: number | null;
+  estimatedMinutesToOverflow?: number | null;
   trendMessage?: string | null;
 };
 
@@ -336,7 +339,10 @@ export default function AdminDashboardPage() {
       .order("last_seen", { ascending: false })
       .limit(1)
       .maybeSingle();
-    const deviceStatusLabel = String(statusData?.status ?? "inactive").toLowerCase() === "active" ? "Active" : "Inactive";
+    const deviceStatusTestMode = process.env.NEXT_PUBLIC_SENSOR_STATUS_TEST_MODE === "true";
+    const deviceStatusLabel = deviceStatusTestMode
+      ? process.env.NEXT_PUBLIC_SENSOR_STATUS_TEST_ACTIVE === "true" ? "Active" : "Inactive"
+      : String(statusData?.status ?? "inactive").toLowerCase() === "active" ? "Active" : "Inactive";
 
     if (!silent) {
       setIsLoadingData(true);
@@ -361,7 +367,7 @@ export default function AdminDashboardPage() {
       );
 
       const trend = buildWaterTrendFromRows(
-        (await supabase.from(source.table).select("water_level, created_at").order(source.orderBy, { ascending: false }).limit(2)).data ?? [],
+        (await supabase.from(source.table).select("water_level, created_at").order(source.orderBy, { ascending: false }).limit(100)).data ?? [],
       );
 
       setSnapshot({
@@ -370,6 +376,9 @@ export default function AdminDashboardPage() {
         updatedAt: (row.created_at ?? row.timestamp ?? row.recorded_at ?? null) as string | null,
         sourceTable: source.table,
         deviceStatusLabel,
+        trendState: trend.state,
+        trendRate: trend.ratePerMinute,
+        estimatedMinutesToOverflow: trend.estimatedMinutesToOverflow,
         trendMessage: trend.message,
       });
 
@@ -771,6 +780,9 @@ export default function AdminDashboardPage() {
             isLoadingData={isLoadingData}
             sourceTable={snapshot.sourceTable}
             fetchError={fetchError}
+            trendState={snapshot.trendState}
+            trendRate={snapshot.trendRate}
+            estimatedMinutesToOverflow={snapshot.estimatedMinutesToOverflow}
             trendMessage={snapshot.trendMessage}
           />
 

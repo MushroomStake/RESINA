@@ -88,6 +88,9 @@ type SensorSnapshot = {
   statusText: string | null;
   updatedAt: string | null;
   deviceStatusLabel: string;
+  trendState?: string | null;
+  trendRate?: number | null;
+  estimatedMinutesToOverflow?: number | null;
   trendMessage?: string | null;
 };
 
@@ -433,11 +436,6 @@ function normalizeStatusMessage(message: string, variant: "error" | "success"): 
       normalized.includes("not confirmed") ||
       normalized.includes("confirm your email") ||
       normalized.includes("email_not_confirmed")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "status_check" },
-          scheduleSensorReload,
-        )
     ) {
       return "Your email is not confirmed yet. Please check your inbox and confirm your account.";
     }
@@ -1072,7 +1070,10 @@ export default function App() {
         .order("last_seen", { ascending: false })
         .limit(1)
         .maybeSingle();
-      const deviceStatusLabel = String(statusData?.status ?? "inactive").toLowerCase() === "active" ? "Active" : "Inactive";
+      const deviceStatusTestMode = process.env.EXPO_PUBLIC_SENSOR_STATUS_TEST_MODE === "true";
+      const deviceStatusLabel = deviceStatusTestMode
+        ? process.env.EXPO_PUBLIC_SENSOR_STATUS_TEST_ACTIVE === "true" ? "Active" : "Inactive"
+        : String(statusData?.status ?? "inactive").toLowerCase() === "active" ? "Active" : "Inactive";
 
       for (const source of sources) {
         const { data, error } = await supabase
@@ -1094,13 +1095,16 @@ export default function App() {
           .from(source.table)
           .select("water_level, created_at")
           .order(source.orderBy, { ascending: false })
-          .limit(2);
+          .limit(100);
 
         const nextSnapshot: SensorSnapshot = {
           waterLevel: Number.isNaN(waterLevel) ? null : waterLevel,
           statusText: (row.status ?? row.level_status ?? row.alert_status ?? row.alert_level ?? null) as string | null,
           updatedAt: (row.created_at ?? row.timestamp ?? row.recorded_at ?? null) as string | null,
           deviceStatusLabel,
+          trendState: buildWaterTrendSummary(trendRows.data ?? []).state,
+          trendRate: buildWaterTrendSummary(trendRows.data ?? []).ratePerMinute,
+          estimatedMinutesToOverflow: buildWaterTrendSummary(trendRows.data ?? []).estimatedMinutesToOverflow,
           trendMessage: buildWaterTrendSummary(trendRows.data ?? []).message,
         };
 
