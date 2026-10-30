@@ -156,8 +156,8 @@ export function SensorStatusCard({
   const deviceStatusBorderColor = isDeviceActive ? "rgba(220,252,231,0.85)" : "rgba(254,226,226,0.85)";
   const deviceStatusBackgroundColor = isDeviceActive ? "rgba(240,253,244,0.94)" : "rgba(254,242,242,0.94)";
   const deviceStatusTextColor = isDeviceActive ? "#166534" : "#b91c1c";
-  const trendBadge = trendState === "rapid-surge" ? "Fast Surge" : trendState === "slow-rise" ? "Slow Rise" : trendState === "receding" ? "Receding" : trendState === "baseline" ? "Baseline" : trendState === "unavailable" ? "Unavailable" : "Stable";
-  const trendRateLabel = trendRate === null || trendRate === undefined ? "N/A" : `${trendState === "receding" ? "" : trendRate > 0 ? "+" : ""}${Math.abs(trendRate).toFixed(2)} m/min`;
+  const trendBadge = trendState === "rapid-surge" ? "Fast Surge" : trendState === "slow-rise" ? "Slow Rise" : trendState === "receding" ? "Receding" : trendState === "baseline" ? "Baseline" : trendState === "unavailable" ? "No recent reading" : "Stable";
+  const trendRateLabel = trendState === "unavailable" ? "Rate not available" : trendRate === null || trendRate === undefined ? "N/A" : `${trendState === "receding" ? "" : trendRate > 0 ? "+" : ""}${Math.abs(trendRate).toFixed(2)} m/min`;
   const trendBadgeColor = trendState === "rapid-surge" ? "#ffb4b4" : trendState === "slow-rise" ? "#ffe08a" : trendState === "receding" ? "#9ed8ff" : "#e4e9f0";
 
   const fillAnim = useRef(new Animated.Value(normalizedLevel)).current;

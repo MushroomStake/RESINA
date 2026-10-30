@@ -194,8 +194,8 @@ export function CurrentSensorStatus({
     ? "border-[#d9f7e4] bg-[#ecfdf3] text-[#166534]"
     : "border-[#fee2e2] bg-[#fef2f2] text-[#b91c1c]";
   const deviceStatusDotClass = isDeviceActive ? "bg-[#22c55e]" : "bg-[#ef4444]";
-  const trendBadge = trendState === "rapid-surge" ? "Fast Surge" : trendState === "slow-rise" ? "Slow Rise" : trendState === "receding" ? "Receding" : trendState === "baseline" ? "Baseline" : trendState === "unavailable" ? "Unavailable" : "Stable";
-  const trendRateLabel = trendRate === null || trendRate === undefined ? "N/A" : `${trendState === "receding" ? "" : trendRate > 0 ? "+" : ""}${Math.abs(trendRate).toFixed(2)} m/min`;
+  const trendBadge = trendState === "rapid-surge" ? "Fast Surge" : trendState === "slow-rise" ? "Slow Rise" : trendState === "receding" ? "Receding" : trendState === "baseline" ? "Baseline" : trendState === "unavailable" ? "No recent reading" : "Stable";
+  const trendRateLabel = trendState === "unavailable" ? "Rate not available" : trendRate === null || trendRate === undefined ? "N/A" : `${trendState === "receding" ? "" : trendRate > 0 ? "+" : ""}${Math.abs(trendRate).toFixed(2)} m/min`;
   const trendBadgeClass = trendState === "rapid-surge" ? "border-[#fecaca] bg-[#fee2e2] text-[#991b1b]" : trendState === "slow-rise" ? "border-[#fde68a] bg-[#fef3c7] text-[#92400e]" : trendState === "receding" ? "border-[#bfdbfe] bg-[#dbeafe] text-[#1d4ed8]" : "border-[#d1d5db] bg-[#f3f4f6] text-[#4b5563]";
 
   return (

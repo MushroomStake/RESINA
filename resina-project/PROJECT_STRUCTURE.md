@@ -1,3 +1,5 @@
+ 
+
 # RESINA Project Structure Reference
 
 Last updated: 2026-06-26
@@ -97,6 +99,38 @@ Rules for entries:
 If a task touches only one area, document only that area. If a task spans multiple areas, add one entry per area or one combined entry with the affected paths.
 
 ## Change Log
+
+### 2026-10-30 (password reveal control)
+
+- Prompt: remove the duplicate show-password icons from the Barangay Portal login.
+- Area: web
+- Files changed: [resina-project/apps/web/app/admin/page.tsx](apps/web/app/admin/page.tsx), [resina-project/PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
+- What changed: removed the custom eye button and state so the password field uses only the browser-native reveal control.
+- Validation: `get_errors` passed for apps/web/app/admin/page.tsx.
+
+### 2026-10-30 (clear unavailable trend label)
+
+- Prompt: replace the unclear `Unavailable - N/A` trend text with wording users can understand.
+- Area: web, mobile
+- Files changed: [resina-project/apps/web/app/admin/dashboard/components/current-sensor-status.tsx](apps/web/app/admin/dashboard/components/current-sensor-status.tsx), [resina-project/apps/mobile/components/sensor-status-card.tsx](apps/mobile/components/sensor-status-card.tsx), [resina-project/PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
+- What changed: unavailable trend badges now display `No recent reading - Rate not available` in the web and mobile monitors.
+- Validation: `get_errors` passed for both changed monitor components.
+
+### 2026-10-30 (barangay portal naming)
+
+- Prompt: add a Barangay Portal button beside the landing-page Download App button, rename portal links, and update the login heading.
+- Area: web
+- Files changed: [resina-project/apps/web/app/page.tsx](apps/web/app/page.tsx), [resina-project/apps/web/app/admin/page.tsx](apps/web/app/admin/page.tsx), [resina-project/PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
+- What changed: added a hero Barangay Portal link to `/admin` without changing the top download button, renamed the footer link to Barangay Portal, and changed Admin Access Portal to Barangay Access Portal.
+- Validation: `get_errors` passed for apps/web/app/page.tsx and apps/web/app/admin/page.tsx.
+
+### 2026-10-30 (visit-triggered weather refresh)
+
+- Prompt: stop relying on weather cron jobs and refresh weather when users visit the public web monitor, admin weather monitor, or mobile monitor.
+- Area: multiple
+- Files changed: [resina-project/apps/web/lib/weather-refresh.ts](apps/web/lib/weather-refresh.ts), [resina-project/apps/web/app/api/weather/refresh/route.ts](apps/web/app/api/weather/refresh/route.ts), [resina-project/apps/web/app/api/cron/weather/route.ts](apps/web/app/api/cron/weather/route.ts), [resina-project/apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx](apps/web/app/components/public-monitoring/PublicWeatherWrapper.tsx), [resina-project/apps/web/app/admin/dashboard/page.tsx](apps/web/app/admin/dashboard/page.tsx), [resina-project/apps/mobile/App.tsx](apps/mobile/App.tsx), [resina-project/apps/mobile/.env](apps/mobile/.env), [resina-project/apps/mobile/.env.example](apps/mobile/.env.example), [README.md](../README.md), [.github/workflows/weather-cron.yml](../.github/workflows/weather-cron.yml), [.github/workflows/daily-weather-refresh.yml](.github/workflows/daily-weather-refresh.yml)
+- What changed: extracted the OpenWeather-to-`weather_logs` refresh into shared server logic with a 10-minute freshness guard, added `POST /api/weather/refresh`, triggered it from public/admin web and mobile visits, added `EXPO_PUBLIC_WEB_URL` for mobile, removed both hourly weather workflows, and kept `weather:fetch` as a manual fallback.
+- Validation: `get_errors` passed for changed web and mobile source files; mobile `npx.cmd tsc --noEmit` completed without output; web type-check was invoked but the terminal wrapper did not return a completion line.
 
 ### 2026-10-05 (water-level RoR/RoF monitoring)
 

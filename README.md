@@ -20,7 +20,7 @@ Run these from the repository root at `resina-project/`.
 | API | Fetch tide data | `npm run tide:fetch` |
 | API | Interpolate hourly tide data | `npm run tide:interpolate` |
 | API | Refresh tide window | `npm run tide:refresh-window` |
-| API | Fetch weather snapshot | `npm run weather:fetch` |
+| API | Manually fetch weather snapshot | `npm run weather:fetch` |
 | Mobile | Start Expo | `npm run start:mobile` |
 | Mobile | Run Android | `npm run android:mobile` |
 | Mobile | Run iOS | `npm run ios:mobile` |

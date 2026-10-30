@@ -1150,6 +1150,8 @@ export default function App() {
     }
 
     try {
+      const webUrl = (process.env.EXPO_PUBLIC_WEB_URL ?? "https://resina-two.vercel.app").replace(/\/$/, "");
+      await fetch(`${webUrl}/api/weather/refresh`, { method: "POST" });
       const { data } = await supabase
         .from("weather_logs")
         .select(

@@ -10,16 +10,22 @@ export default function PublicWeatherWrapper() {
 
   useEffect(() => {
     let mounted = true;
-    const url = `/api/weather/current`;
-    fetch(url)
-      .then((r) => r.json())
-      .then((json) => {
+    const loadWeather = async () => {
+      try {
+        await fetch("/api/weather/refresh", { method: "POST" });
+        const response = await fetch("/api/weather/current", { cache: "no-store" });
+        const json = await response.json();
         if (!mounted) return;
         if (json?.error) setError(json.error);
         else setData(json);
-      })
-      .catch((e) => mounted && setError(e?.message || String(e)))
-      .finally(() => mounted && setLoading(false));
+      } catch (e) {
+        if (mounted) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    void loadWeather();
 
     return () => { mounted = false; };
   }, []);

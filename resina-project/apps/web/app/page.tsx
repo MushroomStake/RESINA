@@ -59,6 +59,15 @@ export default function HomePage() {
                 </svg>
                 Download App
               </a>
+              <a
+                href="/admin"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#2e9d5a] bg-white px-7 py-3 text-center text-base font-semibold text-[#247b43] transition-colors hover:bg-[#edf7ef] sm:w-auto"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-5 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H7a2 2 0 00-2 2v6a2 2 0 002 2zm8-8V8a3 3 0 00-6 0v3h6z" />
+                </svg>
+                Barangay Portal
+              </a>
             </div>
           </div>
 
@@ -95,7 +104,7 @@ export default function HomePage() {
               <ul className="space-y-2 text-base text-[#4b5563]">
                 <li>
                   <a href="/admin" className="hover:text-[#0d3d73]">
-                    Admin Portal
+                    Barangay Portal
                   </a>
                 </li>
                 <li>

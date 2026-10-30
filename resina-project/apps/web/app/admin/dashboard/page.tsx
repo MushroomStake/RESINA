@@ -396,6 +396,7 @@ export default function AdminDashboardPage() {
   };
 
   const loadWeatherFromSupabase = async (): Promise<boolean> => {
+    await fetch("/api/weather/refresh", { method: "POST" }).catch(() => undefined);
     const supabase = createClient();
     const { data } = await supabase
       .from("weather_logs")
